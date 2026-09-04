@@ -8,6 +8,7 @@
     ./cli.nix
     ./hosts.nix
     ./jails.nix
+    ./vars
   ];
 
   options.workspace = {

@@ -48,6 +48,10 @@ let
             mode = "0440";
           };
         };
+        placeholder = lib.mkOption {
+          type = lib.types.str;
+          default = "___ALLOY_SECRET_${builtins.hashString "sha256" name}___";
+        };
         assertions = lib.mkOption {
           type = lib.types.listOf alib.types.assertion;
           default = [ ];
@@ -84,11 +88,226 @@ let
       };
     };
 
+  secretTemplateSubmodule =
+    contextType: contextName:
+    {
+      name,
+      ...
+    }:
+    {
+      options = {
+        template = lib.mkOption {
+          type = lib.types.str;
+          description = "Template to render.";
+        };
+        path = lib.mkOption {
+          type = lib.types.str;
+          description = "Path where the rendered file will be placed.";
+        };
+        permissions = lib.mkOption {
+          type = alib.types.permissions;
+          default = {
+            owner = "root";
+            group = "root";
+            mode = "0440";
+          };
+        };
+      };
+      config = {
+        path = lib.mkOptionDefault (
+          if contextType == "host" then
+            "${alloy.hosts.${contextName}.workspace.secretTemplates.basePath}/${name}"
+          else
+            "${alloy.jails.${contextName}.workspace.secretTemplates.basePath}/${name}"
+        );
+      };
+    };
+
+  mkJail =
+    host: jailName: jail:
+    let
+      secrets = lib.filter (s: s.jailName == jailName) jailSecretsList;
+      templates = lib.filter (s: s.jailName == jailName) jailTemplatesList;
+      mkSecret =
+        secret:
+        { config, ... }:
+        let
+          agenixPath = config.age.secrets."alloy/secrets/jails/${jailName}/${secret.secretName}".path;
+        in
+        {
+          assertions = [
+            {
+              assertion = builtins.pathExists (alloy.workspace.root + "/${secret.file}");
+              message = "[Alloy] Secret '${secret.secretName}' attached to jail '${jailName}' on host '${jail.host}' not found at ${alloy.workspace.root}/${secret.file}. You may need to rekey the secret for this jail, or add the rekeyed secret to git.";
+            }
+          ];
+
+          age.secrets."alloy/secrets/jails/${jailName}/${secret.secretName}" = {
+            file = alloy.workspace.root + "/${secret.file}";
+            owner = "root";
+            group = "root";
+            mode = secret.permissions.mode;
+          };
+
+          containers."alloy-jail-${jailName}" = {
+            bindMounts."secret-${secret.secretName}" = {
+              hostPath = agenixPath;
+              mountPoint = agenixPath;
+              isReadOnly = true;
+            };
+            config = { pkgs, ... }: {
+              systemd.services."alloy-secrets-and-templates-setup" = {
+                script = ''
+                  install -D \
+                    -m "${secret.permissions.mode}" \
+                    -o "${secret.permissions.owner}" \
+                    -g "${secret.permissions.group}" \
+                    "${agenixPath}" \
+                    "${secret.path}"
+                '';
+              };
+            };
+          };
+        };
+      mkTemplate =
+        template:
+        { config, ... }:
+        {
+          containers."alloy-jail-${jailName}" = {
+            config = { pkgs, ... }: {
+              systemd.services."alloy-secrets-and-templates-setup" = {
+                script = ''
+                  mkdir -p "$(dirname "${template.path}")"
+                  jq -rRs ${
+                    lib.concatImapStringsSep " " (
+                      idx: secret: ''--arg secret${toString idx} "$(cat ${secret.path})"''
+                    ) secrets
+                  } '${
+                    if secrets == [ ] then
+                      "."
+                    else
+                      lib.concatImapStringsSep " | " (
+                        idx: secret: ''gsub("${secret.placeholder}"; $secret${toString idx})''
+                      ) secrets
+                  }' "${pkgs.writeText "alloy-jail-${jailName}-secret-template-${template.templateName}" template.template}" > "${template.path}.tmp"
+                  install -D -m "${template.permissions.mode}" -o "${template.permissions.owner}" -g "${template.permissions.group}" "${template.path}.tmp" "${template.path}"
+                  rm -f "${template.path}.tmp"
+                '';
+              };
+            };
+          };
+        };
+    in
+    {
+      nixosModule = {
+        imports = [
+          alloy-internal-inputs.agenix.nixosModules.default
+        ]
+        ++ (lib.map mkSecret secrets)
+        ++ (lib.map mkTemplate templates);
+
+        age.identityPaths = lib.optionals (secrets != [ ]) (
+          lib.map (kp: toString kp.identity) host.workspace.secrets.age.keyPairs
+        );
+
+        containers."alloy-jail-${jailName}" = {
+          config = { pkgs, ... }: {
+            systemd.services."alloy-secrets-and-templates-setup" = {
+              enable = secrets != [ ] || templates != [ ];
+              wantedBy = [ "sysinit.target" ];
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+              };
+              path = [
+                pkgs.jq
+                pkgs.coreutils
+              ];
+              script = "";
+            };
+          };
+        };
+      };
+    };
+
+  mkHost =
+    hostName: host:
+    let
+      secrets = lib.filter (s: s.hostName == hostName) hostSecretsList;
+      templates = lib.filter (s: s.hostName == hostName) hostTemplatesList;
+      mkSecret = secret: {
+        assertions = [
+          {
+            assertion = builtins.pathExists (alloy.workspace.root + "/${secret.file}");
+            message = "[Alloy] Secret '${secret.secretName}' attached to host '${hostName}' not found at ${alloy.workspace.root}/${secret.file}. You may need to rekey the secret for this host, or add the rekeyed secret to git.";
+          }
+        ];
+
+        age.secrets."alloy/secrets/host/${secret.secretName}" = {
+          file = alloy.workspace.root + "/${secret.file}";
+          path = secret.path;
+          inherit (secret.permissions) owner group mode;
+        };
+      };
+      mkTemplate = template: { pkgs, ... }: {
+        systemd.services."alloy-secret-templates-setup" = {
+          script = ''
+            mkdir -p "$(dirname "${template.path}")"
+            jq -rRs ${
+              lib.concatImapStringsSep " " (
+                idx: secret: ''--arg secret${toString idx} "$(cat ${secret.path})"''
+              ) secrets
+            } '${
+              if secrets == [ ] then
+                "."
+              else
+                lib.concatImapStringsSep " | " (
+                  idx: secret: ''gsub("${secret.placeholder}"; $secret${toString idx})''
+                ) secrets
+            }' "${pkgs.writeText "alloy-host-${hostName}-secret-template-${template.templateName}" template.template}" > "${template.path}.tmp"
+            install -D -m "${template.permissions.mode}" -o "${template.permissions.owner}" -g "${template.permissions.group}" "${template.path}.tmp" "${template.path}"
+            rm -f "${template.path}.tmp"
+          '';
+        };
+      };
+    in
+    {
+      nixosModule = { pkgs, ... }: {
+        imports = [
+          alloy-internal-inputs.agenix.nixosModules.default
+        ]
+        ++ (lib.map mkSecret secrets)
+        ++ (lib.map mkTemplate templates);
+
+        age.identityPaths = lib.optionals (secrets != [ ]) (
+          lib.map (kp: toString kp.identity) host.workspace.secrets.age.keyPairs
+        );
+
+        systemd.services."alloy-secret-templates-setup" = {
+          enable = templates != [ ];
+          wantedBy = [ "sysinit.target" ];
+          after = [ "agenix-install-secrets.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+          };
+          path = [
+            pkgs.jq
+            pkgs.coreutils
+          ];
+        };
+      };
+    };
+
   hostSubmodule = { name, config, ... }: {
     options = {
       secrets = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule (secretSubmodule "host" name));
+      };
+      secretTemplates = lib.mkOption {
+        default = { };
+        type = lib.types.attrsOf (lib.types.submodule (secretTemplateSubmodule "host" name));
       };
       workspace.secrets = {
         baseDir = lib.mkOption {
@@ -104,97 +323,25 @@ let
           type = lib.types.listOf alib.types.ageKeyPair;
         };
       };
+      workspace.secretTemplates = {
+        basePath = lib.mkOption {
+          type = lib.types.str;
+          default = "/run/alloy/secret-templates";
+        };
+      };
     };
     config =
       let
-        host = config;
-        hostJailsList = lib.filter (j: j.hostName == name) jailSecretsList;
-        hasSecrets = config.secrets != { } || hostJailsList != [ ];
+        configs = lib.flatten (
+          [ (mkHost name config) ]
+          ++ (lib.pipe alloy.jails [
+            (lib.filterAttrs (_: jail: jail.host == name))
+            (lib.mapAttrsToList (jailName: jail: mkJail config jailName jail))
+          ])
+        );
       in
       {
-        nixosModule =
-          { pkgs, config, ... }@nixosArgs:
-          {
-            imports = [ alloy-internal-inputs.agenix.nixosModules.default ];
-
-            config = lib.mkIf hasSecrets {
-              assertions =
-                (lib.mapAttrsToList (secretName: secret: {
-                  assertion = builtins.pathExists (alloy.workspace.root + "/${secret.file}");
-                  message = "[Alloy] Secret '${secretName}' attached to host '${name}' not found at ${alloy.workspace.root}/${secret.file}. You may need to rekey the secret for this host, or add the rekeyed secret to git.";
-                }) host.secrets)
-                ++ (lib.map (secret: {
-                  assertion = builtins.pathExists (alloy.workspace.root + "/${secret.file}");
-                  message = "[Alloy] Secret '${secret.secretName}' attached to jail '${secret.jailName}' on host '${name}' not found at ${alloy.workspace.root}/${secret.file}. You may need to rekey the secret for this jail, or add the rekeyed secret to git.";
-                }) hostJailsList);
-
-              age.identityPaths = lib.map (kp: toString kp.identity) host.workspace.secrets.age.keyPairs;
-
-              age.secrets =
-                (lib.mapAttrs' (
-                  secretName: secret:
-                  lib.nameValuePair "alloy/secrets/host/${secretName}" {
-                    file = alloy.workspace.root + "/${secret.file}";
-                    path = secret.path;
-                    inherit (secret.permissions) owner group mode;
-                  }
-                ) host.secrets)
-                // (builtins.listToAttrs (
-                  lib.map (
-                    secret:
-                    lib.nameValuePair "alloy/secrets/jails/${secret.jailName}/${secret.secretName}" {
-                      file = alloy.workspace.root + "/${secret.file}";
-                      path = secret.path;
-                      inherit (secret.permissions) owner group mode;
-                    }
-                  ) hostJailsList
-                ));
-
-              containers =
-                let
-                  jailsToSecrets = lib.groupBy (s: s.jailName) hostJailsList;
-                in
-                lib.mapAttrs' (
-                  jailName: secrets:
-                  lib.nameValuePair "alloy-jail-${jailName}" {
-                    bindMounts = builtins.listToAttrs (
-                      lib.map (
-                        secret:
-                        let
-                          ageName = "alloy/secrets/jails/${secret.jailName}/${secret.secretName}";
-                        in
-                        lib.nameValuePair "secret-${secret.secretName}" {
-                          hostPath = nixosArgs.config.age.secrets.${ageName}.path;
-                          mountPoint = nixosArgs.config.age.secrets.${ageName}.path;
-                          isReadOnly = true;
-                        }
-                      ) secrets
-                    );
-
-                    config.system.activationScripts.setupSecrets = {
-                      deps = [
-                        "users"
-                        "groups"
-                      ];
-                      text = lib.concatMapStringsSep "\n" (
-                        secret:
-                        let
-                          ageName = "alloy/secrets/jails/${secret.jailName}/${secret.secretName}";
-                        in
-                        ''
-                          install -D \
-                            -m "${secret.permissions.mode}" \
-                            -o "${secret.permissions.owner}" \
-                            -g "${secret.permissions.group}" \
-                            "${nixosArgs.config.age.secrets.${ageName}.path}" \
-                            "${secret.path}"
-                        ''
-                      ) secrets;
-                    };
-                  }
-                ) jailsToSecrets;
-            };
-          };
+        nixosModule = lib.mkMerge (lib.catAttrs "nixosModule" configs);
       };
   };
 
@@ -204,6 +351,10 @@ let
         default = { };
         type = lib.types.attrsOf (lib.types.submodule (secretSubmodule "jail" name));
       };
+      secretTemplates = lib.mkOption {
+        default = { };
+        type = lib.types.attrsOf (lib.types.submodule (secretTemplateSubmodule "jail" name));
+      };
       workspace.secrets = {
         baseDir = lib.mkOption {
           type = lib.types.str;
@@ -212,6 +363,12 @@ let
         basePath = lib.mkOption {
           type = lib.types.str;
           default = "/run/alloy/secrets";
+        };
+      };
+      workspace.secretTemplates = {
+        basePath = lib.mkOption {
+          type = lib.types.str;
+          default = "/run/alloy/secret-templates";
         };
       };
     };
@@ -235,6 +392,29 @@ let
           hostName = jail.host;
         }
       ) jail.secrets
+    ) alloy.jails
+  );
+
+  hostTemplatesList = lib.flatten (
+    lib.mapAttrsToList (
+      hostName: host:
+      lib.mapAttrsToList (
+        templateName: template: template // { inherit hostName templateName; }
+      ) host.secretTemplates
+    ) alloy.hosts
+  );
+
+  jailTemplatesList = lib.flatten (
+    lib.mapAttrsToList (
+      jailName: jail:
+      lib.mapAttrsToList (
+        templateName: template:
+        template
+        // {
+          inherit jailName templateName;
+          hostName = jail.host;
+        }
+      ) jail.secretTemplates
     ) alloy.jails
   );
 in

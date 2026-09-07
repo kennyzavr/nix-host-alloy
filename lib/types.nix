@@ -3,6 +3,23 @@
   alib,
 }:
 {
+  ageKeyPair = lib.types.submodule {
+    options = {
+      identity = lib.mkOption {
+        type = lib.types.oneOf [
+          lib.types.path
+          lib.types.str
+        ];
+      };
+      recipient = lib.mkOption {
+        type = lib.types.oneOf [
+          lib.types.path
+          lib.types.str
+        ];
+      };
+    };
+  };
+
   assertion = lib.types.submodule {
     options = {
       assertion = lib.mkOption {
@@ -32,24 +49,6 @@
     }
   );
 
-  # dns.name =
-  #   lib.types.addCheck
-  #     (lib.types.strMatching "^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\\.)*[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\\.?$")
-  #     (
-  #       str:
-  #       let
-  #         validTotalLength = builtins.stringLength str <= 253;
-  #         labels = lib.strings.splitString "." str;
-  #         nonEmptyLabels = lib.filter (l: l != "") labels;
-  #         validLabelLengths = lib.all (l: builtins.stringLength l <= 63) nonEmptyLabels;
-  #       in
-  #       validTotalLength && validLabelLengths
-  #     )
-  #   // {
-  #     name = "dns domain name";
-  #     description = "valid domain name (RFC 1123, max 253 total chars, max 63 per label)";
-  #   };
-
   dns.name =
     let
       labelRegex = "[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?";
@@ -69,12 +68,6 @@
       x: builtins.isString x && builtins.match "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$" x != null;
     merge = lib.options.mergeEqualOption;
   };
-
-  # TODO check octeds values: 0 <= octed value <= 255
-  # ip.v4addr = lib.types.strMatching "^([0-9]{1,3}\\.){3}[0-9]{1,3}$" // {
-  #   name = "ipv4";
-  #   description = "IPv4 address";
-  # };
 
   ip.v4addr =
     lib.types.strMatching "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$"

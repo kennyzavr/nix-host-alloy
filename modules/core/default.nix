@@ -5,16 +5,25 @@
 }:
 {
   imports = [
-    ./cli.nix
     ./hosts.nix
     ./jails.nix
-    ./vars
+    ./cli.nix
+    ./secrets.nix
+    ./facts.nix
+    ./generators.nix
+    ./index-table.nix
+    ./overlays.nix
   ];
 
   options.workspace = {
     root = lib.mkOption {
       type = lib.types.path;
     };
+  };
+
+  options.core.api = lib.mkOption {
+    default = { };
+    type = lib.types.attrsOf lib.types.unspecified;
   };
 
   options.assertions = lib.mkOption {

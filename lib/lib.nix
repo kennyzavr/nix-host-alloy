@@ -63,11 +63,11 @@
   #   in
   #   if sortedZones == [ ] then null else builtins.head sortedZones;
 
-  # resolveZoneNode =
-  #   zones: node:
-  #   assert lib.assertMsg (builtins.hasAttr node.zone zones)
-  #     "alloy: dns: resolveZoneNode 'zone ${node.zone}, name ${node.name}': the zone is not defined";
-  #   "${if node.name == "@" then "" else "${lib.removeSuffix "." node.name}."}${
-  #     lib.removeSuffix "." zones.${node.zone}.apex
-  #   }.";
+  resolveZoneNode =
+    zones: node:
+    assert lib.assertMsg (builtins.hasAttr node.zone zones)
+      "alloy: dns: resolveZoneNode 'zone ${node.zone}, name ${node.name}': the zone is not defined";
+    "${if node.name == "@" then "" else "${lib.removeSuffix "." node.name}."}${
+      lib.removeSuffix "." zones.${node.zone}.apex
+    }.";
 }

@@ -514,11 +514,6 @@ let
             };
           };
 
-          boot.kernel.sysctl = {
-            "net.ipv6.conf.all.forwarding" = true;
-            "net.ipv6.conf.all.accept_redirects" = false;
-          };
-
           networking.firewall.allowedUDPPorts = [ hostOverlay.wg.port ];
           networking.firewall.filterForward = true;
           networking.firewall.extraForwardRules = ''

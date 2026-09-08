@@ -540,6 +540,13 @@ in
                   return CLI.root / data["file"]
 
               @classmethod
+              def exists(cls, name: str) -> bool:
+                  data = cls.db.get(name)
+                  if not data:
+                      return False
+                  return (CLI.root / data["file"]).exists()
+
+              @classmethod
               def check_recipients(cls):
                   if not cls.master_recipients:
                       CLI.abort("No master recipients defined in workspace.secrets.age.keyPairs")

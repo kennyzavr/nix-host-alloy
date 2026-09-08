@@ -30,14 +30,25 @@
           };
         };
       };
-      firstFailedAssertion = lib.findFirst (a: !a.assertion) null res.config.assertions;
+      failedAssertions = lib.filter (a: !a.assertion) res.config.assertions;
     in
-    if (evalArgs.checkAssertions or true) && firstFailedAssertion != null then
-      builtins.throw firstFailedAssertion.message
+    if (evalArgs.checkAssertions or true) && failedAssertions != [ ] then
+      builtins.throw ''
+        Failed assertions:
+        ${lib.concatMapStringsSep "\n" (x: "- ${x.message}") failedAssertions}
+      ''
     else
       res;
 
   evalModule = module: alib.evalModules { modules = lib.toList module; };
+
+  mkCli =
+    { pkgs, module }:
+    (alib.evalModules {
+      checkAssertions = false;
+      modules = [ module ];
+    }).config.cli.package
+      { inherit pkgs; };
 
   mkArpaIpv6 =
     ipv6:

@@ -686,7 +686,7 @@ in
               secrets.${config.privateKey} = { };
               script = ''
                 import subprocess
-                if not AlloySecretsAPI.get_file("${config.privateKey}").exists() or getattr(args, "force", False):
+                if not AlloySecretsAPI.exists("${config.privateKey}") or getattr(args, "force", False):
                     new_key = subprocess.run(["wg", "genpsk"], capture_output=True, text=True, check=True).stdout.strip()
                     AlloySecretsAPI.set("${config.privateKey}", new_key.encode(), force=getattr(args, "force", False), add_to_git=getattr(args, "add_to_git", False))
                 else:
@@ -708,9 +708,9 @@ in
                 import subprocess
 
                 needs_generation = getattr(args, "force", False)
-                if not AlloySecretsAPI.get_file("${config.privateKey}").exists():
+                if not AlloySecretsAPI.exists("${config.privateKey}"):
                     needs_generation = True
-                if not AlloyFactsAPI.get_file("${config.publicKey}").exists():
+                if not AlloyFactsAPI.exists("${config.publicKey}"):
                     needs_generation = True
                     
                 if needs_generation:

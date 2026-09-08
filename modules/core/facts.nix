@@ -93,6 +93,13 @@ in
                 return CLI.root / data["file"]
                 
             @classmethod
+            def exists(cls, name: str) -> bool:
+                data = cls.db.get(name)
+                if not data:
+                    return False
+                return (CLI.root / data["file"]).exists()
+                
+            @classmethod
             def set(cls, name: str, data: str, force: bool = False, add_to_git: bool = False) -> Path:
                 """
                 Validates JSON and saves the fact data.

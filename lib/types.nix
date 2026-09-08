@@ -51,7 +51,7 @@
 
   dns.name =
     let
-      labelRegex = "[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?";
+      labelRegex = "[a-zA-Z0-9_]([a-zA-Z0-9_-]{0,61}[a-zA-Z0-9_])?";
     in
     lib.types.addCheck (lib.types.strMatching "^(${labelRegex}\\.)*${labelRegex}\\.?$") (
       str: builtins.stringLength str <= 253
@@ -65,7 +65,7 @@
     name = "dnsLabel";
     description = "A valid DNS label (1-63 chars, alphanumeric and hyphens, no leading/trailing hyphens)";
     check =
-      x: builtins.isString x && builtins.match "^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$" x != null;
+      x: builtins.isString x && builtins.match "^[a-zA-Z0-9_]([a-zA-Z0-9_-]{0,61}[a-zA-Z0-9_])?$" x != null;
     merge = lib.options.mergeEqualOption;
   };
 

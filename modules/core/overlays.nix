@@ -5,6 +5,7 @@
   ...
 }:
 let
+  # TODO: keepalive
   alloy = config;
 
   overlayIndexes = alloy.facts."overlay-index-table".value;

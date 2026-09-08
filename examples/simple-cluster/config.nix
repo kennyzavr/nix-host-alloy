@@ -137,6 +137,56 @@ in
       };
 
       config = {
+        dns.zones = {
+          "public" = {
+            apex = "d108.dev";
+            rname = "admin.d108.dev";
+          };
+          "private" = {
+            apex = "d108.internal";
+            rname = "admin.d108.internal";
+          };
+          "private2" = {
+            apex = "d108.internal2";
+            rname = "admin.d108.internal";
+          };
+        };
+
+        gateways."public" = { };
+
+        services.dns-gateways."public" = {
+          hosts."iridium" = {
+            ipv4 = "192.168.100.2";
+          };
+          hosts."gallium" = {
+            ipv4 = "192.168.100.1";
+          };
+        };
+
+        services.dns."main" = {
+          gateway = "public";
+          hosts = {
+            "iridium" = { };
+            "gallium" = { };
+          };
+          overlays = {
+            "main" = { };
+          };
+          zones = {
+            "public" = { };
+            "private" = { };
+            "private2" = { };
+          };
+        };
+
+        services.dns-acme."main" = {
+          gateway = "public";
+          host = "iridium";
+          overlays = {
+            "main" = { };
+          };
+        };
+
         workspace.root = toString self;
 
         workspace.secrets = {
@@ -159,7 +209,7 @@ in
           ];
         };
 
-        jails."testjail" = {config, ...}: {
+        jails."testjail" = { config, ... }: {
           host = "iridium";
           overlays."main" = { };
           uplink.allowEgress = true;
@@ -494,7 +544,10 @@ in
     };
 
   perSystem = { pkgs, config, ... }: {
-    packages.alloy = infra.cli.package { inherit pkgs; };
+    packages.alloy = inputs.alloy.lib.mkCli {
+      module = self.alloyModules.test;
+      inherit pkgs;
+    };
 
     apps = {
 

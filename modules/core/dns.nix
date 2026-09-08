@@ -157,6 +157,9 @@ let
         apex = lib.mkOption {
           type = alib.types.dns.name;
         };
+        rname = lib.mkOption {
+          type = alib.types.dns.name;
+        };
         ttl = lib.mkOption {
           default = 3600;
           type = lib.types.int;

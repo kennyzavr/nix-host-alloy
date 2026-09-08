@@ -13,6 +13,9 @@
     ./generators.nix
     ./index-table.nix
     ./overlays.nix
+    ./dns.nix
+    ./gateways.nix
+    ./endpoints.nix
   ];
 
   options.workspace = {

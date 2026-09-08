@@ -7,6 +7,14 @@
 let
   alloy = config;
 
+  mkVethIpv4 =
+    jail:
+    "10.99.${toString (jail.uplink.localIdx / 253)}.${
+      toString ((lib.mod jail.uplink.localIdx 253) + 2)
+    }";
+  mkVethIpv6 = jail: "fd00:99::${lib.toHexString (jail.uplink.localIdx + 2)}";
+  mkVethIface = jail: "al-v${toString (jail.idx)}-0";
+
   indexes = alloy.facts."jail-index-table".value;
 
   portType = lib.types.either lib.types.port (
@@ -77,6 +85,12 @@ let
             default = [ ];
             type = lib.types.listOf forwardType;
           };
+          ipv6 = lib.mkOption {
+            type = lib.types.str;
+          };
+          ipv4 = lib.mkOption {
+            type = lib.types.str;
+          };
           localIdx = lib.mkOption {
             type = lib.types.ints.unsigned;
             readOnly = true;
@@ -98,6 +112,8 @@ let
       };
 
       config = {
+        uplink.ipv4 = mkVethIpv4 config;
+        uplink.ipv6 = mkVethIpv6 config;
         uplink.localIdx = (
           lib.lists.findFirstIndex (j: j.name == name) null (
             lib.pipe alloy.jails [
@@ -167,11 +183,6 @@ let
   hostSubmodule = { name, config, ... }: {
     config =
       let
-        mkVethIpv4 =
-          jail: "10.99.${toString (jail.uplink.localIdx / 253)}.${toString ((lib.mod jail.uplink.localIdx 253) + 2)}";
-        mkVethIpv6 = jail: "fd00:99::${lib.toHexString (jail.uplink.localIdx + 2)}";
-        mkVethIface = jail: "al-v${toString (jail.idx)}-0";
-
         bridgeIpv4 = "10.99.0.1";
         bridgeIpv6 = "fd00:99::1";
         bridgeIface = "al-br0";
@@ -184,21 +195,11 @@ let
               Name = bridgeIface;
             };
           };
-          systemd.network.networks."10-${bridgeIface}" = {
-            matchConfig.Name = bridgeIface;
-            address = [
-              "${bridgeIpv4}/24"
-              "${bridgeIpv6}/64"
-            ];
-            networkConfig = {
-              ConfigureWithoutCarrier = true;
-            };
-          };
 
           networking.nftables.tables."alloy-jail-nat" = {
             family = "inet";
             content =
-              let 
+              let
                 forwardsRules = lib.concatMap (
                   jail:
                   lib.map (
@@ -227,37 +228,38 @@ let
                     }
                   ) jail.uplink.forwards
                 ) (lib.filter (j: j.host == name) (builtins.attrValues alloy.jails));
-              in ''
-              chain prerouting {
-                type nat hook prerouting priority dstnat; policy accept;
-                ${lib.concatMapStringsSep "\n" (x: x.prerouting) forwardsRules}
-              }
-              chain output {
-                type nat hook output priority dstnat; policy accept;
-                ${lib.concatMapStringsSep "\n" (x: x.output) forwardsRules}
-              }
-              chain postrouting {
-                type nat hook postrouting priority srcnat; policy accept;
-                ip saddr 10.99.0.0/24 masquerade
-                ip6 saddr fd00:99::/64 masquerade
-              }
-            '';
+              in
+              ''
+                chain prerouting {
+                  type nat hook prerouting priority dstnat; policy accept;
+                  ${lib.concatMapStringsSep "\n" (x: x.prerouting) forwardsRules}
+                }
+                chain output {
+                  type nat hook output priority dstnat; policy accept;
+                  ${lib.concatMapStringsSep "\n" (x: x.output) forwardsRules}
+                }
+                chain postrouting {
+                  type nat hook postrouting priority srcnat; policy accept;
+                  ip saddr 10.99.0.0/24 masquerade
+                  ip6 saddr fd00:99::/64 masquerade
+                }
+              '';
           };
 
-            networking.firewall.extraForwardRules = ''
-              ${lib.concatMapStringsSep "\n" (jail: ''
-                ${lib.concatMapStringsSep "\n" (forward: ''
-                  ip daddr ${mkVethIpv4 jail} ${forward.proto} dport ${toString forward.targetPort} accept
-                  ip6 daddr ${mkVethIpv6 jail} ${forward.proto} dport ${toString forward.targetPort} accept
-                '') jail.uplink.forwards}
-                ${lib.optionalString (!jail.uplink.allowEgress) ''
-                  iifname ${mkVethIface jail} ip saddr ${mkVethIpv4 jail} ct state new drop
-                  iifname ${mkVethIface jail} ip6 saddr ${mkVethIpv6 jail} ct state new drop
-                ''}
-              '') (lib.filter (j: j.host == name) (builtins.attrValues alloy.jails))}
-              
-              iifname "${bridgeIface}" oifname != "al-*" accept
-            '';
+          networking.firewall.extraForwardRules = ''
+            ${lib.concatMapStringsSep "\n" (jail: ''
+              ${lib.concatMapStringsSep "\n" (forward: ''
+                ip daddr ${mkVethIpv4 jail} ${forward.proto} dport ${toString forward.targetPort} accept
+                ip6 daddr ${mkVethIpv6 jail} ${forward.proto} dport ${toString forward.targetPort} accept
+              '') jail.uplink.forwards}
+              ${lib.optionalString (!jail.uplink.allowEgress) ''
+                iifname ${mkVethIface jail} ip saddr ${mkVethIpv4 jail} ct state new drop
+                iifname ${mkVethIface jail} ip6 saddr ${mkVethIpv6 jail} ct state new drop
+              ''}
+            '') (lib.filter (j: j.host == name) (builtins.attrValues alloy.jails))}
+
+            iifname "${bridgeIface}" oifname != "al-*" accept
+          '';
 
           networking.firewall.extraInputRules = ''
             ${lib.concatMapStringsSep "\n" (jail: ''
@@ -269,6 +271,29 @@ let
               }
             '') (lib.filter (j: j.host == name) (builtins.attrValues alloy.jails))}
           '';
+
+          systemd.network.networks =
+            lib.listToAttrs (
+              lib.map (
+                jail:
+                lib.nameValuePair "10-${mkVethIface jail}" {
+                  matchConfig.Name = mkVethIface jail;
+                  networkConfig.Bridge = bridgeIface;
+                }
+              ) (lib.filter (j: j.host == name) (builtins.attrValues alloy.jails))
+            )
+            // {
+              "10-${bridgeIface}" = {
+                matchConfig.Name = bridgeIface;
+                address = [
+                  "${bridgeIpv4}/24"
+                  "${bridgeIpv6}/64"
+                ];
+                networkConfig = {
+                  ConfigureWithoutCarrier = true;
+                };
+              };
+            };
 
           containers = lib.mapAttrs' (
             jailName: jail:

@@ -1,11 +1,11 @@
 {
-  generators.templates."index-table" =
+  generators.templates."index" =
     { config, lib, ... }:
     let
-      indexTableType =
+      indexType =
         min: max:
         lib.mkOptionType {
-          name = "indexTable";
+          name = "index";
           description = "a mapping of strings to unique integers between ${toString min} and ${toString max}";
           check =
             val:
@@ -20,7 +20,7 @@
     {
       options.name = lib.mkOption {
         type = lib.types.str;
-        description = "Name of the fact where the index table will be stored.";
+        description = "Name of the fact where the index will be stored.";
       };
       options.keys = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -38,12 +38,11 @@
 
       config = {
         tags = [
-          "indexes"
-          "facts"
+          "index"
         ];
 
         facts.${config.name} = {
-          type = indexTableType config.minValue config.maxValue;
+          type = indexType config.minValue config.maxValue;
         };
 
         script = ''
@@ -57,7 +56,7 @@
           force = getattr(args, "force", False)
           add_to_git = getattr(args, "add_to_git", False)
 
-          CLI.step(f"Generating index table '{fact_name}'...")
+          CLI.step(f"Generating index '{fact_name}'...")
 
           existing_state = {}
           fact_file = AlloyFactsAPI.get_file(fact_name)
@@ -98,7 +97,7 @@
               current_state[k] = available_values.pop(0)
 
           if current_state == existing_state and not force:
-              CLI.skip(f"No changes in index table '{fact_name}'.")
+              CLI.skip(f"No changes in index '{fact_name}'.")
           else:
               AlloyFactsAPI.set(
                   fact_name,

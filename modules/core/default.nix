@@ -11,11 +11,12 @@
     ./secrets.nix
     ./facts.nix
     ./generators.nix
-    ./index-table.nix
+    ./indexes.nix
     ./overlays.nix
     ./dns.nix
     ./gateways.nix
     ./endpoints.nix
+    ./tls.nix
   ];
 
   options.workspace = {

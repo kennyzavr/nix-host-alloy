@@ -15,7 +15,7 @@ let
   mkVethIpv6 = jail: "fd00:99::${lib.toHexString (jail.uplink.localIdx + 2)}";
   mkVethIface = jail: "al-v${toString (jail.idx)}-0";
 
-  indexes = alloy.facts."jail-index-table".value;
+  indexes = alloy.facts."indexes/jails".value;
 
   portType = lib.types.either lib.types.port (
     lib.types.submodule {
@@ -369,9 +369,9 @@ in
   };
 
   config = {
-    generators.instances."jail-index-table" = {
-      imports = [ alloy.generators.templates."index-table" ];
-      name = "jail-index-table";
+    generators.instances."indexes/jails" = {
+      imports = [ alloy.generators.templates."index" ];
+      name = "indexes/jails";
       keys = builtins.attrNames alloy.jails;
       minValue = 1;
       maxValue = 999;

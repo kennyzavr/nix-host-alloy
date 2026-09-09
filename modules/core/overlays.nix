@@ -8,7 +8,7 @@ let
   # TODO: keepalive
   alloy = config;
 
-  overlayIndexes = alloy.facts."overlay-index-table".value;
+  overlayIndexes = alloy.facts."indexes/overlays".value;
 
   portRangeType = lib.types.submodule {
     options = {
@@ -99,7 +99,7 @@ let
         wg = {
           presharedKeySecret = lib.mkOption {
             type = lib.types.str;
-            default = "overlays/${name}/wg/preshared-key";
+            default = "overlays/${name}/wg/preshared.key";
           };
         };
       };
@@ -179,11 +179,11 @@ let
         wg = {
           privateKeySecret = lib.mkOption {
             type = lib.types.str;
-            default = "overlays/${name}/hosts/${hostName}/wg/private-key";
+            default = "overlays/${name}/wg/${hostName}.key";
           };
           publicKeyFact = lib.mkOption {
             type = lib.types.str;
-            default = "overlays/${name}/hosts/${hostName}/wg/public-key";
+            default = "overlays/${name}/wg/${hostName}.key.pub";
           };
           port = lib.mkOption {
             type = lib.types.port;
@@ -229,9 +229,9 @@ let
     overlay: overlayName:
     [
       {
-        generators.instances."overlay-${overlayName}-preshared-key" = {
-          imports = [ alloy.generators.templates."wireguard-preshared-key" ];
-          privateKey = "overlays/${overlayName}/wg/preshared-key";
+        generators.instances."overlays/${overlayName}/wg/psk" = {
+          imports = [ alloy.generators.templates."wg/psk" ];
+          privateKey = "overlays/${overlayName}/wg/preshared.key";
         };
       }
     ]
@@ -239,10 +239,10 @@ let
       (lib.filterAttrs (_: host: builtins.hasAttr overlayName host.overlays))
       (lib.mapAttrsToList (
         hostName: host: {
-          generators.instances."overlay-${overlayName}-host-${hostName}-keypair" = {
-            imports = [ alloy.generators.templates."wireguard-keypair" ];
-            privateKey = "overlays/${overlayName}/hosts/${hostName}/wg/private-key";
-            publicKey = "overlays/${overlayName}/hosts/${hostName}/wg/public-key";
+          generators.instances."overlays/${overlayName}/hosts/${hostName}/keypair" = {
+            imports = [ alloy.generators.templates."wg/keypair" ];
+            privateKey = "overlays/${overlayName}/wg/${hostName}.key";
+            publicKey = "overlays/${overlayName}/wg/${hostName}.key.pub";
           };
         }
       ))
@@ -670,15 +670,15 @@ in
       generators = lib.mkMerge [
         (lib.mkMerge (builtins.catAttrs "generators" overlayConfigs))
         {
-          instances."index-table" = {
-            imports = [ alloy.generators.templates."index-table" ];
-            name = "overlay-index-table";
+          instances."indexes/overlays" = {
+            imports = [ alloy.generators.templates."index" ];
+            name = "indexes/overlays";
             minValue = 1;
             maxValue = 99;
             keys = builtins.attrNames alloy.overlays;
           };
 
-          templates."wireguard-preshared-key" = { config, lib, ... }: {
+          templates."wg/psk" = { config, lib, ... }: {
             options = {
               privateKey = lib.mkOption { type = lib.types.str; };
             };
@@ -696,7 +696,7 @@ in
             };
           };
 
-          templates."wireguard-keypair" = { config, lib, ... }: {
+          templates."wg/keypair" = { config, lib, ... }: {
             options = {
               privateKey = lib.mkOption { type = lib.types.str; };
               publicKey = lib.mkOption { type = lib.types.str; };

@@ -1,0 +1,8 @@
+{
+  "dns-acme-main-iridium": 1,
+  "dns-gateway-gallium": 2,
+  "dns-gateway-iridium": 3,
+  "dns-main-gallium": 4,
+  "dns-main-iridium": 5,
+  "testjail": 6
+}

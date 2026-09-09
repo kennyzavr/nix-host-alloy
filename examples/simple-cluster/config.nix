@@ -137,6 +137,22 @@ in
       };
 
       config = {
+        generators.instances."test-ca" = {
+          imports = [ alloy.generators.templates."tls-x509-ca-cert" ];
+
+          certFact = "test-ca-cert";
+          keySecret = "test-ca-key";
+
+          subject = "d108 Root CA";
+
+          permitted.ips = [
+            {
+              addr.v4 = "192.168.100.0";
+              prefixLength = 24;
+            }
+          ];
+        };
+
         dns.zones = {
           "public" = {
             apex = "d108.dev";
@@ -198,8 +214,6 @@ in
           ];
         };
 
-        secrets."test" = { };
-
         overlays."main" = {
           links = [
             {
@@ -220,12 +234,6 @@ in
               ipv4 = "192.168.100.2";
             }
           ];
-          secrets."test" = { };
-          secretTemplates."testtemplate" = {
-            template = ''
-              TESTFOO=${config.secrets."test".placeholder}
-            '';
-          };
           nixosModule = { pkgs, ... }: {
             services.nginx.enable = true;
             services.nginx.virtualHosts."_" = {
@@ -260,27 +268,9 @@ in
             wg.endpoint = "192.168.100.${toString config.idx}";
           };
 
-          secrets."test" = { };
-          secretTemplates."testtemplate" = {
-            template = ''
-              TEST=${config.secrets."test".placeholder}
-            '';
-          };
-
           nixosModule = {
             networking.firewall.allowedTCPPorts = [ 80 ];
           };
-
-          # vars.secrets."testsecret" = {};
-          # overlays.main = {
-          #   wg.port = 52158;
-          #   wg.endpoint = "192.168.100.${toString (config.idx)}";
-          # };
-          # nixosModule = { ... }: {
-          #   security.pki.certificateFiles = [
-          #     alloy.secrets."ca-root".generator.ssl-x509-ca.certPath
-          #   ];
-          # };
         };
 
         hosts.gallium = { config, ... }: {
@@ -298,25 +288,6 @@ in
           overlays."main" = {
             wg.endpoint = "192.168.100.${toString config.idx}";
           };
-
-          # workspace.vars.secrets = {
-          #   identities = [
-          #     {
-          #       identity = "/etc/ssh/ssh_host_ed25519_key";
-          #       pubkey = ./test_ed25519_key.pub;
-          #     }
-          #   ];
-          # };
-
-          # overlays.main = {
-          #   wg.port = 52158;
-          #   wg.endpoint = "192.168.100.${toString (toString config.idx)}";
-          # };
-          # nixosModule = { ... }: {
-          #   security.pki.certificateFiles = [
-          #     alloy.secrets."ca-root".generator.ssl-x509-ca.certPath
-          #   ];
-          # };
         };
 
         # overlays.main = {

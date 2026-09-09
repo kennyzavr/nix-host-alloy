@@ -6,7 +6,7 @@
 let
   alloy = config;
 
-  indexes = alloy.facts."host-index-table".value;
+  indexes = alloy.facts."indexes/hosts".value;
 
   hostSubmodule = { name, config, ... }: {
     options = {
@@ -65,12 +65,12 @@ in
   };
 
   config = {
-    generators.instances."host-index-table" = {
+    generators.instances."indexes/hosts" = {
       imports = [
-        alloy.generators.templates."index-table"
+        alloy.generators.templates."index"
       ];
 
-      name = "host-index-table";
+      name = "indexes/hosts";
       keys = builtins.attrNames alloy.hosts;
       minValue = 1;
       maxValue = 99;

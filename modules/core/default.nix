@@ -1,9 +1,4 @@
 {
-  lib,
-  alib,
-  ...
-}:
-{
   imports = [
     ./hosts.nix
     ./jails.nix
@@ -17,22 +12,20 @@
     ./gateways.nix
     ./endpoints.nix
     ./tls.nix
+    ./state.nix
   ];
 
-  options.workspace = {
-    root = lib.mkOption {
-      type = lib.types.path;
+  flake.alloyModules.core = { alib, lib, ... }: {
+    options.workspace = {
+      root = lib.mkOption {
+        type = lib.types.path;
+      };
     };
-  };
 
-  options.core.api = lib.mkOption {
-    default = { };
-    type = lib.types.attrsOf lib.types.unspecified;
-  };
-
-  options.assertions = lib.mkOption {
-    type = lib.types.listOf alib.types.assertion;
-    default = [ ];
-    description = "List of assertions to validate the global configuration.";
+    options.assertions = lib.mkOption {
+      type = lib.types.listOf alib.types.assertion;
+      default = [ ];
+      description = "List of assertions to validate the global configuration.";
+    };
   };
 }

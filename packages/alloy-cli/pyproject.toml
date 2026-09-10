@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alloy-cli"
+version = "0.1.0"
+dependencies = [
+    "rich"
+]
+
+[project.scripts]
+alloy-cli = "alloy_cli.main:main"

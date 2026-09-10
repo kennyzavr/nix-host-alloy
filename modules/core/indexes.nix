@@ -1,111 +1,152 @@
 {
-  generators.templates."index" =
-    { config, lib, ... }:
+  flake.alloyModules.core =
+    {
+      alib,
+      lib,
+      config,
+      ...
+    }:
     let
-      indexType =
-        min: max:
-        lib.mkOptionType {
-          name = "index";
-          description = "a mapping of strings to unique integers between ${toString min} and ${toString max}";
-          check =
-            val:
-            let
-              values = builtins.attrValues val;
-            in
-            builtins.isAttrs val
-            && builtins.all (v: builtins.isInt v && v >= min && v <= max) values
-            && lib.length (lib.unique values) == lib.length values;
+      alloy = config;
+
+      indexSubmodule =
+        { name, config, ... }:
+        {
+          options = {
+            factName = lib.mkOption {
+              type = lib.types.str;
+              default = "indexes/${name}.json";
+            };
+
+            keys = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "The list of keys that must be allocated a unique integer in this index.";
+            };
+
+            minValue = lib.mkOption {
+              type = lib.types.int;
+              default = 1;
+              description = "Minimum allocatable value (inclusive).";
+            };
+
+            maxValue = lib.mkOption {
+              type = lib.types.int;
+              default = 999;
+              description = "Maximum allocatable value (inclusive).";
+            };
+
+            values = lib.mkOption {
+              type = lib.types.attrsOf lib.types.int;
+              readOnly = true;
+              description = ''
+                The full mapping of key → integer for this index, loaded from the
+                backing fact file. Returns {} if the file does not yet exist.
+              '';
+            };
+
+            get = lib.mkOption {
+              type = lib.types.functionTo lib.types.int;
+              readOnly = true;
+              description = ''
+                Look up the allocated integer for a given key.
+
+                Throws a descriptive error if the key is not present in the index
+                (e.g. the index file was not regenerated after a new key was added).
+
+                Usage:
+                  config.indexes."hosts".get "my-host"
+              '';
+            };
+
+            assertions = lib.mkOption {
+              type = lib.types.listOf alib.types.assertion;
+              readOnly = true;
+              description = "Assertions verifying the integrity of the stored index data.";
+            };
+          };
+
+          config = {
+            values =
+              if alloy.facts.${config.factName}.exists then
+                builtins.fromJSON alloy.facts.${config.factName}.value
+              else
+                { };
+            get =
+              key: if config.values ? ${key} then config.values.${key} else 0
+            # throw ''
+            #   Alloy: Index '${name}' has no allocation for key '${key}'.
+            #   The index file at '${alloy.workspace.facts.baseDir}/${config.factName}' is either
+            #   missing or out of date.
+            #   Run: alloy indexes generate --instace "${name}"
+            #   to regenerate it.
+            # ''
+            ;
+
+            assertions = lib.optionals alloy.facts.${config.factName}.exists (
+              [
+                {
+                  assertion =
+                    lib.length (builtins.attrNames config.values)
+                    == lib.length (lib.unique (builtins.attrValues config.values));
+                  message = ''
+                    [Alloy] Index '${name}': duplicate values detected in the index file.
+
+                    Every key must map to a unique integer. Run:
+                      alloy indexes generate --force --instance "${name}"
+                    to reallocate and fix collisions.
+                  '';
+                }
+                {
+                  assertion = builtins.all (v: v >= config.minValue && v <= config.maxValue) (
+                    builtins.attrValues config.values
+                  );
+                  message = ''
+                    [Alloy] Index '${name}': one or more values are outside the
+                    allowed range [${toString config.minValue}, ${toString config.maxValue}].
+
+                    Run:
+                      alloy indexes generate --force --instance "${name}"
+                    to reallocate all values within the valid range.
+                  '';
+                }
+              ]
+              ++ (lib.map (key: {
+                assertion = builtins.hasAttr key config.values;
+                message = ''
+                  Alloy: Index '${name}' has no allocation for key '${key}'.
+                  The index file at '${alloy.workspace.facts.baseDir}/${config.factName}' is either
+                  missing or out of date.
+                  Run: alloy indexes generate --instace "${name}"
+                  to regenerate it.
+                '';
+              }) config.keys)
+            );
+          };
         };
     in
     {
-      options.name = lib.mkOption {
-        type = lib.types.str;
-        description = "Name of the fact where the index will be stored.";
-      };
-      options.keys = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        default = [ ];
-        description = "List of keys that require an index.";
-      };
-      options.minValue = lib.mkOption {
-        type = lib.types.int;
-        default = 1;
-      };
-      options.maxValue = lib.mkOption {
-        type = lib.types.int;
-        default = 999;
+      options.indexes = lib.mkOption {
+        default = { };
+        type = lib.types.attrsOf (lib.types.submodule indexSubmodule);
       };
 
       config = {
-        tags = [
-          "index"
-        ];
+        assertions = lib.flatten (lib.mapAttrsToList (_: idx: idx.assertions) alloy.indexes);
 
-        facts.${config.name} = {
-          type = indexType config.minValue config.maxValue;
+        facts = lib.mapAttrs' (_: index: lib.nameValuePair index.factName { }) alloy.indexes;
+
+        _internal.state = { ... }: {
+          indexes = lib.mapAttrsToList (indexName: index: {
+            name = indexName;
+            inherit (index)
+              keys
+              minValue
+              maxValue
+              factName
+              ;
+          }) alloy.indexes;
         };
-
-        script = ''
-          import json
-
-          fact_name = "${config.name}"
-          keys = ${builtins.toJSON (lib.unique (config.keys))}
-          min_val = ${toString config.minValue}
-          max_val = ${toString config.maxValue}
-
-          force = getattr(args, "force", False)
-          add_to_git = getattr(args, "add_to_git", False)
-
-          CLI.step(f"Generating index '{fact_name}'...")
-
-          existing_state = {}
-          fact_file = AlloyFactsAPI.get_file(fact_name)
-          if fact_file.is_file():
-              try:
-                  existing_state = AlloyFactsAPI.get(fact_name)
-                  if not isinstance(existing_state, dict):
-                      existing_state = {}
-              except Exception:
-                  pass
-
-          current_state = {k: v for k, v in existing_state.items() if k in keys}
-
-          unallocated_keys = sorted([k for k in keys if k not in current_state])
-          needed = len(unallocated_keys)
-
-          used_sorted = sorted([v for v in current_state.values() if min_val <= v <= max_val])
-
-          available_values = []
-          candidate = min_val
-
-          for used_val in used_sorted:
-              if len(available_values) >= needed:
-                  break
-              while candidate < used_val and len(available_values) < needed and candidate <= max_val:
-                  available_values.append(candidate)
-                  candidate += 1
-              candidate = max(candidate, used_val + 1)
-
-          while len(available_values) < needed and candidate <= max_val:
-              available_values.append(candidate)
-              candidate += 1
-
-          if len(available_values) < needed:
-              CLI.abort(f"Index allocation failed for '{fact_name}'. Need {needed} new slots, but not enough gaps available in range [{min_val}, {max_val}].")
-
-          for k in unallocated_keys:
-              current_state[k] = available_values.pop(0)
-
-          if current_state == existing_state and not force:
-              CLI.skip(f"No changes in index '{fact_name}'.")
-          else:
-              AlloyFactsAPI.set(
-                  fact_name,
-                  json.dumps(current_state, indent=2, sort_keys=True),
-                  force=True,
-                  add_to_git=add_to_git
-              )
-        '';
       };
     };
 }

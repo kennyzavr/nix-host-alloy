@@ -1,81 +1,84 @@
 {
-  lib,
-  config,
-  ...
-}:
-let
-  alloy = config;
+  flake.alloyModules.core =
+    {
+      lib,
+      config,
+      ...
+    }:
+    let
+      alloy = config;
 
-  indexes = alloy.facts."indexes/hosts".value;
+      hostSubmodule = { name, config, ... }: {
+        options = {
+          idx = lib.mkOption {
+            type = lib.types.ints.unsigned;
+            readOnly = true;
+          };
+          system = lib.mkOption {
+            type = lib.types.str;
+          };
+          nixosModule = lib.mkOption {
+            type = lib.types.deferredModule;
+            default = { };
+            apply = module: {
+              _class = "nixos";
+              _file = "hosts.${lib.strings.escapeNixIdentifier name}.nixosModule";
+              imports = [ module ];
+            };
+          };
+          nixosConfiguration = lib.mkOption {
+            readOnly = true;
+            type = lib.types.unspecified;
+          };
+          assertions = lib.mkOption {
+            type = lib.types.listOf lib.types.unspecified;
+            default = [ ];
+          };
+        };
+        config = {
+          idx = alloy.indexes."hosts".get name;
+          nixosConfiguration = lib.nixosSystem {
+            inherit (config) system;
+            modules = [
+              config.nixosModule
+              {
+                system.stateVersion = "26.05";
+                networking.useNetworkd = true;
+                systemd.network.enable = true;
+                networking.nftables.enable = true;
 
-  hostSubmodule = { name, config, ... }: {
-    options = {
-      idx = lib.mkOption {
-        type = lib.types.ints.unsigned;
-        readOnly = true;
-      };
-      system = lib.mkOption {
-        type = lib.types.str;
-      };
-      nixosModule = lib.mkOption {
-        type = lib.types.deferredModule;
-        default = { };
-        apply = module: {
-          _class = "nixos";
-          _file = "hosts.${lib.strings.escapeNixIdentifier name}.nixosModule";
-          imports = [ module ];
+                boot.kernel.sysctl = {
+                  "net.ipv4.ip_forward" = true;
+                  "net.ipv6.conf.all.forwarding" = true;
+                  "net.ipv4.conf.all.accept_redirects" = false;
+                  "net.ipv6.conf.all.accept_redirects" = false;
+                };
+              }
+            ];
+          };
         };
       };
-      nixosConfiguration = lib.mkOption {
-        readOnly = true;
-        type = lib.types.unspecified;
+    in
+    {
+      options.hosts = lib.mkOption {
+        default = { };
+        type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
       };
-      assertions = lib.mkOption {
-        type = lib.types.listOf lib.types.unspecified;
-        default = [ ];
-      };
-    };
-    config = {
-      idx = indexes.${name};
-      nixosConfiguration = lib.nixosSystem {
-        inherit (config) system;
-        modules = [
-          config.nixosModule
-          {
-            networking.useNetworkd = true;
-            systemd.network.enable = true;
-            networking.nftables.enable = true;
 
-            boot.kernel.sysctl = {
-              "net.ipv4.ip_forward" = true;
-              "net.ipv6.conf.all.forwarding" = true;
-              "net.ipv4.conf.all.accept_redirects" = false;
-              "net.ipv6.conf.all.accept_redirects" = false;
-            };
-          }
-        ];
+      config = {
+        assertions = lib.flatten (lib.mapAttrsToList (_: host: host.assertions) alloy.hosts);
+
+        indexes."hosts" = {
+          keys = builtins.attrNames alloy.hosts;
+          minValue = 1;
+          maxValue = 99;
+        };
+
+        _internal.state = { ... }: {
+          hosts = lib.mapAttrsToList (hostName: host: {
+            name = hostName;
+          }) alloy.hosts;
+        };
       };
     };
-  };
-in
-{
-  options.hosts = lib.mkOption {
-    default = { };
-    type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
-  };
-
-  config = {
-    generators.instances."indexes/hosts" = {
-      imports = [
-        alloy.generators.templates."index"
-      ];
-
-      name = "indexes/hosts";
-      keys = builtins.attrNames alloy.hosts;
-      minValue = 1;
-      maxValue = 99;
-    };
-
-    assertions = lib.flatten (lib.mapAttrsToList (_: host: host.assertions) alloy.hosts);
-  };
 }

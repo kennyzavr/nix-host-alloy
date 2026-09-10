@@ -20,12 +20,8 @@
       {
         imports = [
           ./parts.nix
-          ({ lib, ... }: {
-            flake.lib = import ./lib {
-              inherit lib;
-              inherit inputs;
-            };
-          })
+          ./lib
+          ./modules
         ];
 
         flake.flakeModules = {
@@ -35,12 +31,35 @@
         perSystem =
           {
             pkgs,
+            config,
             ...
           }:
           {
+            packages.alloy-cli = pkgs.python3Packages.buildPythonApplication {
+              pname = "alloy-cli";
+              version = "0.1.0";
+              src = ./packages/alloy-cli;
+              pyproject = true;
+              build-system = [ pkgs.python3Packages.setuptools ];
+              dependencies = [ pkgs.python3Packages.rich ];
+
+              makeWrapperArgs = [
+                "--prefix"
+                "PATH"
+                ":"
+                (pkgs.lib.makeBinPath [
+                  pkgs.rage
+                  pkgs.git
+                  pkgs.nano
+                ])
+              ];
+            };
+
             devShells.default = pkgs.mkShell {
               packages = [
                 pkgs.nil
+                pkgs.pyright
+                pkgs.ruff
               ];
             };
             formatter = pkgs.nixfmt-tree;

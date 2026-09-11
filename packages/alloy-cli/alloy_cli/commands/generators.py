@@ -1,7 +1,7 @@
 import argparse
 from ..cli import CLI
 from ..di import Container
-from .utils import resolve_force, resolve_add_to_git
+from .utils import resolve_force, resolve_add_to_git, ensure_indexes_consistency
 
 from ..domain.exceptions import GeneratorNotDefinedError, GeneratorCycleError, GeneratorExecutionError
 
@@ -9,6 +9,8 @@ def handle_run(args, cli: CLI, container: Container):
     service = container.generators_service
     force = resolve_force(args.force)
     add_to_git = resolve_add_to_git(args.add_to_git)
+    
+    ensure_indexes_consistency(cli, container)
 
     try:
         plan = service.get_execution_plan(names=args.generator, tags=args.tag)

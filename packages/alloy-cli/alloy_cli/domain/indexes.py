@@ -45,11 +45,14 @@ class IndexesService:
         needed = len(unallocated_keys)
 
         if needed > 0:
-            available_values = self._compute_allocations(current_state.values(), needed, record)
+            available_values = self._compute_allocations(
+                current_state.values(), needed, record
+            )
             for k in unallocated_keys:
                 current_state[k] = available_values.pop(0)
 
-        if current_state == existing_state and not force:
+        # if current_state == existing_state and not force:
+        if current_state == existing_state:
             return False, len(current_state)
 
         self.facts_service.set(
@@ -101,10 +104,12 @@ class IndexesService:
                 raise e
         except FactFileNotFoundError:
             return {}
-            
+
         return existing_state
 
-    def _compute_allocations(self, used_values: Iterable[int], needed: int, record: IndexRecord) -> List[int]:
+    def _compute_allocations(
+        self, used_values: Iterable[int], needed: int, record: IndexRecord
+    ) -> List[int]:
         used_sorted = sorted(used_values)
         available_values = []
         candidate = record.min_value
@@ -129,5 +134,32 @@ class IndexesService:
             raise IndexAllocationFailedError(
                 record.name, needed, record.min_value, record.max_value
             )
-            
+
         return available_values
+
+    def check_consistency(self, record: IndexRecord) -> None:
+        """
+        Checks if the index is in a consistent state.
+        Raises IndexStateCorruptedError if not.
+        """
+        state = self._read_state(record, force=False)
+
+        expected_keys = set(record.keys)
+        actual_keys = set(state.keys())
+
+        if expected_keys != actual_keys:
+            missing = expected_keys - actual_keys
+            extra = actual_keys - expected_keys
+            msg = "Keys mismatch."
+            if missing:
+                msg += f" Missing allocated keys: {', '.join(sorted(missing))}."
+            if extra:
+                msg += f" Extra keys in state: {', '.join(sorted(extra))}."
+            raise IndexStateCorruptedError(record.name, record.fact_name, msg)
+
+    def check_all_consistency(self) -> None:
+        """
+        Checks consistency for all defined indexes.
+        """
+        for record in self.indexes_repo.find_all():
+            self.check_consistency(record)

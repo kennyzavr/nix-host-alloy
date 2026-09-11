@@ -3,13 +3,15 @@ import sys
 from ..cli import CLI
 from ..di import Container
 from ..domain.exceptions import *
-from .utils import resolve_force, resolve_add_to_git
+from .utils import resolve_force, resolve_add_to_git, ensure_indexes_consistency
 
 
 def handle_set(args, cli: CLI, container: Container):
     service = container.secrets_service
     force = resolve_force(args.force)
     add_to_git = resolve_add_to_git(args.add_to_git)
+
+    ensure_indexes_consistency(cli, container)
 
     new_data = sys.stdin.buffer.read()
     try:
@@ -40,6 +42,8 @@ def handle_set(args, cli: CLI, container: Container):
 
 def handle_view(args, cli: CLI, container: Container):
     service = container.secrets_service
+    
+    ensure_indexes_consistency(cli, container)
     try:
         decrypted = service.get(args.secret)
     except NoMasterIdentitiesDefinedError:
@@ -64,6 +68,8 @@ def handle_view(args, cli: CLI, container: Container):
 def handle_edit(args, cli: CLI, container: Container):
     service = container.secrets_service
     add_to_git = resolve_add_to_git(args.add_to_git)
+
+    ensure_indexes_consistency(cli, container)
 
     try:
         current_data = service.get(args.secret)
@@ -112,6 +118,8 @@ def handle_rekey(args, cli: CLI, container: Container):
     service = container.secrets_service
     force = resolve_force(args.force)
     add_to_git = resolve_add_to_git(args.add_to_git)
+
+    ensure_indexes_consistency(cli, container)
 
     try:
         host_plan, jail_plan = service.get_rekey_plan(

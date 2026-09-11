@@ -2,12 +2,14 @@ import sys
 from ..cli import CLI
 from ..di import Container
 from ..domain.exceptions import *
-from .utils import resolve_force, resolve_add_to_git
+from .utils import resolve_force, resolve_add_to_git, ensure_indexes_consistency
 
 def handle_set(args, cli: CLI, container: Container):
     service = container.facts_service
     force = resolve_force(args.force)
     add_to_git = resolve_add_to_git(args.add_to_git)
+    
+    ensure_indexes_consistency(cli, container)
 
     new_data = sys.stdin.read()
     cli.step(f"Writing fact '{cli.id(args.fact)}'...")
@@ -33,6 +35,8 @@ def handle_set(args, cli: CLI, container: Container):
 
 def handle_view(args, cli: CLI, container: Container):
     service = container.facts_service
+    
+    ensure_indexes_consistency(cli, container)
 
     try:
         fact_value = service.get(args.fact)
@@ -47,6 +51,8 @@ def handle_view(args, cli: CLI, container: Container):
 def handle_edit(args, cli: CLI, container: Container):
     service = container.facts_service
     add_to_git = resolve_add_to_git(args.add_to_git)
+    
+    ensure_indexes_consistency(cli, container)
 
     try:
         current_data = service.get(args.fact)

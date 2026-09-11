@@ -71,6 +71,8 @@
             ${jailName} = { config, pkgs, ... }: {
               host = srv.host;
 
+              uplink.allowEgress = true;
+
               overlays = lib.mapAttrs (_: _: { }) srv.overlays;
 
               nixosModule = {

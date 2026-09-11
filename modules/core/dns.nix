@@ -148,7 +148,7 @@
                     toString d;
                 ttlStr = lib.optionalString (config.ttl != null) "${toString config.ttl} ";
               in
-              "${alloy.dns.rezolveNode config.domain} ${ttlStr}IN ${recordTypeStr} ${value}";
+              "${alloy.dns.resolveNode config.domain} ${ttlStr}IN ${recordTypeStr} ${value}";
           };
         }
       );
@@ -313,7 +313,7 @@
           default = { };
           type = lib.types.attrsOf zoneType;
         };
-        rezolveNode = lib.mkOption {
+        resolveNode = lib.mkOption {
           type = lib.types.functionTo lib.types.str;
           readOnly = true;
           default = domain: alib.resolveZoneNode config.dns.zones domain;

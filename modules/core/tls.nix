@@ -60,6 +60,11 @@
             readOnly = true;
             default = [ ];
           };
+          idx = lib.mkOption {
+            type = lib.types.ints.unsigned;
+            readOnly = true;
+            default = alloy.indexes."tls.certs".get name;
+          };
         };
 
         config = {
@@ -76,6 +81,10 @@
               );
             in
             [
+              {
+                assertion = alib.types.dns.name.check config.subject;
+                message = "[Alloy] Cert '${name}' must be a valid domain name string";
+              }
               {
                 assertion = config.domains != [ ] || config.ips != [ ];
                 message = ''
@@ -195,6 +204,12 @@
           secrets = lib.mkMerge (lib.map (c: c.secrets or { }) certs);
           generators.instances = lib.mkMerge (lib.map (c: c.generators.instances or { }) certs);
           dns.acmeChallenges = lib.mkMerge (lib.map (c: c.dns.acmeChallenges or [ ]) certs);
+
+          indexes."tls.certs" = {
+            keys = builtins.attrNames alloy.tls.certs;
+            minValue = 1;
+            maxValue = 999;
+          };
 
           generators.templates."tls/ca-cert" = { config, ... }: {
             options = {

@@ -28,7 +28,7 @@
             directory = lib.mkOption {
               type = lib.types.str;
               readOnly = true;
-              default = "/var/lib/acme/${name}";
+              default = "/var/lib/alloy/certs/${name}";
             };
             certPath = lib.mkOption {
               type = lib.types.str;
@@ -138,16 +138,15 @@
                     );
                     allCerts = hostCerts // jailCerts;
 
-                    mkDnsCert =
+                    configs = lib.mapAttrsToList (
                       certName: certCfg:
                       let
                         cert = alloy.tls.certs.${certName};
                         ca = alloy.tls.ca.${cert.ca};
                         ch = cert.acme.challenge.dns;
 
-                        domains = lib.map (d: lib.removeSuffix "." (alloy.dns.resolveNode d)) cert.domains;
-                        primaryDomain = builtins.head domains;
-                        globalExtraDomains = builtins.tail domains;
+                        primaryDomain = alloy.dns.resolveNode (builtins.head cert.domains);
+                        globalExtraDomains = lib.map alloy.dns.resolveNode (builtins.tail cert.domains);
 
                         serverUrl =
                           if ca.acme.directory != null && ca.acme.directory ? url then
@@ -202,7 +201,7 @@
 
                         nixosModule = {
                           security.acme.acceptTerms = true;
-                          security.acme.certs.${certName} = {
+                          security.acme.certs.${primaryDomain} = {
                             email = cert.acme.email;
                             server = serverUrl;
                             domain = primaryDomain;
@@ -211,20 +210,18 @@
                             dnsProvider = "dnsupdate";
                             extraLegoFlags = [ "--dns.propagation-disable-ans" ];
                             environmentFile = hostSubmodule.config.secretTemplates."tls-acme-${certName}-creds".path;
+                            directory = certCfg.directory;
                           };
                         };
-                      };
-
-                    configs = lib.pipe allCerts [
-                      (lib.filterAttrs (certName: _: alloy.tls.certs.${certName}.acme.challenge ? dns))
-                      (lib.mapAttrsToList mkDnsCert)
-                    ];
+                      }
+                    ) allCerts;
                   in
                   {
                     secrets = lib.mkMerge (lib.catAttrs "secrets" configs);
                     secretTemplates = lib.mkMerge (lib.catAttrs "secretTemplates" configs);
                     assertions = lib.mkMerge (lib.catAttrs "assertions" configs);
                     nixosModule = {
+                      # Bind mounts for jails on this host
                       containers = lib.mapAttrs' (
                         jailName: jail:
                         lib.nameValuePair "alloy-jail-${jailName}" {
@@ -238,13 +235,15 @@
                         }
                       ) (lib.filterAttrs (_: j: j.host == name) alloy.jails);
 
-                      users.groups = lib.mapAttrs' (
-                        certName: certCfg:
-                        lib.nameValuePair certCfg.group {
-                          gid = certCfg.gid;
-                        }
-                      ) allCerts;
+                      # Create the groups with the specific GID for each cert
+                      users.groups =
+                        lib.mapAttrs' (certName: certCfg:
+                          lib.nameValuePair certCfg.group {
+                            gid = certCfg.gid;
+                          }
+                        ) allCerts;
 
+                      # Anchor services for the host's own certs
                       systemd.services = lib.mkMerge (
                         lib.mapAttrsToList mkAnchorServices hostSubmodule.config.acme2.certs
                       );

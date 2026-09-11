@@ -123,6 +123,10 @@
 
             assertions = [
               {
+                assertion = alib.types.dns.label.check name;
+                message = "[Alloy] Jail name '${name}' contains invalid characters or is too long. Use only lowercase letters, numbers, and hyphens (max 63 characters).";
+              }
+              {
                 assertion = builtins.hasAttr config.host alloy.hosts;
                 message = ''
                   [Alloy] Invalid host reference in jail '${name}'
@@ -292,6 +296,13 @@
                   };
                 };
 
+              systemd.services = lib.mapAttrs' (
+                jailName: jail:
+                lib.nameValuePair "container@alloy-jail-${jailName}" {
+                  serviceConfig.TimeoutStartSec = lib.mkForce "infinity";
+                }
+              ) (lib.filterAttrs (_: jail: jail.host == name) alloy.jails);
+
               containers = lib.mapAttrs' (
                 jailName: jail:
                 lib.nameValuePair "alloy-jail-${jailName}" {
@@ -304,7 +315,15 @@
                     };
                   };
                   config = { ... }: {
-                    imports = [ jail.nixosModule ];
+                    imports = [
+                      jail.nixosModule
+                      ({ pkgs, ... }: {
+                        environment.systemPackages = [
+                          pkgs.dig
+                          pkgs.lego
+                        ];
+                      })
+                    ];
 
                     nixpkgs.pkgs = lib.mkDefault pkgs;
                     networking.useNetworkd = true;

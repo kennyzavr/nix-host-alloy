@@ -25,7 +25,7 @@
       recordType = lib.types.submodule (
         { config, ... }: {
           options = {
-            node = lib.mkOption {
+            domain = lib.mkOption {
               type = alib.types.zoneNode;
             };
             ttl = lib.mkOption {
@@ -148,7 +148,20 @@
                     toString d;
                 ttlStr = lib.optionalString (config.ttl != null) "${toString config.ttl} ";
               in
-              "${alloy.dns.rezolveNode config.node} ${ttlStr}IN ${recordTypeStr} ${value}";
+              "${alloy.dns.rezolveNode config.domain} ${ttlStr}IN ${recordTypeStr} ${value}";
+          };
+        }
+      );
+
+      acmeChallengeType = lib.types.submodule (
+        { config, name, ... }: {
+          options = {
+            domain = lib.mkOption {
+              type = alib.types.zoneNode;
+            };
+            tsigKeySecret = lib.mkOption {
+              type = lib.types.str;
+            };
           };
         }
       );
@@ -170,21 +183,131 @@
               readOnly = true;
               type = lib.types.str;
             };
+            nameservers = lib.mkOption {
+              default = [ ];
+              type = lib.types.listOf lib.types.str;
+            };
+            acmeChallenge = {
+              enable = lib.mkOption {
+                default = false;
+                type = lib.types.bool;
+              };
+              subzone = lib.mkOption {
+                type = alib.types.dns.name;
+                default = "acme";
+              };
+              endpoint = lib.mkOption {
+                type = lib.types.str;
+              };
+            };
           };
           config.bindConfig = ''
             $ORIGIN ${lib.removeSuffix "." config.apex}.
             $TTL ${toString config.ttl}
             ${lib.concatMapStringsSep "\n" (record: record.bindConfig) (
-              lib.filter (r: r.node.zone == name) alloy.dns.records
+              lib.filter (r: r.domain.zone == name) alloy.dns.records
             )}
           '';
         }
       );
+
+      nodeSubmodule =
+        type:
+        { name, config, ... }:
+        let
+          nodeName = name;
+        in
+        {
+          options = {
+            overlays = lib.mkOption {
+              type = lib.types.attrsOf (
+                lib.types.submodule (
+                  { name, ... }:
+                  let
+                    oName = name;
+                  in
+                  {
+                    options = {
+                      domain = lib.mkOption {
+                        type = lib.types.str;
+                        readOnly = true;
+                      };
+                    };
+                    config = {
+                      domain = "${nodeName}.${type}.${alloy.overlays.${oName}.domain}";
+                    };
+                  }
+                )
+              );
+            };
+            dns = {
+              upstreamResolvers = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [
+                  "8.8.8.8"
+                  "1.1.1.1"
+                ];
+              };
+            };
+          };
+          config.nixosModule = {
+            services.resolved.enable = false;
+            services.coredns = {
+              enable = true;
+              config = ''
+                . {
+                  bind 127.0.0.1 ::1
+                  forward . ${lib.concatStringsSep " " config.dns.upstreamResolvers}
+                  cache
+                }
+                ${alloy.dns.discovery.domain} {
+                  bind 127.0.0.1 ::1
+                  hosts {
+                    ${lib.concatStringsSep "\n                  " (
+                      let
+                        allHostRecords = lib.flatten (
+                          lib.mapAttrsToList (
+                            hName: h: lib.mapAttrsToList (oName: o: "${o.ipv6} ${o.domain}") h.overlays
+                          ) alloy.hosts
+                        );
+                        allJailRecords = lib.flatten (
+                          lib.mapAttrsToList (
+                            jName: j: lib.mapAttrsToList (oName: o: "${o.ipv6} ${o.domain}") j.overlays
+                          ) alloy.jails
+                        );
+                        allEndpointRecords = lib.flatten (
+                          lib.mapAttrsToList (eName: e: lib.map (t: "${t.ipv6} ${e.domain}") e.targets) alloy.endpoints
+                        );
+                      in
+                      allHostRecords ++ allJailRecords ++ allEndpointRecords
+                    )}
+                    fallthrough
+                  }
+                }
+              '';
+            };
+            networking.nameservers = [
+              "127.0.0.1"
+              "::1"
+            ];
+          };
+        };
     in
     {
       options.dns = {
+        discovery = {
+          domain = lib.mkOption {
+            type = alib.types.dns.name;
+            default = "alloy.internal";
+          };
+        };
         records = lib.mkOption {
+          default = [ ];
           type = lib.types.listOf recordType;
+        };
+        acmeChallenges = lib.mkOption {
+          default = [ ];
+          type = lib.types.listOf acmeChallengeType;
         };
         zones = lib.mkOption {
           default = { };
@@ -193,7 +316,84 @@
         rezolveNode = lib.mkOption {
           type = lib.types.functionTo lib.types.str;
           readOnly = true;
-          default = node: alib.resolveZoneNode config.dns.zones node;
+          default = domain: alib.resolveZoneNode config.dns.zones domain;
+        };
+        mkTsigKeyId = lib.mkOption {
+          type = lib.types.functionTo lib.types.str;
+          readOnly = true;
+          default =
+            tsigKeySecret:
+            let
+              fullHash = builtins.hashString "sha256" tsigKeySecret;
+            in
+            "${builtins.substring 0 32 fullHash}.${builtins.substring 32 32 fullHash}";
+        };
+      };
+
+      options.overlays = lib.mkOption {
+        type = lib.types.attrsOf (
+          lib.types.submodule (
+            { name, ... }: {
+              options = {
+                domain = lib.mkOption {
+                  type = lib.types.str;
+                  readOnly = true;
+                };
+              };
+              config = {
+                domain = "${name}.${alloy.dns.discovery.domain}";
+              };
+            }
+          )
+        );
+      };
+
+      options.endpoints = lib.mkOption {
+        type = lib.types.attrsOf (
+          lib.types.submodule (
+            { name, ... }: {
+              options = {
+                domain = lib.mkOption {
+                  type = lib.types.str;
+                  readOnly = true;
+                };
+              };
+              config = {
+                domain = "${name}.ep.${alloy.dns.discovery.domain}";
+              };
+            }
+          )
+        );
+      };
+
+      options.hosts = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule (nodeSubmodule "host"));
+      };
+
+      options.jails = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule (nodeSubmodule "jail"));
+      };
+
+      config = {
+        assertions = lib.map (ch: {
+          assertion = alib.types.dns.name.check (lib.replaceStrings [ "/" ] [ "." ] ch.tsigKeySecret);
+          message = "[Alloy] DNS acmeChallenge for zone '${ch.domain.zone}' has an invalid tsigKeySecret '${ch.tsigKeySecret}'. When slashes are replaced by dots, it must form a valid DNS name.";
+        }) alloy.dns.acmeChallenges;
+
+        generators.templates."dns/tsig-key" = { config, ... }: {
+          options = {
+            keySecret = lib.mkOption { type = lib.types.str; };
+          };
+          config.tags = [
+            "dns"
+            "tsig-key"
+          ];
+          config.package =
+            { pkgs, ... }:
+            pkgs.writeShellScriptBin "dns-tsig-key-gen" ''
+              TSIG_KEY=$(${pkgs.openssl}/bin/openssl rand -base64 32)
+              "$ALLOY_BIN" secrets set "${config.keySecret}" <<< "$TSIG_KEY"
+            '';
         };
       };
     };

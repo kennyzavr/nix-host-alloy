@@ -1,8 +1,11 @@
 {
-  "dns-acme-main-iridium": 2,
-  "dns-gateway-gallium": 3,
-  "dns-gateway-iridium": 4,
-  "dns-main-gallium": 5,
-  "dns-main-iridium": 6,
-  "testjail": 1
+  "dnsdist-gallium": 1,
+  "dnsdist-iridium": 2,
+  "knot-acme-main-iridium": 3,
+  "knot-main-gallium": 4,
+  "knot-main-iridium": 5,
+  "knot-resolver-main-iridium": 9,
+  "nginx-public-gallium": 7,
+  "nginx-public-iridium": 8,
+  "step-ca-d108": 6
 }

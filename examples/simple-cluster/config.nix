@@ -130,20 +130,84 @@ in
         };
 
         config = {
+          tls.ca."d108" = {
+          };
+          tls.certs."d108-ca" = {
+            domains = [
+              {
+                zone = "private";
+                name = "ca";
+              }
+            ];
+            ca = "d108";
+            acme.email = "me@d108.internal";
+            acme.challenge.dns = { };
+          };
+
+          gateways."public" = {
+            http.routes."d108-ca" = {
+              serverName = "ca.d108.dev";
+              downstream.tls.mode = "only";
+              downstream.tls.cert = "d108-ca";
+              upstream.tls.enable = true;
+              upstream.endpoint = alloy.services.step-ca."d108".endpoint;
+            };
+            # http.routes."testjail" = {
+            #   serverName = "testjail.d108.internal";
+            #   upstream.endpoint = "testjail";
+            # };
+          };
+
+          secrets."dns-acme/public/ca" = { };
+          generators.instances."dns-acme/public/ca" = {
+            imports = [ alloy.generators.templates."dns/tsig-key" ];
+            keySecret = "dns-acme/public/ca";
+          };
+
+          dns.acmeChallenges = [
+            {
+              domain.zone = "public";
+              domain.name = "ca";
+              tsigKeySecret = "dns-acme/public/ca";
+            }
+          ];
+          dns.records = [
+            {
+              domain.zone = "public";
+              domain.name = "ca";
+              data.a = "192.168.100.2";
+            }
+            {
+              domain.zone = "public";
+              domain.name = "ca";
+              data.a = "192.168.100.1";
+            }
+            {
+              domain.zone = "private";
+              domain.name = "ca";
+              data.a = "192.168.100.2";
+            }
+            {
+              domain.zone = "private";
+              domain.name = "ca";
+              data.a = "192.168.100.1";
+            }
+          ];
           dns.zones = {
             "public" = {
               apex = "d108.dev";
               rname = "admin.d108.dev";
+              acmeChallenge.enable = true;
             };
             "private" = {
               apex = "d108.internal";
               rname = "admin.d108.internal";
+              acmeChallenge.enable = true;
             };
           };
 
-          gateways."public" = { };
-
-          services.dns-gateways."public" = {
+          services.nginx."public" = {
+            gateway = "public";
             hosts."iridium" = {
               ipv4 = "192.168.100.2";
             };
@@ -152,45 +216,54 @@ in
             };
           };
 
-          services.dns."main" = {
+          services.dnsdist."public" = {
             gateway = "public";
-            hosts = {
-              "iridium" = { };
-              "gallium" = { };
+            hosts."iridium" = {
+              ipv4 = "192.168.100.2";
             };
-            overlays = {
-              "main" = { };
-            };
-            zones = {
-              "public" = { };
-              "private" = { };
+            hosts."gallium" = {
+              ipv4 = "192.168.100.1";
             };
           };
 
-          services.dns-acme."main" = {
+          services.knot."main" = {
             gateway = "public";
+            overlays."main" = { };
+            hosts."iridium" = { };
+            hosts."gallium" = { };
+            zones = [
+              "public"
+              "private"
+            ];
+          };
+
+          services.knot-acme."main" = {
+            gateway = "public";
+            overlays."main" = { };
             host = "iridium";
-            overlays = {
-              "main" = { };
-            };
-            domains = [
-              {
-                zone = "public";
-                name = "foobar";
-                tsigSecret = "dns-acme/public/foobar";
-              }
+            zones = [
+              "public"
+              "private"
             ];
           };
 
-          # jails."fooooo" = {
-          #   host = "gallium";
-          # };
+          services.knot-resolver."main" = {
+            overlays."main" = {};
+            host = "iridium";
+          };
 
-          generators.instances."dns-acme/public/foobar" = {
-            imports = [
-              alloy.generators.templates."dns/tsig-key"
+          services.step-ca."d108" = {
+            ca = "d108";
+            host = "gallium";
+            overlays = {
+              "main" = { };
+            };
+            domain = "ca.d108.internal";
+            acme.enable = true;
+            subject = "D108 CA";
+            permittedDomains = [
+              "d108.internal"
             ];
-            secret = "dns-acme/public/foobar";
           };
 
           workspace.root = toString self;
@@ -213,34 +286,41 @@ in
             ];
           };
 
-          jails."testjail" = { config, ... }: {
-            host = "iridium";
-            overlays."main" = { };
-            uplink.allowEgress = true;
-            uplink.forwards = [
-              {
-                proto = "tcp";
-                port = 80;
-                ipv4 = "192.168.100.2";
-              }
-            ];
-            nixosModule = { pkgs, ... }: {
-              services.nginx.enable = true;
-              services.nginx.virtualHosts."_" = {
-                default = true;
-                root = pkgs.writeTextDir "index.html" ''
-                  <!DOCTYPE html>
-                  <html>
-                    <head><title>Test</title></head>
-                    <body>
-                      <h1>Hello from NixOS Nginx!</h1>
-                      <p>Это работает.</p>
-                    </body>
-                  </html>
-                '';
-              };
-            };
+          jails."nginx-public-iridium" = {
+            acme.certs."d108-ca" = { };
           };
+
+          # endpoints."testjail".targets = [
+          #   {
+          #     overlay = "main";
+          #     ipv6 = alloy.jails."testjail".overlays."main".ipv6;
+          #     port = 80;
+          #   }
+          # ];
+          # jails."testjail" = { config, ... }: {
+          #   host = "iridium";
+          #   overlays."main" = { };
+          #   volumes."somedata" = {
+          #     driver.directory = { };
+          #   };
+          #   nixosModule = { pkgs, ... }: {
+          #     networking.firewall.allowedTCPPorts = [ 80 ];
+          #     services.nginx.enable = true;
+          #     services.nginx.virtualHosts."_" = {
+          #       default = true;
+          #       root = pkgs.writeTextDir "index.html" ''
+          #         <!DOCTYPE html>
+          #         <html>
+          #           <head><title>Test</title></head>
+          #           <body>
+          #             <h1>Hello from NixOS Nginx!</h1>
+          #             <p>Это работает.</p>
+          #           </body>
+          #         </html>
+          #       '';
+          #     };
+          #   };
+          # };
 
           hosts.iridium = { config, ... }: {
             system = "x86_64-linux";

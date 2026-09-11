@@ -12,7 +12,10 @@
     ./gateways.nix
     ./endpoints.nix
     ./tls.nix
+    ./acme.nix
+    ./static-ca.nix
     ./state.nix
+    ./volumes.nix
   ];
 
   flake.alloyModules.core = { alib, lib, ... }: {

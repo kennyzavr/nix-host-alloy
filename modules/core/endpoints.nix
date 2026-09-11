@@ -14,9 +14,6 @@
           ipv6 = lib.mkOption {
             type = alib.types.ip.v6addr;
           };
-          port = lib.mkOption {
-            type = lib.types.port;
-          };
           overlay = lib.mkOption {
             type = lib.types.str;
           };
@@ -52,6 +49,9 @@
               lib.types.listOf targetType
             );
           };
+          port = lib.mkOption {
+            type = lib.types.port;
+          };
         };
       };
     in
@@ -66,6 +66,10 @@
           lib.mapAttrsToList (
             endpointName: endpoint:
             [
+              {
+                assertion = alib.types.dns.label.check endpointName;
+                message = "[Alloy] Endpoint name '${endpointName}' contains invalid characters or is too long. Use only lowercase letters, numbers, and hyphens (max 63 characters).";
+              }
               {
                 assertion = builtins.length endpoint.targets > 0;
                 message = "[Alloy] Endpoint '${endpointName}': missing targets. Each endpoint must have at least one target specified in the 'targets' list.";

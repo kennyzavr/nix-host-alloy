@@ -3,6 +3,7 @@
     {
       lib,
       config,
+      alib,
       ...
     }:
     let
@@ -37,6 +38,12 @@
         };
         config = {
           idx = alloy.indexes."hosts".get name;
+          assertions = [
+            {
+              assertion = alib.types.dns.label.check name;
+              message = "[Alloy] Host name '${name}' contains invalid characters or is too long. Use only lowercase letters, numbers, and hyphens (max 63 characters).";
+            }
+          ];
           nixosConfiguration = lib.nixosSystem {
             inherit (config) system;
             modules = [

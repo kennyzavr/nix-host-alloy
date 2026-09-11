@@ -19,7 +19,6 @@
             default = true;
             type = lib.types.bool;
           };
-          # TODO: add assertion - only one service per a gateway
           gateway = lib.mkOption {
             default = name;
             type = lib.types.str;

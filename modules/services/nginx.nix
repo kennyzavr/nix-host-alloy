@@ -19,7 +19,6 @@
             default = true;
             type = lib.types.bool;
           };
-          # TODO: add assertion - only one service per a gateway
           gateway = lib.mkOption {
             default = name;
             type = lib.types.str;
@@ -186,7 +185,7 @@
                           acmeCert = jail.acme.certs.${route.downstream.tls.cert};
                         in
                         {
-                          serverName = route.serverName;
+                          serverName = alloy.dns.resolveNode route.domain;
                           addSSL = route.downstream.tls.mode == "add";
                           onlySSL = route.downstream.tls.mode == "only";
                           forceSSL = route.downstream.tls.mode == "force";

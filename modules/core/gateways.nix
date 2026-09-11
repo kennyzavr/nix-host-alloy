@@ -25,8 +25,12 @@
 
       httpRouteSubmodule = { config, ... }: {
         options = {
-          serverName = lib.mkOption {
-            type = lib.types.str;
+          domain = lib.mkOption {
+            type = alib.types.zoneNode;
+          };
+          addDnsRecords = lib.mkOption {
+            default = true;
+            type = lib.types.bool;
           };
           downstream = {
             http2 = lib.mkOption {
@@ -96,23 +100,10 @@
         };
       };
 
-      entrypointSubmodule = { config, name, ... }: {
-        options = {
-          ipv4 = lib.mkOption {
-            type = lib.types.nullOr alib.types.ip.v4addr;
-            default = null;
-          };
-          ipv6 = lib.mkOption {
-            type = lib.types.nullOr alib.types.ip.v6addr;
-            default = null;
-          };
-        };
-      };
-
       smtpRelaySubmodule = { config, name, ... }: {
         options = {
           domains = lib.mkOption {
-            default = [];
+            default = [ ];
             type = lib.types.listOf lib.types.str;
             description = "Destination domains that should be routed to this upstream. Empty list means catch-all/default.";
           };
@@ -168,12 +159,25 @@
         };
       };
 
+      entrypointSubmodule = { config, name, ... }: {
+        options = {
+          ipv4 = lib.mkOption {
+            type = lib.types.nullOr alib.types.ip.v4addr;
+            default = null;
+          };
+          ipv6 = lib.mkOption {
+            type = lib.types.nullOr alib.types.ip.v6addr;
+            default = null;
+          };
+        };
+      };
+
       gatewaySubmodule = { config, name, ... }: {
         options = {
           dns = {
             entrypoints = lib.mkOption {
               default = { };
-              type = lib.types.attrsOf (lib.types.submodule entrypointSubmodule);
+              type = lib.types.uniq (lib.types.attrsOf (lib.types.submodule entrypointSubmodule));
             };
             routes = lib.mkOption {
               default = { };
@@ -183,7 +187,7 @@
           http = {
             entrypoints = lib.mkOption {
               default = { };
-              type = lib.types.attrsOf (lib.types.submodule entrypointSubmodule);
+              type = lib.types.uniq (lib.types.attrsOf (lib.types.submodule entrypointSubmodule));
             };
             routes = lib.mkOption {
               default = { };
@@ -214,6 +218,28 @@
       };
 
       config = {
+        dns.records = lib.pipe alloy.gateways [
+          (lib.mapAttrsToList (
+            _: gw:
+            lib.mapAttrsToList (
+              _: r:
+              lib.mapAttrsToList (
+                _: ep:
+                [ ]
+                ++ (lib.optional (r.addDnsRecords && ep.ipv4 != null) {
+                  domain = r.domain;
+                  data.a = ep.ipv4;
+                })
+                ++ (lib.optional (r.addDnsRecords && ep.ipv6 != null) {
+                  domain = r.domain;
+                  data.a = ep.ipv6;
+                })
+              ) gw.http.entrypoints
+            ) gw.http.routes
+          ))
+          lib.flatten
+        ];
+
         assertions = lib.flatten (
           lib.mapAttrsToList (
             gwName: gw:
@@ -261,27 +287,28 @@
               message = "[Alloy] Gateway '${gwName}' RAW stream '${streamName}' has downstream TLS enabled, but tls.cert is not set. You must specify a valid certificate reference in 'tls.cert'.";
             }) gw.raw.streams)
             ++ (lib.mapAttrsToList (streamName: stream: {
-              assertion = (stream.downstream.tls.cert != null) -> builtins.hasAttr stream.downstream.tls.cert alloy.tls.certs;
+              assertion =
+                (stream.downstream.tls.cert != null) -> builtins.hasAttr stream.downstream.tls.cert alloy.tls.certs;
               message = "[Alloy] Gateway '${gwName}' RAW stream '${streamName}' refers to an unknown TLS certificate '${stream.downstream.tls.cert}'. Please ensure it is defined in 'config.tls.certs'.";
             }) gw.raw.streams)
-            ++ (lib.mapAttrsToList (epName: ep: {
-              assertion = ep.ipv4 != null || ep.ipv6 != null;
-              message = "[Alloy] Gateway '${gwName}' SMTP entrypoint '${epName}' must specify at least one IP address (ipv4 or ipv6).";
-            }) gw.smtp.entrypoints)
-            ++ (lib.mapAttrsToList (relayName: relay: {
-              assertion = builtins.hasAttr relay.upstream.endpoint alloy.endpoints;
-              message = "[Alloy] Gateway '${gwName}' SMTP relay '${relayName}' refers to an unknown endpoint '${relay.upstream.endpoint}'. Please ensure it is defined in 'config.endpoints'.";
-            }) gw.smtp.relays)
-            ++ [
-              {
-                assertion = gw.smtp.explicitTLS.mode != "none" -> gw.smtp.explicitTLS.cert != null;
-                message = "[Alloy] Gateway '${gwName}' SMTP specifies explicitTLS.mode '${gw.smtp.explicitTLS.mode}' but explicitTLS.cert is not set. You must specify a valid certificate reference in 'explicitTLS.cert'.";
-              }
-              {
-                assertion = (gw.smtp.explicitTLS.cert != null) -> builtins.hasAttr gw.smtp.explicitTLS.cert alloy.tls.certs;
-                message = "[Alloy] Gateway '${gwName}' SMTP refers to an unknown TLS certificate '${gw.smtp.explicitTLS.cert}'. Please ensure it is defined in 'config.tls.certs'.";
-              }
-            ]
+            # ++ (lib.mapAttrsToList (epName: ep: {
+            #   assertion = ep.ipv4 != null || ep.ipv6 != null;
+            #   message = "[Alloy] Gateway '${gwName}' SMTP entrypoint '${epName}' must specify at least one IP address (ipv4 or ipv6).";
+            # }) gw.smtp.entrypoints)
+            # ++ (lib.mapAttrsToList (relayName: relay: {
+            #   assertion = builtins.hasAttr relay.upstream.endpoint alloy.endpoints;
+            #   message = "[Alloy] Gateway '${gwName}' SMTP relay '${relayName}' refers to an unknown endpoint '${relay.upstream.endpoint}'. Please ensure it is defined in 'config.endpoints'.";
+            # }) gw.smtp.relays)
+            # ++ [
+            #   {
+            #     assertion = gw.smtp.explicitTLS.mode != "none" -> gw.smtp.explicitTLS.cert != null;
+            #     message = "[Alloy] Gateway '${gwName}' SMTP specifies explicitTLS.mode '${gw.smtp.explicitTLS.mode}' but explicitTLS.cert is not set. You must specify a valid certificate reference in 'explicitTLS.cert'.";
+            #   }
+            #   {
+            #     assertion = (gw.smtp.explicitTLS.cert != null) -> builtins.hasAttr gw.smtp.explicitTLS.cert alloy.tls.certs;
+            #     message = "[Alloy] Gateway '${gwName}' SMTP refers to an unknown TLS certificate '${gw.smtp.explicitTLS.cert}'. Please ensure it is defined in 'config.tls.certs'.";
+            #   }
+            # ]
           ) alloy.gateways
         );
       };

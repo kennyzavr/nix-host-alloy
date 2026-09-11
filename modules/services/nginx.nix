@@ -95,12 +95,15 @@
 
           jails = lib.mapAttrs' (
             hostName: hostCfg:
-            lib.nameValuePair "nginx-${srvName}-${hostName}" {
-              host = hostName;
+            lib.nameValuePair "nginx-${srvName}-${hostName}" (
+              { config, ... }:
+              let
+                jail = config;
+              in
+              {
+                host = hostName;
 
-              uplink = {
-                allowEgress = true;
-                forwards = lib.optionals (hostCfg.ipv4 != null || hostCfg.ipv6 != null) [
+                uplink.forwards = lib.optionals (hostCfg.ipv4 != null || hostCfg.ipv6 != null) [
                   {
                     proto = "tcp";
                     port = 80;
@@ -117,86 +120,92 @@
                     inherit (hostCfg) iface ipv4 ipv6;
                   }
                 ];
-              };
 
-              overlays = lib.genAttrs allOverlays (_: _: { });
+                overlays = lib.genAttrs allOverlays (_: _: { });
 
-              acme.certs = lib.mkMerge (
-                lib.mapAttrsToList (_: route: {
-                  ${route.downstream.tls.cert} = {
-                    group = "nginx";
-                  };
-                }) (lib.filterAttrs (_: r: r.downstream.tls.mode != "none" && r.downstream.tls.cert != null) routes)
-              );
-
-              nixosModule = { pkgs, ... }: {
-                networking.firewall.allowedUDPPorts = [
-                  443
-                ];
-                networking.firewall.allowedTCPPorts = [
-                  80
-                  443
-                ];
-
-                services.nginx = {
-                  enable = true;
-                  appendHttpConfig = ''
-                    ${lib.concatMapAttrsStringSep "\n" (
-                      routeName: route:
-                      let
-                        endpoint = alloy.endpoints.${route.upstream.endpoint};
-                        policy = endpoint.loadBalancing.policy;
-                      in
-                      ''
-                        upstream route-${routeName} {
-                          ${
-                            if policy == "round-robin" then
-                              ""
-                            else if policy == "least-connections" then
-                              "least_conn;"
-                            else if policy == "ip-hash" then
-                              "ip_hash;"
-                            else if policy == "random" then
-                              "random;"
-                            else
-                              ""
-                          }
-                          ${lib.concatMapStringsSep "\n" (target: ''
-                            server [${target.ipv6}]:${toString endpoint.port} weight=${toString target.weight} ${lib.optionalString target.backup "backup"} ${lib.optionalString target.down "down"};
-                          '') endpoint.targets}
-                        }
-                      ''
-                    ) routes}
-                  '';
-                  virtualHosts = lib.mapAttrs' (
-                    routeName: route:
-                    lib.nameValuePair "route-${routeName}" {
-                      serverName = route.serverName;
-                      addSSL = route.downstream.tls.mode == "add";
-                      onlySSL = route.downstream.tls.mode == "only";
-                      forceSSL = route.downstream.tls.mode == "force";
-                      useACMEHost = lib.mkIf (route.downstream.tls.mode != "none" && route.downstream.tls.cert != null) (
-                        let
-                          cert = alloy.tls.certs.${route.downstream.tls.cert};
-                          primaryNode = builtins.head cert.domains;
-                        in
-                        if primaryNode.name == "@" then
-                          alloy.dns.zones.${primaryNode.zone}.apex
-                        else
-                          "${primaryNode.name}.${alloy.dns.zones.${primaryNode.zone}.apex}"
-                      );
-                      http2 = route.downstream.http2;
-                      http3 = route.downstream.http3;
-                      quic = route.downstream.http3;
-                      locations."/" = {
-                        recommendedProxySettings = true;
-                        proxyPass = "${if route.upstream.tls.enable then "https" else "http"}://route-${routeName}";
+                acme.certs = lib.pipe routes [
+                  (lib.filterAttrs (_: r: r.downstream.tls.mode != "none" && r.downstream.tls.cert != null))
+                  (lib.mapAttrsToList (
+                    _: route: {
+                      ${route.downstream.tls.cert} = {
+                        restartServices = [ "nginx.service" ];
                       };
                     }
-                  ) routes;
+                  ))
+                  lib.mkMerge
+                ];
+
+                nixosModule = { pkgs, ... }: {
+                  networking.firewall.allowedUDPPorts = [
+                    443
+                  ];
+                  networking.firewall.allowedTCPPorts = [
+                    80
+                    443
+                  ];
+
+                  users.users.nginx = {
+                    extraGroups = lib.mapAttrsToList (_: cert: cert.group) jail.acme.certs;
+                  };
+
+                  services.nginx = {
+                    enable = true;
+                    appendHttpConfig = ''
+                      ${lib.concatMapAttrsStringSep "\n" (
+                        routeName: route:
+                        let
+                          endpoint = alloy.endpoints.${route.upstream.endpoint};
+                          policy = endpoint.loadBalancing.policy;
+                        in
+                        ''
+                          upstream route-${routeName} {
+                            ${
+                              if policy == "round-robin" then
+                                ""
+                              else if policy == "least-connections" then
+                                "least_conn;"
+                              else if policy == "ip-hash" then
+                                "ip_hash;"
+                              else if policy == "random" then
+                                "random;"
+                              else
+                                ""
+                            }
+                            ${lib.concatMapStringsSep "\n" (target: ''
+                              server [${target.ipv6}]:${toString endpoint.port} weight=${toString target.weight} ${lib.optionalString target.backup "backup"} ${lib.optionalString target.down "down"};
+                            '') endpoint.targets}
+                          }
+                        ''
+                      ) routes}
+                    '';
+                    virtualHosts = lib.mapAttrs' (
+                      routeName: route:
+                      lib.nameValuePair "route-${routeName}" (
+                        let
+                          isSsl = route.downstream.tls.mode != "none";
+                          acmeCert = jail.acme.certs.${route.downstream.tls.cert};
+                        in
+                        {
+                          serverName = route.serverName;
+                          addSSL = route.downstream.tls.mode == "add";
+                          onlySSL = route.downstream.tls.mode == "only";
+                          forceSSL = route.downstream.tls.mode == "force";
+                          sslCertificate = lib.mkIf isSsl acmeCert.certPath;
+                          sslCertificateKey = lib.mkIf isSsl acmeCert.keyPath;
+                          http2 = route.downstream.http2;
+                          http3 = route.downstream.http3;
+                          quic = route.downstream.http3;
+                          locations."/" = {
+                            recommendedProxySettings = true;
+                            proxyPass = "${if route.upstream.tls.enable then "https" else "http"}://route-${routeName}";
+                          };
+                        }
+                      )
+                    ) routes;
+                  };
                 };
-              };
-            }
+              }
+            )
           ) srv.hosts;
         };
     in

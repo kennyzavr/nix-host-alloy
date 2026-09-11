@@ -101,7 +101,7 @@
           type = lib.types.attrsOf (
             lib.types.submodule (
               { name, config, ... }: {
-                options.acme2.certs = lib.mkOption {
+                options.acme.certs = lib.mkOption {
                   default = { };
                   type = lib.types.attrsOf (lib.types.submodule acmeCertSubmodule);
                 };
@@ -112,9 +112,9 @@
                       lib.nameValuePair certCfg.group {
                         gid = certCfg.gid;
                       }
-                    ) config.acme2.certs;
-                    systemd.services = lib.mkMerge (lib.mapAttrsToList mkAnchorServices config.acme2.certs);
-                    systemd.paths = lib.mkMerge (lib.mapAttrsToList mkAnchorPaths config.acme2.certs);
+                    ) config.acme.certs;
+                    systemd.services = lib.mkMerge (lib.mapAttrsToList mkAnchorServices config.acme.certs);
+                    systemd.paths = lib.mkMerge (lib.mapAttrsToList mkAnchorPaths config.acme.certs);
                   };
                 };
               }
@@ -126,14 +126,14 @@
             lib.types.submodule (
               hostSubmodule@{ name, config, ... }:
               {
-                options.acme2.certs = lib.mkOption {
+                options.acme.certs = lib.mkOption {
                   default = { };
                   type = lib.types.attrsOf (lib.types.submodule acmeCertSubmodule);
                 };
                 config =
                   let
-                    hostCerts = hostSubmodule.config.acme2.certs;
-                    jailCerts = lib.foldl' (acc: jail: acc // jail.acme2.certs) { } (
+                    hostCerts = hostSubmodule.config.acme.certs;
+                    jailCerts = lib.foldl' (acc: jail: acc // jail.acme.certs) { } (
                       lib.attrValues (lib.filterAttrs (_: j: j.host == name) alloy.jails)
                     );
                     allCerts = hostCerts // jailCerts;
@@ -234,7 +234,7 @@
                               hostPath = certCfg.directory;
                               isReadOnly = true;
                             }
-                          ) jail.acme2.certs;
+                          ) jail.acme.certs;
                         }
                       ) (lib.filterAttrs (_: j: j.host == name) alloy.jails);
 
@@ -246,9 +246,9 @@
                       ) allCerts;
 
                       systemd.services = lib.mkMerge (
-                        lib.mapAttrsToList mkAnchorServices hostSubmodule.config.acme2.certs
+                        lib.mapAttrsToList mkAnchorServices hostSubmodule.config.acme.certs
                       );
-                      systemd.paths = lib.mkMerge (lib.mapAttrsToList mkAnchorPaths hostSubmodule.config.acme2.certs);
+                      systemd.paths = lib.mkMerge (lib.mapAttrsToList mkAnchorPaths hostSubmodule.config.acme.certs);
 
                       imports = lib.map (c: c.nixosModule) configs;
                     };

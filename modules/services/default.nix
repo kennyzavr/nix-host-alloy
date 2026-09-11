@@ -6,7 +6,7 @@
     ./dnsdist.nix
     ./nginx.nix
     ./step-ca.nix
-    ./haproxy.nix
+    # ./haproxy.nix
   ];
 
   flake.alloyModules.services = { };

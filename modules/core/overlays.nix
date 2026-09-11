@@ -9,8 +9,6 @@
     let
       alloy = config;
 
-      overlayIndexes = alloy.indexes."overlays".values;
-
       portRangeType = lib.types.submodule {
         options = {
           from = lib.mkOption {
@@ -87,7 +85,7 @@
             idx = lib.mkOption {
               type = lib.types.ints.unsigned;
               readOnly = true;
-              default = overlayIndexes.${name};
+              default = alloy.indexes."overlays".get name;
             };
             ipv6Prefix = lib.mkOption {
               type = lib.types.strMatching "^fd[0-9a-fA-F]{2}(:[0-9a-fA-F]{4}){2}$";

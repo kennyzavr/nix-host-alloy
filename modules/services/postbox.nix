@@ -32,10 +32,6 @@
           host = lib.mkOption {
             type = lib.types.str;
           };
-          extraDomains = lib.mkOption {
-            default = [ ];
-            type = lib.types.listOf lib.types.str;
-          };
           overlays = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule { });
@@ -75,6 +71,14 @@
           domain = lib.mkOption {
             type = alib.types.zoneNode;
           };
+          extraDomains = lib.mkOption {
+            default = [ ];
+            type = lib.types.listOf alib.types.zoneNode;
+          };
+          admin = lib.mkOption {
+            default = null;
+            type = lib.types.nullOr lib.types.str;
+          };
           users = lib.mkOption {
             type = lib.types.attrsOf (lib.types.submodule (userSubmodule name));
           };
@@ -84,7 +88,7 @@
       mkService =
         srvName: srv:
         let
-          domain = lib.removeSuffix "." (alloy.dns.resolveNode srv.domain);
+          mkDomain = d: lib.removeSuffix "." (alloy.dns.resolveNode d);
           relayEndpoint = alloy.endpoints.${srv.smtp.relayEndpoint};
         in
         {
@@ -172,7 +176,7 @@
                   ${jail.static-ca.keySecret} = {
                     permissions = {
                       owner = "root";
-                      group = "smtpd";
+                      group = "postfix";
                       mode = "0640";
                     };
                   };
@@ -184,13 +188,14 @@
                   let
                     login = lib.removePrefix "\n" (lib.removeSuffix "\n" alloy.facts.${user.loginFact}.value);
                     hash = jail.secrets.${user.hashedPasswdSecret}.placeholder;
-                    domains = [ domain ] ++ srv.extraDomains;
                   in
-                  lib.concatMapStringsSep "\n" (d: "${login}@${d}:${hash}") domains
+                  lib.concatMapStringsSep "\n" (d: "${login}@${mkDomain d}:${hash}") (
+                    [ srv.domain ] ++ srv.extraDomains
+                  )
                 ) srv.users;
                 permissions = {
                   owner = "dovecot2";
-                  group = "smtpd";
+                  group = "dovecot2";
                   mode = "0440";
                 };
               };
@@ -203,50 +208,78 @@
                   993
                 ];
 
-                systemd.services.opensmtpd.wants = [ "network-online.target" ];
-                systemd.services.opensmtpd.after = [ "network-online.target" ];
+                systemd.services.postfix.wants = [ "network-online.target" ];
+                systemd.services.postfix.after = [ "network-online.target" ];
 
-                services.opensmtpd = {
+                services.postfix = {
                   enable = true;
+                  enableSubmission = false;
+                  enableSmtp = false;
+                  enableSubmissions = false;
+                  virtual = lib.mkIf (srv.admin != null) (
+                    lib.pipe ([ srv.domain ] ++ srv.extraDomains) [
+                      (lib.map (
+                        domain:
+                        let
+                          admin = alloy.facts.${srv.users.${srv.admin}.loginFact}.value;
+                        in
+                        [
+                          "postmaster@${mkDomain domain} ${admin}@${mkDomain srv.domain}"
+                          "hostmaster@${mkDomain domain} ${admin}@${mkDomain srv.domain}"
+                          "abuse@${mkDomain domain} ${admin}@${mkDomain srv.domain}"
+                          "root@${mkDomain domain} ${admin}@${mkDomain srv.domain}"
+                        ]
+                      ))
+                    ]
+                  );
+                  settings.main = {
+                    myhostname = mkDomain srv.domain;
+                    mydestination = "";
+                    mynetworks = lib.map (t: "[${t.ipv6}]") relayEndpoint.targets;
 
-                  extraServerArgs = [
-                    "-T"
-                    "all"
-                  ];
+                    virtual_mailbox_domains = [ (mkDomain srv.domain) ] ++ (lib.map mkDomain srv.extraDomains);
 
-                  serverConfiguration = ''
-                    pki "static-ca" cert "${alloy.facts.${jail.static-ca.certFact}.path}"
-                    pki "static-ca" key "${jail.secrets.${jail.static-ca.keySecret}.path}"
-                    ca "static-ca" cert "${alloy.facts.${alloy.static-ca.certFact}.path}"
+                    virtual_transport = "lmtp:unix:/run/dovecot2/lmtp";
+                    relayhost = [ "[${relayEndpoint.domain}]:${toString relayEndpoint.port}" ];
 
-                    table vdomains { "${domain}"${
-                      lib.optionalString (srv.extraDomains != [ ]) (
-                        ", " + lib.concatMapStringsSep ", " (d: ''"${d}"'') srv.extraDomains
-                      )
-                    } }
-                    table relay_ips { ${lib.concatMapStringsSep ", " (t: t.ipv6) relayEndpoint.targets} }
-                    table user_passwords file:${jail.secretTemplates."userdb".path}
+                    smtpd_tls_cert_file = alloy.facts.${jail.static-ca.certFact}.path;
+                    smtpd_tls_key_file = jail.secrets.${jail.static-ca.keySecret}.path;
+                    smtpd_tls_CAfile = alloy.facts.${alloy.static-ca.certFact}.path;
+                    smtpd_tls_security_level = "encrypt";
 
-                    ${lib.concatMapAttrsStringSep "\n" (_: overlay: ''
-                      listen on ${overlay.ipv6} port 465 smtps ${lib.optionalString srv.smtps.proxyV2 "proxy-v2"} pki "static-ca" ca "static-ca" hostname "${domain}" auth <user_passwords>
-                      listen on ${overlay.ipv6} port 25 tls-require verify pki "static-ca" ca "static-ca" hostname "${domain}"
-                    '') jail.overlays}
-                    listen on socket
-
-                    action "to_dovecot" lmtp "/run/dovecot2/lmtp" rcpt-to
-                    action "to_relay" relay \
-                      host "tls://${relayEndpoint.domain}:${toString relayEndpoint.port}" \
-                      helo "${domain}" \
-                      pki "static-ca" \
-                      ca "static-ca"
-
-                    match tls from src <relay_ips> for domain <vdomains> action "to_dovecot"
-                    match auth from any for domain <vdomains> action "to_relay"
-                    match from local for domain <vdomains> action "to_relay"
-
-                    match auth for any action "to_relay"
-                    match from local for any action "to_relay"
-                  '';
+                    smtp_tls_cert_file = alloy.facts.${jail.static-ca.certFact}.path;
+                    smtp_tls_key_file = jail.secrets.${jail.static-ca.keySecret}.path;
+                    smtp_tls_CAfile = alloy.facts.${alloy.static-ca.certFact}.path;
+                    smtp_tls_security_level = "encrypt";
+                  };
+                  settings.master = {
+                    "25" = {
+                      type = "inet";
+                      private = false;
+                      command = "smtpd";
+                      args = [
+                        "-o smtpd_tls_security_level=encrypt"
+                        "-o smtpd_tls_req_ccert=yes"
+                        "-o smtpd_client_restrictions=permit_mynetworks,reject"
+                        "-o smtpd_relay_restrictions=reject_unauth_destination"
+                      ];
+                    };
+                    "465" = {
+                      type = "inet";
+                      private = false;
+                      command = "smtpd";
+                      args = [
+                        "-o smtpd_tls_security_level=encrypt"
+                        "-o smtpd_tls_req_ccert=yes"
+                        "-o smtpd_tls_wrappermode=yes"
+                        "-o smtpd_sasl_auth_enable=yes"
+                        "-o smtpd_sasl_type=dovecot"
+                        "-o smtpd_sasl_path=/run/dovecot2/auth"
+                        "-o smtpd_client_restrictions=permit_sasl_authenticated,reject"
+                      ]
+                      ++ lib.optional srv.smtps.proxyV2 "-o smtpd_upstream_proxy_protocol=haproxy";
+                    };
+                  };
                 };
 
                 services.dovecot2 = {
@@ -307,8 +340,18 @@
                         };
                         "unix_listener lmtp" = {
                           mode = "0660";
-                          user = "smtpd";
-                          group = "smtpd";
+                          user = "postfix";
+                          group = "postfix";
+                        };
+                      }
+                      {
+                        _section = {
+                          name = "auth";
+                        };
+                        "unix_listener auth" = {
+                          mode = "0660";
+                          user = "postfix";
+                          group = "postfix";
                         };
                       }
                     ];

@@ -232,14 +232,14 @@
 
                     acme.certs = lib.optionalAttrs (srv.explicitTLS.mode != "none" && srv.explicitTLS.cert != null) {
                       ${srv.explicitTLS.cert} = {
-                        restartServices = [ "opensmtpd.service" ];
+                        restartServices = [ "postfix.service" ];
                       };
                     };
 
                     secrets.${jail.static-ca.keySecret} = {
                       permissions = {
                         owner = "root";
-                        group = "smtpd";
+                        group = "postfix";
                         mode = "0640";
                       };
                     };
@@ -254,87 +254,173 @@
                       {
                         networking.firewall.allowedTCPPorts = [ 25 ];
 
-                        users.users.smtpd.extraGroups = lib.mapAttrsToList (certName: cert: cert.group) jail.acme.certs;
-
-                        systemd.services.opensmtpd.wants = [ "network-online.target" ];
-                        systemd.services.opensmtpd.after = [ "network-online.target" ];
-                        systemd.services.opensmtpd.serviceConfig.ExecStartPre =
-                          pkgs.writeShellScript "prepare-opensmtpd-certs" ''
-                            mkdir -p /run/opensmtpd-certs
-                            cp -L "${certCfg.certPath}" /run/opensmtpd-certs/cert.pem
-                            cp -L "${certCfg.keyPath}" /run/opensmtpd-certs/key.pem
-                            chown -R root:smtpd /run/opensmtpd-certs
-                            chmod 644 /run/opensmtpd-certs/cert.pem
-                            chmod 640 /run/opensmtpd-certs/key.pem
-                          '';
-
-                        services.opensmtpd = {
-                          enable = true;
-                          serverConfiguration = ''
-                            smtp max-message-size ${toString srv.maxMsgSizeMB}M
-
-                            ${lib.optionalString hasCert ''
-                              pki "relay" cert "/run/opensmtpd-certs/cert.pem"
-                              pki "relay" key "/run/opensmtpd-certs/key.pem"
-                            ''}
-
-                            pki "static-ca" cert "${alloy.facts.${jail.static-ca.certFact}.path}"
-                            pki "static-ca" key "${jail.secrets.${jail.static-ca.keySecret}.path}"
-                            ca "static-ca" cert "${alloy.facts.${alloy.static-ca.certFact}.path}"
-
-                            ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
-                              table route_${routeName}_domains { ${lib.concatMapStringsSep ", " mkDomain route.domains} }
-                              table route_${routeName}_ips { ${
-                                lib.concatMapStringsSep ", " (t: t.ipv6) alloy.endpoints.${route.upstream.endpoint}.targets
-                              } }
-                            '') srv.routes}
-
-                            listen on ${jail.uplink.ipv4} port 25 ${
-                              if hasCert && srv.explicitTLS.mode == "require" then
-                                ''tls-require pki "relay"''
-                              else if hasCert then
-                                ''tls pki "relay"''
-                              else
-                                ""
-                            } hostname "${mkDomain srv.hostname}"
-
-                            listen on ${jail.uplink.ipv6} port 25 ${
-                              if hasCert && srv.explicitTLS.mode == "require" then
-                                ''tls-require pki "relay"''
-                              else if hasCert then
-                                ''tls pki "relay"''
-                              else
-                                ""
-                            } hostname "${mkDomain srv.hostname}"
-
-                            ${lib.concatMapAttrsStringSep "\n" (overlayName: overlay: ''
-                              listen on ${overlay.ipv6} port 25 tag "OVERLAY_MTLS" tls-require verify pki "static-ca" ca "static-ca" hostname "${mkDomain srv.hostname}"
-                            '') jail.overlays}
-
-                            action "route_out" relay helo "${mkDomain srv.hostname}"
-                            ${lib.concatMapAttrsStringSep "\n" (
-                              routeName: route:
-                              let
-                                endpoint = alloy.endpoints.${route.upstream.endpoint};
-                              in
-                              ''
-                                action "route_to_${routeName}" relay \
-                                  host "tls://${endpoint.domain}:${toString endpoint.port}" \
-                                  helo "${mkDomain srv.hostname}" \
-                                  pki "static-ca" \
-                                  ca "static-ca"
-                              ''
-                            ) srv.routes}
-
-                            ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
-                              match from any for domain <route_${routeName}_domains> action "route_to_${routeName}"
-                            '') srv.routes}
-
-                            ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
-                              match tag "OVERLAY_MTLS" from src <route_${routeName}_ips> for any action "route_out"
-                            '') srv.routes}
-                          '';
+                        users.users.postfix = {
+                          isSystemUser = true;
+                          group = "postfix";
+                          extraGroups = lib.mapAttrsToList (certName: cert: cert.group) jail.acme.certs;
                         };
+
+                        systemd.services.postfix.wants = [ "network-online.target" ];
+                        systemd.services.postfix.after = [ "network-online.target" ];
+
+                        services.postfix = {
+                          enable = true;
+                          transport = lib.pipe srv.routes [
+                            (lib.mapAttrsToList (
+                              routeName: route:
+                              lib.map (
+                                domain:
+                                let
+                                  endpoint = alloy.endpoints.${route.upstream.endpoint};
+                                in
+                                "${mkDomain domain} route_${routeName}:${endpoint.domain}:${toString endpoint.port}"
+                              ) route.domains
+                            ))
+                            lib.flatten
+                            (lib.concatStringsSep "\n")
+                          ];
+                          settings.main = {
+                            myhostname = mkDomain srv.hostname;
+                            mydestination = "";
+                            mynetworks = lib.pipe srv.routes [
+                              (lib.mapAttrsToList (
+                                _: route: lib.map (t: "[${t.ipv6}]") alloy.endpoints.${route.upstream.endpoint}.targets
+                              ))
+                              lib.flatten
+                            ];
+
+                            smtpd_relay_restrictions = "permit_mynetworks, reject_unauth_destination";
+                            relay_domains = lib.pipe srv.routes [
+                              (lib.mapAttrsToList (_: route: lib.map mkDomain route.domains))
+                              lib.flatten
+                            ];
+                          }
+                          // (lib.optionalAttrs hasCert {
+                            smtpd_tls_cert_file = certCfg.certPath;
+                            smtpd_tls_key_file = certCfg.keyPath;
+                            smtpd_tls_security_level = if srv.explicitTLS.mode == "optional" then "may" else "encrypt";
+                          });
+
+                          settings.master = {
+                            "${jail.uplink.ipv4}:25" = {
+                              type = "inet";
+                              private = false;
+                              command = "smtpd";
+                            };
+                            "[${jail.uplink.ipv6}]:25" = {
+                              type = "inet";
+                              private = false;
+                              command = "smtpd";
+                            };
+                          }
+                          // (lib.mapAttrs' (
+                            _: overlay:
+                            lib.nameValuePair "[${overlay.ipv6}]:25" {
+                              type = "inet";
+                              private = false;
+                              command = "smtpd";
+                              args = [
+                                "-o smtpd_tls_cert_file=${alloy.facts.${jail.static-ca.certFact}.path}"
+                                "-o smtpd_tls_key_file=${jail.secrets.${jail.static-ca.keySecret}.path}"
+                                "-o smtpd_tls_CAfile=${alloy.facts.${alloy.static-ca.certFact}.path}"
+                                "-o smtpd_tls_security_level=encrypt"
+                                "-o smtpd_tls_req_ccert=yes"
+                                "-o smtpd_client_restrictions=permit_mynetworks,reject"
+                              ];
+                            }
+                          ) jail.overlays)
+                          // (lib.mapAttrs' (
+                            routeName: route:
+                            lib.nameValuePair "route_${routeName}" {
+                              type = "unix";
+                              command = "smtp";
+                              args = [
+                                "-o smtp_tls_cert_file=${alloy.facts.${jail.static-ca.certFact}.path}"
+                                "-o smtp_tls_key_file=${jail.secrets.${jail.static-ca.keySecret}.path}"
+                                "-o smtp_tls_CAfile=${alloy.facts.${alloy.static-ca.certFact}.path}"
+                                "-o smtp_tls_security_level=encrypt"
+                              ];
+                            }
+                          ) srv.routes);
+                        };
+
+                        # systemd.services.opensmtpd.serviceConfig.ExecStartPre =
+                        #   pkgs.writeShellScript "prepare-opensmtpd-certs" ''
+                        #     mkdir -p /run/opensmtpd-certs
+                        #     cp -L "${certCfg.certPath}" /run/opensmtpd-certs/cert.pem
+                        #     cp -L "${certCfg.keyPath}" /run/opensmtpd-certs/key.pem
+                        #     chown -R root:smtpd /run/opensmtpd-certs
+                        #     chmod 644 /run/opensmtpd-certs/cert.pem
+                        #     chmod 640 /run/opensmtpd-certs/key.pem
+                        #   '';
+
+                        # services.opensmtpd = {
+                        #   enable = true;
+                        #   serverConfiguration = ''
+                        #     smtp max-message-size ${toString srv.maxMsgSizeMB}M
+
+                        #     ${lib.optionalString hasCert ''
+                        #       pki "relay" cert "/run/opensmtpd-certs/cert.pem"
+                        #       pki "relay" key "/run/opensmtpd-certs/key.pem"
+                        #     ''}
+
+                        #     pki "static-ca" cert "${alloy.facts.${jail.static-ca.certFact}.path}"
+                        #     pki "static-ca" key "${jail.secrets.${jail.static-ca.keySecret}.path}"
+                        #     ca "static-ca" cert "${alloy.facts.${alloy.static-ca.certFact}.path}"
+
+                        #     ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
+                        #       table route_${routeName}_domains { ${lib.concatMapStringsSep ", " mkDomain route.domains} }
+                        #       table route_${routeName}_ips { ${
+                        #         lib.concatMapStringsSep ", " (t: t.ipv6) alloy.endpoints.${route.upstream.endpoint}.targets
+                        #       } }
+                        #     '') srv.routes}
+
+                        #     listen on ${jail.uplink.ipv4} port 25 ${
+                        #       if hasCert && srv.explicitTLS.mode == "require" then
+                        #         ''tls-require pki "relay"''
+                        #       else if hasCert then
+                        #         ''tls pki "relay"''
+                        #       else
+                        #         ""
+                        #     } hostname "${mkDomain srv.hostname}"
+
+                        #     listen on ${jail.uplink.ipv6} port 25 ${
+                        #       if hasCert && srv.explicitTLS.mode == "require" then
+                        #         ''tls-require pki "relay"''
+                        #       else if hasCert then
+                        #         ''tls pki "relay"''
+                        #       else
+                        #         ""
+                        #     } hostname "${mkDomain srv.hostname}"
+
+                        #     ${lib.concatMapAttrsStringSep "\n" (overlayName: overlay: ''
+                        #       listen on ${overlay.ipv6} port 25 tag "OVERLAY_MTLS" tls-require verify pki "static-ca" ca "static-ca" hostname "${mkDomain srv.hostname}"
+                        #     '') jail.overlays}
+
+                        #     action "route_out" relay helo "${mkDomain srv.hostname}"
+                        #     ${lib.concatMapAttrsStringSep "\n" (
+                        #       routeName: route:
+                        #       let
+                        #         endpoint = alloy.endpoints.${route.upstream.endpoint};
+                        #       in
+                        #       ''
+                        #         action "route_to_${routeName}" relay \
+                        #           host "tls://${endpoint.domain}:${toString endpoint.port}" \
+                        #           helo "${mkDomain srv.hostname}" \
+                        #           pki "static-ca" \
+                        #           ca "static-ca"
+                        #       ''
+                        #     ) srv.routes}
+
+                        #     ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
+                        #       match from any for domain <route_${routeName}_domains> action "route_to_${routeName}"
+                        #     '') srv.routes}
+
+                        #     ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
+                        #       match tag "OVERLAY_MTLS" from src <route_${routeName}_ips> for any action "route_out"
+                        #     '') srv.routes}
+                        #   '';
+                        # };
                       };
                   }
                 )

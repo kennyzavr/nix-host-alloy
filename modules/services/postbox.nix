@@ -36,23 +36,37 @@
             default = { };
             type = lib.types.attrsOf (lib.types.submodule { });
           };
-          smtp.endpoint = lib.mkOption {
-            type = lib.types.str;
-            readOnly = true;
-            default = "postbox-${name}-smtp";
+          smtp = {
+            endpoint = lib.mkOption {
+              type = lib.types.str;
+              readOnly = true;
+              default = "postbox-${name}-smtp";
+            };
+            relayEndpoint = lib.mkOption {
+              type = lib.types.str;
+            };
           };
-          smtp.relayEndpoint = lib.mkOption {
-            type = lib.types.str;
+          smtps = {
+            proxyV2 = lib.mkOption {
+              default = true;
+              type = lib.types.bool;
+            };
+            endpoint = lib.mkOption {
+              type = lib.types.str;
+              readOnly = true;
+              default = "postbox-${name}-smtps";
+            };
           };
-          smtps.endpoint = lib.mkOption {
-            type = lib.types.str;
-            readOnly = true;
-            default = "postbox-${name}-smtps";
-          };
-          imap.endpoint = lib.mkOption {
-            type = lib.types.str;
-            readOnly = true;
-            default = "postbox-${name}-imap";
+          imap = {
+            proxyV2 = lib.mkOption {
+              default = true;
+              type = lib.types.bool;
+            };
+            endpoint = lib.mkOption {
+              type = lib.types.str;
+              readOnly = true;
+              default = "postbox-${name}-imap";
+            };
           };
           jmap.endpoint = lib.mkOption {
             type = lib.types.str;
@@ -187,7 +201,7 @@
                 };
               };
 
-              nixosModule = {
+              nixosModule = { pkgs, ... }: {
                 networking.firewall.allowedTCPPorts = [
                   465
                   25
@@ -206,9 +220,25 @@
 
                 systemd.services.opensmtpd.wants = [ "network-online.target" ];
                 systemd.services.opensmtpd.after = [ "network-online.target" ];
+                systemd.services.opensmtpd.path = [ pkgs.mkpasswd ];
+                systemd.services.opensmtpd.preStart = ''
+                  while IFS=: read -r user pass; do
+                    if [ -n "$pass" ]; then
+                      hash=$(mkpasswd -m sha-512 "$pass")
+                      echo "$user:$hash"
+                    fi
+                  done < /var/lib/cyrus/users.txt > /var/lib/cyrus/users-smtp.txt
+                  chown root:smtpd /var/lib/cyrus/users-smtp.txt
+                  chmod 0440 /var/lib/cyrus/users-smtp.txt
+                '';
 
                 services.opensmtpd = {
                   enable = true;
+
+                  extraServerArgs = [
+                    "-T"
+                    "all"
+                  ];
 
                   serverConfiguration = ''
                     pki "static-ca" cert "${alloy.facts.${jail.static-ca.certFact}.path}"
@@ -217,10 +247,10 @@
 
                     table vdomains { "${domain}" }
                     table relay_ips { ${lib.concatMapStringsSep ", " (t: t.ipv6) relayEndpoint.targets} }
-                    table user_passwords file:/var/lib/cyrus/users.txt
+                    table user_passwords file:/var/lib/cyrus/users-smtp.txt
 
                     ${lib.concatMapAttrsStringSep "\n" (_: overlay: ''
-                      listen on ${overlay.ipv6} port 465 smtps pki "static-ca" ca "static-ca" hostname "${domain}" auth <user_passwords> proxy-v2
+                      listen on ${overlay.ipv6} port 465 smtps ${lib.optionalString srv.smtps.proxyV2 "proxy-v2"} pki "static-ca" ca "static-ca" hostname "${domain}" auth <user_passwords>
                       listen on ${overlay.ipv6} port 25 tls-require verify pki "static-ca" ca "static-ca" hostname "${domain}"
                     '') jail.overlays}
                     listen on socket

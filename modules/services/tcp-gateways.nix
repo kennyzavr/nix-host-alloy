@@ -39,6 +39,10 @@
             endpoint = lib.mkOption {
               type = lib.types.str;
             };
+            proxyV2 = lib.mkOption {
+              default = true;
+              type = lib.types.bool;
+            };
           };
         };
       };
@@ -51,7 +55,7 @@
           };
           allowedOverlays = lib.mkOption {
             default = [ ];
-            type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            type = lib.types.listOf lib.types.str;
           };
           hosts = lib.mkOption {
             default = { };
@@ -239,7 +243,7 @@
                                   ""
                               }
                               ${lib.concatImapStringsSep "\n  " (idx: target: ''
-                                server target${toString idx} [${target.ipv6}]:${toString endpoint.port} weight ${toString target.weight} ssl crt "${
+                                server target${toString idx} [${target.ipv6}]:${toString endpoint.port} weight ${toString target.weight} ${if route.upstream.proxyV2 then "send-proxy-v2 " else ""}ssl crt "${
                                   jail.secretTemplates."static-ca-full".path
                                 }" ca-file "${alloy.facts.${alloy.static-ca.certFact}.path}" verify required
                               '') endpoint.targets}

@@ -35,7 +35,7 @@
             readOnly = true;
             default = "smtp-relay-${name}";
           };
-          domain = lib.mkOption {
+          hostname = lib.mkOption {
             type = alib.types.zoneNode;
           };
           addDnsRecords = lib.mkOption {
@@ -127,8 +127,8 @@
                     srv.explicitTLS.mode != "none"
                     -> (srv.explicitTLS.cert != null)
                     -> builtins.hasAttr srv.explicitTLS.cert alloy.tls.certs
-                    -> builtins.elem srv.domain alloy.tls.certs.${srv.explicitTLS.cert}.domains;
-                  message = "[Alloy] smtp-relay '${srvName}' explicitTLS.cert does not contain main domain of the smtp-relay";
+                    -> builtins.elem srv.hostname alloy.tls.certs.${srv.explicitTLS.cert}.domains;
+                  message = "[Alloy] smtp-relay '${srvName}' explicitTLS.cert does not contain hostname of the smtp-relay";
                 }
               ]
               ++ (lib.flatten (
@@ -162,18 +162,19 @@
 
               dns.records = lib.optionals srv.addDnsRecords (
                 lib.flatten (
-                  [
-                    {
-                      domain = {
-                        zone = srv.domain.zone;
-                        name = "@";
-                      };
-                      data.mx = {
-                        preference = 10;
-                        exchange = alloy.dns.resolveNode srv.domain;
-                      };
-                    }
-                  ]
+                  [ ]
+                  ++ (lib.mapAttrsToList (
+                    _: hostCfg:
+                    [ ]
+                    ++ (lib.optional (hostCfg.ipv4 != null) {
+                      domain = srv.hostname;
+                      data.a = hostCfg.ipv4;
+                    })
+                    ++ (lib.optional (hostCfg.ipv6 != null) {
+                      domain = srv.hostname;
+                      data.aaaa = hostCfg.ipv6;
+                    })
+                  ) srv.hosts)
                   ++ (lib.mapAttrsToList (
                     _: route:
                     lib.map (domain: [
@@ -181,23 +182,11 @@
                         domain = domain;
                         data.mx = {
                           preference = 10;
-                          exchange = alloy.dns.resolveNode srv.domain;
+                          exchange = alloy.dns.resolveNode srv.hostname;
                         };
                       }
                     ]) route.domains
                   ) srv.routes)
-                  ++ (lib.mapAttrsToList (
-                    _: hostCfg:
-                    [ ]
-                    ++ (lib.optional (hostCfg.ipv4 != null) {
-                      domain = srv.domain;
-                      data.a = hostCfg.ipv4;
-                    })
-                    ++ (lib.optional (hostCfg.ipv6 != null) {
-                      domain = srv.domain;
-                      data.aaaa = hostCfg.ipv6;
-                    })
-                  ) srv.hosts)
                 )
               );
 
@@ -307,22 +296,22 @@
                                 ''tls pki "relay"''
                               else
                                 ""
-                            } hostname "${mkDomain srv.domain}"
+                            } hostname "${mkDomain srv.hostname}"
 
                             listen on ${jail.uplink.ipv6} port 25 ${
                               if hasCert && srv.explicitTLS.mode == "require" then
-                                ''tls-require verify pki "relay"''
+                                ''tls-require pki "relay"''
                               else if hasCert then
                                 ''tls pki "relay"''
                               else
                                 ""
-                            } hostname "${mkDomain srv.domain}"
+                            } hostname "${mkDomain srv.hostname}"
 
                             ${lib.concatMapAttrsStringSep "\n" (overlayName: overlay: ''
-                              listen on ${overlay.ipv6} port 25 tag "OVERLAY_MTLS" tls-require verify pki "static-ca" ca "static-ca" hostname "${mkDomain srv.domain}"
+                              listen on ${overlay.ipv6} port 25 tag "OVERLAY_MTLS" tls-require verify pki "static-ca" ca "static-ca" hostname "${mkDomain srv.hostname}"
                             '') jail.overlays}
 
-                            action "route_out" relay helo "${mkDomain srv.domain}"
+                            action "route_out" relay helo "${mkDomain srv.hostname}"
                             ${lib.concatMapAttrsStringSep "\n" (
                               routeName: route:
                               let
@@ -331,7 +320,7 @@
                               ''
                                 action "route_to_${routeName}" relay \
                                   host "tls://${endpoint.domain}:${toString endpoint.port}" \
-                                  helo "${mkDomain srv.domain}" \
+                                  helo "${mkDomain srv.hostname}" \
                                   pki "static-ca" \
                                   ca "static-ca"
                               ''

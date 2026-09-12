@@ -89,7 +89,7 @@
             };
             ipv6Prefix = lib.mkOption {
               type = lib.types.strMatching "^fd[0-9a-fA-F]{2}(:[0-9a-fA-F]{4}){2}$";
-              default = "fdf2:82e2:${lib.fixedWidthString 4 "0" (lib.toHexString config.idx)}";
+              default = "fdf2:82e2:${lib.fixedWidthString 4 "0" (lib.toLower (lib.toHexString config.idx))}";
             };
             links = lib.mkOption {
               default = [ ];
@@ -162,7 +162,7 @@
             ipv6Prefix = lib.mkOption {
               type = lib.types.str;
               readOnly = true;
-              default = "${overlay.ipv6Prefix}:${lib.fixedWidthString 4 "0" (lib.toHexString host.idx)}";
+              default = "${overlay.ipv6Prefix}:${lib.fixedWidthString 4 "0" (lib.toLower (lib.toHexString host.idx))}";
             };
             ipv6 = lib.mkOption {
               type = lib.types.str;
@@ -215,7 +215,7 @@
               type = lib.types.str;
               readOnly = true;
               default = "${host.overlays.${name}.ipv6Prefix}:0000:0000:000c:${
-                lib.fixedWidthString 4 "0" (lib.toHexString jail.idx)
+                lib.fixedWidthString 4 "0" (lib.toLower (lib.toHexString jail.idx))
               }";
             };
             firewall = lib.mkOption {
@@ -385,8 +385,8 @@
                 maxIdx = if host.idx < peerHost.idx then peerHost.idx else host.idx;
 
                 linkSubnet = "${overlay.ipv6Prefix}:0000:0001:${
-                  lib.fixedWidthString 4 "0" (lib.toHexString minIdx)
-                }:${lib.fixedWidthString 4 "0" (lib.toHexString maxIdx)}";
+                  lib.fixedWidthString 4 "0" (lib.toLower (lib.toHexString minIdx))
+                }:${lib.fixedWidthString 4 "0" (lib.toLower (lib.toHexString maxIdx))}";
 
                 thisWgIpv6 = "${linkSubnet}:${if host.idx == minIdx then "1" else "2"}";
                 peerWgIpv6 = "${linkSubnet}:${if peerHost.idx == minIdx then "1" else "2"}";

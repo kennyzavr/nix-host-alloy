@@ -132,10 +132,34 @@
                 };
                 config =
                   let
-                    hostCerts = hostSubmodule.config.acme.certs;
-                    jailCerts = lib.foldl' (acc: jail: acc // jail.acme.certs) { } (
-                      lib.attrValues (lib.filterAttrs (_: j: j.host == name) alloy.jails)
-                    );
+                    hostCerts = lib.mapAttrs (
+                      _: cert:
+                      cert
+                      // {
+                        ownerType = "host";
+                        owner = name;
+                      }
+                    ) hostSubmodule.config.acme.certs;
+                    jailCerts = lib.pipe alloy.jails [
+                      (lib.filterAttrs (_: jail: jail.host == name))
+                      (lib.mapAttrs (jailName: jail: jail // { inherit jailName; }))
+                      builtins.attrValues
+                      (lib.foldl' (
+                        acc: jail:
+                        acc
+                        // (lib.mapAttrs (
+                          _: cert:
+                          cert
+                          // {
+                            ownerType = "jail";
+                            owner = jail.jailName;
+                          }
+                        ) jail.acme.certs)
+                      ) { })
+                    ];
+                    # jailCerts = lib.foldl' (acc: jail: acc // jail.acme.certs) { } (
+                    #   lib.attrValues (lib.filterAttrs (_: j: j.host == name) alloy.jails)
+                    # );
                     allCerts = hostCerts // jailCerts;
 
                     mkDnsCert =
@@ -167,7 +191,8 @@
                           else
                             [ ];
 
-                        chEndpoint = alloy.endpoints.${ch.endpoint};
+                        primaryZone = alloy.dns.zones.${(builtins.head cert.domains).zone};
+                        chEndpoint = alloy.endpoints.${primaryZone.acmeChallenge.endpoint};
                         chOverlays = lib.unique (lib.map (t: t.overlay) chEndpoint.targets);
 
                         requiredOverlays = lib.unique (caOverlays ++ chOverlays);
@@ -179,7 +204,9 @@
                         assertions = [
                           {
                             assertion = missingOverlays == [ ];
-                            message = "[Alloy] Host '${name}': Uses ACME cert '${certName}', but is missing required overlays: ${lib.concatStringsSep ", " missingOverlays}";
+                            message = "[Alloy] ${
+                              if certCfg.ownerType == "host" then "Host" else "Jail"
+                            } '${certCfg.owner}': Uses ACME cert '${certName}', but is missing required overlays: ${lib.concatStringsSep ", " missingOverlays}";
                           }
                         ];
 
@@ -203,7 +230,7 @@
                         nixosModule = {
                           security.acme.acceptTerms = true;
                           security.acme.certs.${certName} = {
-                            email = cert.acme.email;
+                            email = cert.acme.email or "";
                             server = serverUrl;
                             domain = primaryDomain;
                             extraDomainNames = globalExtraDomains;
@@ -215,10 +242,31 @@
                         };
                       };
 
-                    configs = lib.pipe allCerts [
-                      (lib.filterAttrs (certName: _: alloy.tls.certs.${certName}.acme.challenge ? dns))
-                      (lib.mapAttrsToList mkDnsCert)
-                    ];
+                    configs =
+                      (lib.pipe allCerts [
+                        (lib.filterAttrs (
+                          certName: _:
+                          alloy.tls.certs.${certName}.acme.challenge != null
+                          && alloy.tls.certs.${certName}.acme.challenge ? dns
+                        ))
+                        (lib.mapAttrsToList mkDnsCert)
+                      ])
+                      ++ (lib.mapAttrsToList (certName: cert: {
+                        assertions = [
+                          {
+                            assertion = alloy.tls.certs.${certName}.acme.challenge != null;
+                            message = "[Alloy] ${
+                              if cert.ownerType == "host" then "Host" else "Jail"
+                            } '${cert.owner}': Uses ACME cert '${certName}', but it is missing acme.challenge";
+                          }
+                          {
+                            assertion = alloy.tls.certs.${certName}.acme.challenge != null -> alloy.tls.certs.${certName}.acme.email != "";
+                            message = "[Alloy] ${
+                              if cert.ownerType == "host" then "Host" else "Jail"
+                            } '${cert.owner}': Uses ACME cert '${certName}', but it is missing acme.email";
+                          }
+                        ];
+                      }) allCerts);
                   in
                   {
                     secrets = lib.mkMerge (lib.catAttrs "secrets" configs);
@@ -250,7 +298,7 @@
                       );
                       systemd.paths = lib.mkMerge (lib.mapAttrsToList mkAnchorPaths hostSubmodule.config.acme.certs);
 
-                      imports = lib.map (c: c.nixosModule) configs;
+                      imports = lib.map (c: c.nixosModule or { }) configs;
                     };
                   };
               }

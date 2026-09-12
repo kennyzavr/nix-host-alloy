@@ -30,29 +30,29 @@
           };
           acme = {
             email = lib.mkOption {
+              default = "";
               type = lib.types.str;
             };
             challenge = lib.mkOption {
-              type = lib.types.attrTag {
-                dns = lib.mkOption {
-                  type = lib.types.submodule {
-                    options = {
-                      tsigKeySecret = lib.mkOption {
-                        type = lib.types.str;
-                        default = "tls/certs/${name}/tsig-key";
-                      };
-                      tsigKeyGenerator = lib.mkOption {
-                        type = lib.types.str;
-                        default = "tls/certs/${name}/tsig-key";
-                      };
-                      endpoint = lib.mkOption {
-                        type = lib.types.str;
-                        readOnly = true;
+              default = null;
+              type = lib.types.nullOr (
+                lib.types.attrTag {
+                  dns = lib.mkOption {
+                    type = lib.types.submodule {
+                      options = {
+                        tsigKeySecret = lib.mkOption {
+                          type = lib.types.str;
+                          default = "tls/certs/${name}/tsig-key";
+                        };
+                        tsigKeyGenerator = lib.mkOption {
+                          type = lib.types.str;
+                          default = "tls/certs/${name}/tsig-key";
+                        };
                       };
                     };
                   };
-                };
-              };
+                }
+              );
             };
           };
           assertions = lib.mkOption {
@@ -68,9 +68,9 @@
         };
 
         config = {
-          acme.challenge.dns.endpoint = lib.mkIf (
-            config.acme.challenge ? dns && builtins.length config.domains > 0
-          ) (alloy.dns.zones.${(builtins.head config.domains).zone}.acmeChallenge.endpoint);
+          # acme.challenge.dns.endpoint = lib.mkIf (
+          #   config.acme.challenge ? dns && builtins.length config.domains > 0
+          # ) (alloy.dns.zones.${(builtins.head config.domains).zone}.acmeChallenge.endpoint);
 
           assertions =
             let
@@ -272,7 +272,8 @@
 
                   from cryptography import x509
                   from cryptography.x509.oid import NameOID
-                  from cryptography.hazmat.primitives.asymmetric import ed25519
+                  from cryptography.hazmat.primitives.asymmetric import ec
+                  from cryptography.hazmat.primitives import hashes
                   from cryptography.hazmat.primitives import serialization
 
 
@@ -355,7 +356,7 @@
                       issuer_key = None
                       parent_cert = None
 
-                  key = ed25519.Ed25519PrivateKey.generate()
+                  key = ec.generate_private_key(ec.SECP256R1())
                   key_pem = key.private_bytes(
                       encoding=serialization.Encoding.PEM,
                       format=serialization.PrivateFormat.PKCS8,
@@ -452,7 +453,7 @@
                           critical=True
                       )
 
-                  cert = builder.sign(issuer_key, None)
+                  cert = builder.sign(issuer_key, hashes.SHA256())
                   cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
 
                   run_alloy(
@@ -521,7 +522,8 @@
 
                   from cryptography import x509
                   from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
-                  from cryptography.hazmat.primitives.asymmetric import ed25519
+                  from cryptography.hazmat.primitives.asymmetric import ec
+                  from cryptography.hazmat.primitives import hashes
                   from cryptography.hazmat.primitives import serialization
 
 
@@ -595,7 +597,7 @@
                   )
                   parent_cert = x509.load_pem_x509_certificate(parent_cert_pem.encode())
 
-                  key = ed25519.Ed25519PrivateKey.generate()
+                  key = ec.generate_private_key(ec.SECP256R1())
                   key_pem = key.private_bytes(
                       encoding=serialization.Encoding.PEM,
                       format=serialization.PrivateFormat.PKCS8,
@@ -679,7 +681,7 @@
                           x509.SubjectAlternativeName(sans), critical=False
                       )
 
-                  cert = builder.sign(issuer_key, None)
+                  cert = builder.sign(issuer_key, hashes.SHA256())
                   cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
 
                   run_alloy(

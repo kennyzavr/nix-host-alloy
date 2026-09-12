@@ -16,13 +16,13 @@
             type = lib.types.str;
             default = "postboxes/${srvName}/users/${name}/login";
           };
-          passwdSecret = lib.mkOption {
+          hashedPasswdSecret = lib.mkOption {
             type = lib.types.str;
-            default = "postboxes/${srvName}/users/${name}/passwd";
+            default = "postboxes/${srvName}/users/${name}/hashed-passwd";
           };
-          passwdGenerator = lib.mkOption {
+          hashedPasswdGenerator = lib.mkOption {
             type = lib.types.str;
-            default = "postboxes/${srvName}/users/${name}/passwd";
+            default = "postboxes/${srvName}/users/${name}/hashed-passwd";
           };
         };
       };
@@ -31,6 +31,10 @@
         options = {
           host = lib.mkOption {
             type = lib.types.str;
+          };
+          extraDomains = lib.mkOption {
+            default = [ ];
+            type = lib.types.listOf lib.types.str;
           };
           overlays = lib.mkOption {
             default = { };
@@ -68,11 +72,6 @@
               default = "postbox-${name}-imap";
             };
           };
-          jmap.endpoint = lib.mkOption {
-            type = lib.types.str;
-            readOnly = true;
-            default = "postbox-${name}-jmap";
-          };
           domain = lib.mkOption {
             type = alib.types.zoneNode;
           };
@@ -92,16 +91,18 @@
           assertions = [ ];
 
           facts = lib.mapAttrs' (userName: user: lib.nameValuePair user.loginFact { }) srv.users;
-          secrets = lib.mapAttrs' (userName: user: lib.nameValuePair user.passwdSecret { }) srv.users;
+          secrets = lib.mapAttrs' (userName: user: lib.nameValuePair user.hashedPasswdSecret { }) srv.users;
 
           generators.instances = lib.mapAttrs' (
             userName: user:
-            lib.nameValuePair user.passwdGenerator {
+            lib.nameValuePair user.hashedPasswdGenerator {
               package =
                 { pkgs, ... }:
                 pkgs.writeShellScriptBin "postbox-gen-passwd" ''
-                  pass=$(${pkgs.openssl}/bin/openssl rand -base64 32)
-                  "$ALLOY_BIN" secrets set "${user.passwdSecret}" <<< "$pass"
+                  read -r -s -p "Enter password for ''${userName}: " pass
+                  echo
+                  hash=$(echo "$pass" | ${pkgs.mkpasswd}/bin/mkpasswd -m sha-512 -s)
+                  "$ALLOY_BIN" secrets set "${user.hashedPasswdSecret}" <<< "$hash"
                 '';
             }
           ) srv.users;
@@ -130,14 +131,6 @@
                 overlay = overlayName;
               }) srv.overlays;
             };
-
-            ${srv.jmap.endpoint} = {
-              port = 443;
-              targets = lib.mapAttrsToList (overlayName: _: {
-                ipv6 = alloy.jails."postbox-${srvName}".overlays.${overlayName}.ipv6;
-                overlay = overlayName;
-              }) srv.overlays;
-            };
           };
 
           jails."postbox-${srvName}" =
@@ -154,16 +147,15 @@
                 alloy.endpoints.${srv.smtp.endpoint}.domain
                 alloy.endpoints.${srv.smtps.endpoint}.domain
                 alloy.endpoints.${srv.imap.endpoint}.domain
-                alloy.endpoints.${srv.jmap.endpoint}.domain
               ];
 
-              volumes."cyrus" = {
-                path = "/var/lib/cyrus";
+              volumes."dovecot" = {
+                path = "/var/lib/dovecot";
                 driver.directory = { };
                 permissions = {
-                  owner = "cyrus";
-                  group = "postbox";
-                  mode = "0750";
+                  owner = "dovecot2";
+                  group = "dovecot2";
+                  mode = "0755";
                 };
               };
 
@@ -171,7 +163,7 @@
                 lib.pipe srv.users [
                   (lib.mapAttrsToList (
                     userName: user: {
-                      ${user.passwdSecret} = { };
+                      ${user.hashedPasswdSecret} = { };
                     }
                   ))
                   lib.mkMerge
@@ -189,19 +181,21 @@
               secretTemplates."userdb" = {
                 template = lib.concatMapAttrsStringSep "\n" (
                   userName: user:
-                  "${lib.removePrefix "\n" (lib.removeSuffix "\n" alloy.facts.${user.loginFact}.value)}@${domain}:${
-                    jail.secrets.${user.passwdSecret}.placeholder
-                  }"
+                  let
+                    login = lib.removePrefix "\n" (lib.removeSuffix "\n" alloy.facts.${user.loginFact}.value);
+                    hash = jail.secrets.${user.hashedPasswdSecret}.placeholder;
+                    domains = [ domain ] ++ srv.extraDomains;
+                  in
+                  lib.concatMapStringsSep "\n" (d: "${login}@${d}:${hash}") domains
                 ) srv.users;
-                path = "/var/lib/cyrus/users.txt";
                 permissions = {
-                  owner = "cyrus";
-                  group = "postbox";
+                  owner = "dovecot2";
+                  group = "smtpd";
                   mode = "0440";
                 };
               };
 
-              nixosModule = { pkgs, ... }: {
+              nixosModule = { pkgs, config, ... }: {
                 networking.firewall.allowedTCPPorts = [
                   465
                   25
@@ -209,28 +203,8 @@
                   993
                 ];
 
-                users.groups."postbox" = { };
-
-                users.users."smtpd" = {
-                  extraGroups = [ "postbox" ];
-                };
-                users.users."cyrus" = {
-                  group = lib.mkForce "postbox";
-                };
-
                 systemd.services.opensmtpd.wants = [ "network-online.target" ];
                 systemd.services.opensmtpd.after = [ "network-online.target" ];
-                systemd.services.opensmtpd.path = [ pkgs.mkpasswd ];
-                systemd.services.opensmtpd.preStart = ''
-                  while IFS=: read -r user pass; do
-                    if [ -n "$pass" ]; then
-                      hash=$(mkpasswd -m sha-512 "$pass")
-                      echo "$user:$hash"
-                    fi
-                  done < /var/lib/cyrus/users.txt > /var/lib/cyrus/users-smtp.txt
-                  chown root:smtpd /var/lib/cyrus/users-smtp.txt
-                  chmod 0440 /var/lib/cyrus/users-smtp.txt
-                '';
 
                 services.opensmtpd = {
                   enable = true;
@@ -245,9 +219,13 @@
                     pki "static-ca" key "${jail.secrets.${jail.static-ca.keySecret}.path}"
                     ca "static-ca" cert "${alloy.facts.${alloy.static-ca.certFact}.path}"
 
-                    table vdomains { "${domain}" }
+                    table vdomains { "${domain}"${
+                      lib.optionalString (srv.extraDomains != [ ]) (
+                        ", " + lib.concatMapStringsSep ", " (d: ''"${d}"'') srv.extraDomains
+                      )
+                    } }
                     table relay_ips { ${lib.concatMapStringsSep ", " (t: t.ipv6) relayEndpoint.targets} }
-                    table user_passwords file:/var/lib/cyrus/users-smtp.txt
+                    table user_passwords file:${jail.secretTemplates."userdb".path}
 
                     ${lib.concatMapAttrsStringSep "\n" (_: overlay: ''
                       listen on ${overlay.ipv6} port 465 smtps ${lib.optionalString srv.smtps.proxyV2 "proxy-v2"} pki "static-ca" ca "static-ca" hostname "${domain}" auth <user_passwords>
@@ -255,14 +233,14 @@
                     '') jail.overlays}
                     listen on socket
 
-                    action "to_cyrus" lmtp "/run/cyrus/lmtp" rcpt-to
+                    action "to_dovecot" lmtp "/run/dovecot2/lmtp" rcpt-to
                     action "to_relay" relay \
                       host "tls://${relayEndpoint.domain}:${toString relayEndpoint.port}" \
                       helo "${domain}" \
                       pki "static-ca" \
                       ca "static-ca"
 
-                    match tls from src <relay_ips> for domain <vdomains> action "to_cyrus"
+                    match tls from src <relay_ips> for domain <vdomains> action "to_dovecot"
                     match auth from any for domain <vdomains> action "to_relay"
                     match from local for domain <vdomains> action "to_relay"
 
@@ -271,116 +249,71 @@
                   '';
                 };
 
-                services.cyrus-imap = {
+                services.dovecot2 = {
                   enable = true;
-                  group = "postbox";
-                  cyrusSettings = {
-                    START = {
-                      recover = {
-                        cmd = [
-                          "ctl_cyrusdb"
-                          "-r"
-                        ];
-                      };
-                    };
-                    SERVICES = {
-                      lmtpunix = {
-                        cmd = [ "lmtpd" ];
-                        listen = "/run/cyrus/lmtp";
-                      };
-                      jmap = {
-                        cmd = [
-                          "httpd"
-                          "-j"
-                          "-s"
-                        ];
-                        listen = 443;
-                        prefork = 0;
-                      };
-                      imaps = {
-                        cmd = [
-                          "imapd"
-                          "-s"
-                        ];
-                        listen = 993;
-                        prefork = 0;
-                      };
-                    };
-                    EVENTS = {
-                      checkpoint = {
-                        cmd = [
-                          "ctl_cyrusdb"
-                          "-c"
-                        ];
-                        period = 30;
-                      };
-                      deleteprune = {
-                        at = 430;
-                        cmd = [
-                          "cyr_expire"
-                          "-E"
-                          "4"
-                          "-D"
-                          "28"
-                        ];
-                      };
-                      delprune = {
-                        at = 400;
-                        cmd = [
-                          "cyr_expire"
-                          "-E"
-                          "3"
-                        ];
-                      };
-                      expungeprune = {
-                        at = 445;
-                        cmd = [
-                          "cyr_expire"
-                          "-E"
-                          "4"
-                          "-X"
-                          "28"
-                        ];
-                      };
-                      tlsprune = {
-                        at = 400;
-                        cmd = [
-                          "tls_prune"
-                        ];
-                      };
-                    };
-                    DAEMON = { };
-                  };
-                  imapdSettings = {
-                    defaultdomain = domain;
+                  settings = {
+                    dovecot_config_version = config.services.dovecot2.package.version;
+                    dovecot_storage_version = config.services.dovecot2.package.version;
 
-                    sasl_pwcheck_method = "auxprop";
-                    sasl_auxprop_plugin = "authfile";
-                    sasl_authfile_path = "/var/lib/cyrus/users.txt";
-                    sasl_mech_list = "PLAIN LOGIN";
+                    protocols = {
+                      imap = true;
+                      lmtp = true;
+                      pop3 = false;
+                    };
 
-                    jmap_enable = "yes";
-                    httpmodules = [
-                      "jmap"
-                      "caldav"
-                      "carddav"
+                    first_valid_uid = 1;
+
+                    mail_driver = "maildir";
+                    mail_path = "/var/lib/dovecot/mail/%{user | username}";
+
+                    ssl = "required";
+                    ssl_server_cert_file = alloy.facts.${jail.static-ca.certFact}.path;
+                    ssl_server_key_file = jail.secrets.${jail.static-ca.keySecret}.path;
+                    ssl_server_ca_file = alloy.facts.${alloy.static-ca.certFact}.path;
+                    ssl_server_request_client_cert = true;
+
+                    haproxy_trusted_networks = lib.mapAttrsToList (
+                      overlayName: _: "${alloy.overlays.${overlayName}.ipv6Prefix}::/48"
+                    ) srv.overlays;
+
+                    "passdb passwd-file" = {
+                      passwd_file_path = jail.secretTemplates."userdb".path;
+                    };
+                    "userdb static" = {
+                      fields = {
+                        uid = "dovecot2";
+                        gid = "dovecot2";
+                        home = "/var/lib/dovecot/mail/%{user | username}";
+                      };
+                    };
+
+                    service = [
+                      {
+                        _section = {
+                          name = "imap-login";
+                        };
+                        "inet_listener imaps" = {
+                          port = 993;
+                          ssl = "yes";
+                          haproxy = if srv.imap.proxyV2 then "yes" else "no";
+                        };
+                        "inet_listener imap" = {
+                          port = 0;
+                        };
+                      }
+                      {
+                        _section = {
+                          name = "lmtp";
+                        };
+                        "unix_listener lmtp" = {
+                          mode = "0660";
+                          user = "smtpd";
+                          group = "smtpd";
+                        };
+                      }
                     ];
-                    jmap_max_size_upload = 50000000;
-
-                    tls_server_cert = alloy.facts.${jail.static-ca.certFact}.path;
-                    tls_server_key = jail.secrets.${jail.static-ca.keySecret}.path;
-                    tls_server_cafile = alloy.facts.${alloy.static-ca.certFact}.path;
-                    tls_client_ca_file = alloy.facts.${jail.static-ca.certFact}.path;
-                    tls_required_cert = 1;
-
-                    lmtp_downcase_final_addr = true;
-                    autocreate_inbox = "1";
-                    autocreate_folders = "Sent|Drafts|Trash|Junk";
-
-                    lmtpsocket = "/run/cyrus/lmtp";
                   };
                 };
-
               };
             };
         };

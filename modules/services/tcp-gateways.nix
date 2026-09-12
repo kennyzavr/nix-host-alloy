@@ -134,18 +134,18 @@
           dns.records = lib.flatten (
             lib.mapAttrsToList (
               _: route:
-                (lib.mapAttrsToList (
-                  _: hostCfg:
-                  [ ]
-                  ++ (lib.optional (route.addDnsRecords && hostCfg.ipv4 != null) {
-                    domain = route.domain;
-                    data.a = hostCfg.ipv4;
-                  })
-                  ++ (lib.optional (route.addDnsRecords && hostCfg.ipv6 != null) {
-                    domain = route.domain;
-                    data.aaaa = hostCfg.ipv6;
-                  })
-                ) srv.hosts)
+              (lib.mapAttrsToList (
+                _: hostCfg:
+                [ ]
+                ++ (lib.optional (route.addDnsRecords && hostCfg.ipv4 != null) {
+                  domain = route.domain;
+                  data.a = hostCfg.ipv4;
+                })
+                ++ (lib.optional (route.addDnsRecords && hostCfg.ipv6 != null) {
+                  domain = route.domain;
+                  data.aaaa = hostCfg.ipv6;
+                })
+              ) srv.hosts)
             ) srv.routes
           );
 
@@ -243,9 +243,12 @@
                                   ""
                               }
                               ${lib.concatImapStringsSep "\n  " (idx: target: ''
-                                server target${toString idx} [${target.ipv6}]:${toString endpoint.port} weight ${toString target.weight} ${if route.upstream.proxyV2 then "send-proxy-v2 " else ""}ssl crt "${
+
+                                server target${toString idx} [${target.ipv6}]:${toString endpoint.port} weight ${toString target.weight} ssl verify required ca-file "${
+                                  alloy.facts.${alloy.static-ca.certFact}.path
+                                }" crt "${
                                   jail.secretTemplates."static-ca-full".path
-                                }" ca-file "${alloy.facts.${alloy.static-ca.certFact}.path}" verify required
+                                }" ${lib.optionalString route.upstream.proxyV2 "send-proxy-v2"}
                               '') endpoint.targets}
                           ''
                         ) srv.routes}

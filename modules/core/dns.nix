@@ -122,7 +122,7 @@
                         else
                           builtins.genList (i: builtins.substring (i * limit) limit d) numChunks;
                     in
-                    builtins.concatMapStringsSep " " (chunk: ''"${lib.escape [ "\"" "\\" ] chunk}"'') chunks
+                    lib.concatMapStringsSep " " (chunk: ''"${lib.escape [ "\"" "\\" ] chunk}"'') chunks
                   else if recordKey == "caa" then
                     ''${toString d.flags} ${d.tag} "${lib.escape [ "\"" "\\" ] d.value}"''
                   else if recordKey == "mx" then
@@ -201,6 +201,7 @@
               };
             };
           };
+          # TODO: choose unique records
           config.bindConfig = ''
             $ORIGIN ${lib.removeSuffix "." config.apex}.
             $TTL ${toString config.ttl}

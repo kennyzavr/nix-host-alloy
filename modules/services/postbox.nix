@@ -14,14 +14,17 @@
           loginFact = lib.mkOption {
             # TODO check value format
             type = lib.types.str;
+            readOnly = true;
             default = "postboxes/${srvName}/users/${name}/login";
           };
           hashedPasswdSecret = lib.mkOption {
             type = lib.types.str;
+            readOnly = true;
             default = "postboxes/${srvName}/users/${name}/hashed-passwd";
           };
           hashedPasswdGenerator = lib.mkOption {
             type = lib.types.str;
+            readOnly = true;
             default = "postboxes/${srvName}/users/${name}/hashed-passwd";
           };
         };
@@ -68,6 +71,17 @@
               default = "postbox-${name}-imap";
             };
           };
+          https = {
+            proxyV2 = lib.mkOption {
+              default = false;
+              type = lib.types.bool;
+            };
+            endpoint = lib.mkOption {
+              type = lib.types.str;
+              readOnly = true;
+              default = "postbox-${name}-https";
+            };
+          };
           domain = lib.mkOption {
             type = alib.types.zoneNode;
           };
@@ -103,10 +117,13 @@
               package =
                 { pkgs, ... }:
                 pkgs.writeShellScriptBin "postbox-gen-passwd" ''
-                  read -r -s -p "Enter password for ''${userName}: " pass
-                  echo
-                  hash=$(echo "$pass" | ${pkgs.mkpasswd}/bin/mkpasswd -m sha-512 -s)
-                  "$ALLOY_BIN" secrets set "${user.hashedPasswdSecret}" <<< "$hash"
+                  # TODO: add cli command to check secret existance or check just the store file
+                  # if [ "''${ALLOY_FORCE:-0}" = "1" ] || ! [ -r "${alloy.secrets.${user.hashedPasswdSecret}.file}" ]; then
+                    read -r -s -p "Enter password for ${userName}: " pass
+                    echo
+                    hash=$(printf "%s\n" "$pass" | ${pkgs.mkpasswd}/bin/mkpasswd -m sha-512 -s)
+                    "$ALLOY_BIN" secrets set "${user.hashedPasswdSecret}" <<< "$hash"
+                  # fi
                 '';
             }
           ) srv.users;
@@ -135,6 +152,14 @@
                 overlay = overlayName;
               }) srv.overlays;
             };
+
+            ${srv.https.endpoint} = {
+              port = 443;
+              targets = lib.mapAttrsToList (overlayName: _: {
+                ipv6 = alloy.jails."postbox-${srvName}".overlays.${overlayName}.ipv6;
+                overlay = overlayName;
+              }) srv.overlays;
+            };
           };
 
           jails."postbox-${srvName}" =
@@ -151,6 +176,7 @@
                 alloy.endpoints.${srv.smtp.endpoint}.domain
                 alloy.endpoints.${srv.smtps.endpoint}.domain
                 alloy.endpoints.${srv.imap.endpoint}.domain
+                alloy.endpoints.${srv.https.endpoint}.domain
               ];
 
               volumes."dovecot" = {
@@ -207,6 +233,95 @@
                   443
                   993
                 ];
+
+                services.nginx = {
+                  enable = true;
+                  virtualHosts."default" = {
+                    default = true;
+                    listen = [
+                      {
+                        addr = "[::]";
+                        port = 443;
+                        ssl = true;
+                        proxyProtocol = srv.https.proxyV2;
+                      }
+                    ];
+                    sslCertificate = alloy.facts.${jail.static-ca.certFact}.path;
+                    sslCertificateKey = jail.secrets.${jail.static-ca.keySecret}.path;
+                    
+                    locations."/mail/config-v1.1.xml".alias = pkgs.writeText "autoconfig.xml" ''
+                      <?xml version="1.0" encoding="UTF-8"?>
+                      <clientConfig version="1.1">
+                        <emailProvider id="${mkDomain srv.domain}">
+                          <domain>${mkDomain srv.domain}</domain>
+                          <displayName>${mkDomain srv.domain} Mail</displayName>
+                          <displayShortName>${mkDomain srv.domain}</displayShortName>
+                          <incomingServer type="imap">
+                            <hostname>${mkDomain srv.domain}</hostname>
+                            <port>993</port>
+                            <socketType>SSL</socketType>
+                            <authentication>password-cleartext</authentication>
+                            <username>%EMAILADDRESS%</username>
+                          </incomingServer>
+                          <outgoingServer type="smtp">
+                            <hostname>${mkDomain srv.domain}</hostname>
+                            <port>465</port>
+                            <socketType>SSL</socketType>
+                            <authentication>password-cleartext</authentication>
+                            <username>%EMAILADDRESS%</username>
+                          </outgoingServer>
+                        </emailProvider>
+                      </clientConfig>
+                    '';
+
+                    locations."/autodiscover/autodiscover.xml" = {
+                      extraConfig = ''
+                        error_page 405 =200 $uri;
+                      '';
+                      alias = pkgs.writeText "autodiscover.xml" ''
+                        <?xml version="1.0" encoding="utf-8" ?>
+                        <Autodiscover xmlns="http://schemas.microsoft.com/exchange/autodiscover/responseschema/2006">
+                          <Response xmlns="http://schemas.microsoft.com/exchange/autodiscover/outlook/responseschema/2006a">
+                            <Account>
+                              <AccountType>email</AccountType>
+                              <Action>settings</Action>
+                              <Protocol>
+                                <Type>IMAP</Type>
+                                <Server>${mkDomain srv.domain}</Server>
+                                <Port>993</Port>
+                                <DomainRequired>off</DomainRequired>
+                                <LoginName></LoginName>
+                                <SPA>off</SPA>
+                                <SSL>on</SSL>
+                                <AuthRequired>on</AuthRequired>
+                              </Protocol>
+                              <Protocol>
+                                <Type>SMTP</Type>
+                                <Server>${mkDomain srv.domain}</Server>
+                                <Port>465</Port>
+                                <DomainRequired>off</DomainRequired>
+                                <LoginName></LoginName>
+                                <SPA>off</SPA>
+                                <SSL>on</SSL>
+                                <AuthRequired>on</AuthRequired>
+                                <UsePOPAuth>on</UsePOPAuth>
+                                <SMTPLast>off</SMTPLast>
+                              </Protocol>
+                            </Account>
+                          </Response>
+                        </Autodiscover>
+                      '';
+                    };
+
+                    locations."/.well-known/mta-sts.txt".alias = pkgs.writeText "mta-sts.txt" ''
+                      version: STSv1
+                      mode: enforce
+                      mx: ${mkDomain srv.domain}
+                      mx: *.${mkDomain srv.domain}
+                      max_age: 604800
+                    '';
+                  };
+                };
 
                 systemd.services.postfix.wants = [ "network-online.target" ];
                 systemd.services.postfix.after = [ "network-online.target" ];

@@ -14,6 +14,16 @@
           file = lib.mkOption {
             type = lib.types.str;
           };
+          path = lib.mkOption {
+            readOnly = true;
+            default = alloy.workspace.root + "/${config.file}";
+            type = lib.types.path;
+          };
+          exists = lib.mkOption {
+            readOnly = true;
+            default = builtins.pathExists config.path;
+            type = lib.types.bool;
+          };
           assertions = lib.mkOption {
             type = lib.types.listOf alib.types.assertion;
             default = [ ];
@@ -23,7 +33,7 @@
           file = lib.mkOptionDefault "${alloy.workspace.secrets.baseDir}/${name}.age";
           assertions = [
             {
-              assertion = builtins.pathExists (alloy.workspace.root + "/${config.file}");
+              assertion = config.exists;
               message = ''
                 [Alloy] Master secret '${name}' not found at ${alloy.workspace.root}/${config.file}.
                 To fix this, ensure the file is created (e.g. via 'alloy generators run' or 'alloy secrets set "${name}"').

@@ -168,6 +168,11 @@ in
       "${if node.name == "@" then "" else "${lib.removeSuffix "." node.name}."}${
         lib.removeSuffix "." zones.${node.zone}.apex
       }.";
+
+    extendZoneNode = node: extension: {
+      zone = node.zone;
+      name = "${lib.removeSuffix "." extension}${lib.optionalString (node.name != "@") ".${node.name}"}";
+    };
   };
 
 }

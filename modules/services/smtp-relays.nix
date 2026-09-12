@@ -14,6 +14,10 @@
           domains = lib.mkOption {
             type = lib.types.listOf alib.types.zoneNode;
           };
+          postmaster = lib.mkOption {
+            type = lib.types.str;
+            default = "postmaster@${alloy.dns.resolveNode (builtins.head config.domains)}";
+          };
           upstream.endpoint = lib.mkOption {
             type = lib.types.str;
           };
@@ -71,6 +75,41 @@
           allowedOverlays = lib.mkOption {
             default = [ ];
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
+          };
+          dkim = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+            };
+            dmarcPolicy = lib.mkOption {
+              default = "reject";
+              type = lib.types.enum [
+                "none"
+                "quarantine"
+                "reject"
+              ];
+            };
+            privKeySecret = lib.mkOption {
+              default = "smtp-relays/${name}/dkim/pub-key";
+              readOnly = true;
+              type = lib.types.str;
+            };
+            pubKeyFact = lib.mkOption {
+              default = "smtp-relays/${name}/dkim/priv-key";
+              readOnly = true;
+              type = lib.types.str;
+            };
+            keyGenerator = lib.mkOption {
+              default = "smtp-relays/${name}/dkim";
+              readOnly = true;
+              type = lib.types.str;
+            };
+          };
+          antivirus = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+            };
           };
         };
       };
@@ -177,15 +216,30 @@
                   ) srv.hosts)
                   ++ (lib.mapAttrsToList (
                     _: route:
-                    lib.map (domain: [
-                      {
-                        domain = domain;
-                        data.mx = {
-                          preference = 10;
-                          exchange = alloy.dns.resolveNode srv.hostname;
-                        };
-                      }
-                    ]) route.domains
+                    lib.map (
+                      domain:
+                      [
+                        {
+                          domain = domain;
+                          data.mx = {
+                            preference = 10;
+                            exchange = alloy.dns.resolveNode srv.hostname;
+                          };
+                        }
+                        {
+                          domain = domain;
+                          data.txt = "v=spf1 mx -all";
+                        }
+                      ]
+                      ++ (lib.optional srv.dkim.enable {
+                        domain = alib.extendZoneNode domain "relay._domainkey";
+                        data.txt = "v=DKIM1; k=rsa; p=${lib.removeSuffix "\n" alloy.facts.${srv.dkim.pubKeyFact}.value}";
+                      })
+                      ++ (lib.optional srv.dkim.enable {
+                        domain = alib.extendZoneNode domain "_dmarc";
+                        data.txt = "v=DMARC1; p=${srv.dkim.dmarcPolicy}; rua=mailto:${route.postmaster}; ruf=mailto:${route.postmaster}";
+                      })
+                    ) route.domains
                   ) srv.routes)
                 )
               );
@@ -201,6 +255,42 @@
                     }) allOverlays
                   ) srv.hosts
                 );
+              };
+
+              facts = lib.optionalAttrs srv.dkim.enable {
+                ${srv.dkim.pubKeyFact} = { };
+              };
+
+              secrets = lib.optionalAttrs srv.dkim.enable {
+                ${srv.dkim.privKeySecret} = { };
+              };
+
+              generators.instances.${srv.dkim.keyGenerator} = {
+                enable = srv.dkim.enable;
+                tags = [
+                  "smtp-relays"
+                  "smtp-relays/${srvName}"
+                ];
+                package =
+                  { pkgs, ... }:
+                  pkgs.writeShellApplication {
+                    name = "smtp-relay-dkim-generator";
+                    runtimeInputs = [
+                      pkgs.openssl
+                      pkgs.coreutils
+                      pkgs.gnugrep
+                    ];
+                    # TODO: add generator skip feature (check delcared by a generator facts & secrets to exitsance)
+                    text = ''
+                      set -euo pipefail
+
+                      priv=$(openssl genrsa 2048 2>/dev/null)
+                      pub=$(print "%s" "$priv" | openssl rsa -pubout -outform PEM 2>/dev/null | grep -v '^-'  | tr -d '\n' | tr -d '\r')
+
+                      "$ALLOY_BIN" facts set "${srv.dkim.pubKeyFact}" <<< "$pub"
+                      "$ALLOY_BIN" secrets set "${srv.dkim.privKeySecret}" <<< "$priv"
+                    '';
+                  };
               };
 
               jails = lib.mapAttrs' (
@@ -235,14 +325,24 @@
                         restartServices = [ "postfix.service" ];
                       };
                     };
-
-                    secrets.${jail.static-ca.keySecret} = {
-                      permissions = {
-                        owner = "root";
-                        group = "postfix";
-                        mode = "0640";
+                    secrets = {
+                      ${jail.static-ca.keySecret} = {
+                        permissions = {
+                          owner = "root";
+                          group = "postfix";
+                          mode = "0640";
+                        };
                       };
-                    };
+                    }
+                    // (lib.optionalAttrs srv.dkim.enable {
+                      ${srv.dkim.privKeySecret} = {
+                        permissions = {
+                          owner = "rspamd";
+                          group = "rspamd";
+                          mode = "0640";
+                        };
+                      };
+                    });
 
                     nixosModule =
                       { pkgs, config, ... }:
@@ -254,10 +354,79 @@
                       {
                         networking.firewall.allowedTCPPorts = [ 25 ];
 
+                        services.clamav = {
+                          daemon.enable = srv.antivirus.enable;
+                          updater.enable = srv.antivirus.enable;
+                        };
+
+                        services.redis.servers.rspamd = {
+                          enable = srv.dkim.enable || srv.antivirus.enable;
+                          port = 0;
+                          unixSocket = "/run/redis-rspamd/redis.sock";
+                          unixSocketPerm = 660;
+                        };
+
+                        users.users.rspamd = {
+                          extraGroups = [
+                            "redis-rspamd"
+                            "clamav"
+                          ];
+                        };
+
+                        services.rspamd = {
+                          enable = srv.dkim.enable || srv.antivirus.enable;
+                          workers.rspamd_proxy = {
+                            bindSockets = [
+                              {
+                                socket = "/run/rspamd/rspamd-milter.sock";
+                                mode = "0660";
+                              }
+                            ];
+                            extraConfig = ''
+                              milter = yes;
+                              timeout = 120s;
+                              upstream "local" {
+                                default = yes;
+                                self_scan = yes;
+                              }
+                            '';
+                          };
+                          locals = {
+                            "redis.conf".text = ''
+                              servers = "/run/redis-rspamd/redis.sock";
+                            '';
+                            "dkim_signing.conf" = lib.mkIf srv.dkim.enable {
+                              text = ''
+                                path = "${jail.secrets.${srv.dkim.privKeySecret}.path or ""}";
+                                selector = "relay";
+                                allow_username_mismatch = true;
+                              '';
+                            };
+                            "arc.conf" = lib.mkIf srv.dkim.enable {
+                              text = ''
+                                path = "${jail.secrets.${srv.dkim.privKeySecret}.path or ""}";
+                                selector = "relay";
+                                allow_username_mismatch = true;
+                              '';
+                            };
+                            "antivirus.conf" = lib.mkIf srv.antivirus.enable {
+                              text = ''
+                                clamav {
+                                  action = "reject";
+                                  message = "VIRUS FOUND";
+                                  symbol = "CLAM_VIRUS";
+                                  type = "clamav";
+                                  servers = "/run/clamav/clamd.ctl";
+                                }
+                              '';
+                            };
+                          };
+                        };
+
                         users.users.postfix = {
                           isSystemUser = true;
                           group = "postfix";
-                          extraGroups = lib.mapAttrsToList (certName: cert: cert.group) jail.acme.certs;
+                          extraGroups = [ "rspamd" ] ++ (lib.mapAttrsToList (certName: cert: cert.group) jail.acme.certs);
                         };
 
                         systemd.services.postfix.wants = [ "network-online.target" ];
@@ -273,7 +442,7 @@
                                 let
                                   endpoint = alloy.endpoints.${route.upstream.endpoint};
                                 in
-                                "${mkDomain domain} route_${routeName}:${endpoint.domain}:${toString endpoint.port}"
+                                "${mkDomain domain} route_${routeName}:[${endpoint.domain}]:${toString endpoint.port}"
                               ) route.domains
                             ))
                             lib.flatten
@@ -295,6 +464,11 @@
                               lib.flatten
                             ];
                           }
+                          // (lib.optionalAttrs (srv.dkim.enable || srv.antivirus.enable) {
+                            smtpd_milters = "unix:/run/rspamd/rspamd-milter.sock";
+                            non_smtpd_milters = "unix:/run/rspamd/rspamd-milter.sock";
+                            milter_default_action = "accept";
+                          })
                           // (lib.optionalAttrs hasCert {
                             smtpd_tls_cert_file = certCfg.certPath;
                             smtpd_tls_key_file = certCfg.keyPath;
@@ -343,84 +517,6 @@
                             }
                           ) srv.routes);
                         };
-
-                        # systemd.services.opensmtpd.serviceConfig.ExecStartPre =
-                        #   pkgs.writeShellScript "prepare-opensmtpd-certs" ''
-                        #     mkdir -p /run/opensmtpd-certs
-                        #     cp -L "${certCfg.certPath}" /run/opensmtpd-certs/cert.pem
-                        #     cp -L "${certCfg.keyPath}" /run/opensmtpd-certs/key.pem
-                        #     chown -R root:smtpd /run/opensmtpd-certs
-                        #     chmod 644 /run/opensmtpd-certs/cert.pem
-                        #     chmod 640 /run/opensmtpd-certs/key.pem
-                        #   '';
-
-                        # services.opensmtpd = {
-                        #   enable = true;
-                        #   serverConfiguration = ''
-                        #     smtp max-message-size ${toString srv.maxMsgSizeMB}M
-
-                        #     ${lib.optionalString hasCert ''
-                        #       pki "relay" cert "/run/opensmtpd-certs/cert.pem"
-                        #       pki "relay" key "/run/opensmtpd-certs/key.pem"
-                        #     ''}
-
-                        #     pki "static-ca" cert "${alloy.facts.${jail.static-ca.certFact}.path}"
-                        #     pki "static-ca" key "${jail.secrets.${jail.static-ca.keySecret}.path}"
-                        #     ca "static-ca" cert "${alloy.facts.${alloy.static-ca.certFact}.path}"
-
-                        #     ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
-                        #       table route_${routeName}_domains { ${lib.concatMapStringsSep ", " mkDomain route.domains} }
-                        #       table route_${routeName}_ips { ${
-                        #         lib.concatMapStringsSep ", " (t: t.ipv6) alloy.endpoints.${route.upstream.endpoint}.targets
-                        #       } }
-                        #     '') srv.routes}
-
-                        #     listen on ${jail.uplink.ipv4} port 25 ${
-                        #       if hasCert && srv.explicitTLS.mode == "require" then
-                        #         ''tls-require pki "relay"''
-                        #       else if hasCert then
-                        #         ''tls pki "relay"''
-                        #       else
-                        #         ""
-                        #     } hostname "${mkDomain srv.hostname}"
-
-                        #     listen on ${jail.uplink.ipv6} port 25 ${
-                        #       if hasCert && srv.explicitTLS.mode == "require" then
-                        #         ''tls-require pki "relay"''
-                        #       else if hasCert then
-                        #         ''tls pki "relay"''
-                        #       else
-                        #         ""
-                        #     } hostname "${mkDomain srv.hostname}"
-
-                        #     ${lib.concatMapAttrsStringSep "\n" (overlayName: overlay: ''
-                        #       listen on ${overlay.ipv6} port 25 tag "OVERLAY_MTLS" tls-require verify pki "static-ca" ca "static-ca" hostname "${mkDomain srv.hostname}"
-                        #     '') jail.overlays}
-
-                        #     action "route_out" relay helo "${mkDomain srv.hostname}"
-                        #     ${lib.concatMapAttrsStringSep "\n" (
-                        #       routeName: route:
-                        #       let
-                        #         endpoint = alloy.endpoints.${route.upstream.endpoint};
-                        #       in
-                        #       ''
-                        #         action "route_to_${routeName}" relay \
-                        #           host "tls://${endpoint.domain}:${toString endpoint.port}" \
-                        #           helo "${mkDomain srv.hostname}" \
-                        #           pki "static-ca" \
-                        #           ca "static-ca"
-                        #       ''
-                        #     ) srv.routes}
-
-                        #     ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
-                        #       match from any for domain <route_${routeName}_domains> action "route_to_${routeName}"
-                        #     '') srv.routes}
-
-                        #     ${lib.concatMapAttrsStringSep "\n" (routeName: route: ''
-                        #       match tag "OVERLAY_MTLS" from src <route_${routeName}_ips> for any action "route_out"
-                        #     '') srv.routes}
-                        #   '';
-                        # };
                       };
                   }
                 )
@@ -434,6 +530,9 @@
         in
         {
           assertions = lib.mkMerge (lib.map (s: s.assertions) services);
+          generators = lib.mkMerge (lib.map (s: s.generators) services);
+          secrets = lib.mkMerge (lib.map (s: s.secrets) services);
+          facts = lib.mkMerge (lib.map (s: s.facts) services);
           dns = lib.mkMerge (lib.map (s: s.dns) services);
           endpoints = lib.mkMerge (lib.map (s: s.endpoints) services);
           jails = lib.mkMerge (lib.map (s: s.jails) services);

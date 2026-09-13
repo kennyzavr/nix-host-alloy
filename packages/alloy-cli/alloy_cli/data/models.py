@@ -1,24 +1,24 @@
 from dataclasses import dataclass
-from typing import List
 
 
 @dataclass
 class FactRecord:
     name: str
     file: str
+    tags: list[str]
 
 
 @dataclass
 class MasterSecretRecord:
     name: str
     file: str
+    tags: list[str]
 
 
 @dataclass
 class HostSecretRecord:
     name: str
     host: str
-    master: str
     file: str
 
 
@@ -26,7 +26,6 @@ class HostSecretRecord:
 class JailSecretRecord:
     name: str
     jail: str
-    master: str
     file: str
 
 
@@ -43,20 +42,20 @@ class RecipientRecord:
 @dataclass
 class HostRecord:
     name: str
-    recipients: List[RecipientRecord]
+    recipients: list[RecipientRecord]
 
 
 @dataclass
 class JailRecord:
     name: str
-    recipients: List[RecipientRecord]
+    recipients: list[RecipientRecord]
 
 
 @dataclass
 class IndexRecord:
     name: str
     fact_name: str
-    keys: List[str]
+    keys: list[str]
     min_value: int
     max_value: int
 
@@ -65,8 +64,10 @@ class IndexRecord:
 class GeneratorRecord:
     name: str
     script_path: str
-    wants: List[str]
-    wanted_by: List[str]
-    before: List[str]
-    after: List[str]
-    tags: List[str]
+    wants: list[str]
+    wanted_by: list[str]
+    before: list[str]
+    after: list[str]
+    tags: list[str]
+    secrets: list[str]
+    facts: list[str]

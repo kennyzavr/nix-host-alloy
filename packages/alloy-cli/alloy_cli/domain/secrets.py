@@ -76,8 +76,8 @@ class SecretsService:
         masters: Optional[List[str]] = None,
         hosts: Optional[List[str]] = None,
         jails: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
     ) -> Tuple[List[HostSecretRecord], List[JailSecretRecord]]:
-
         if hosts:
             for h in hosts:
                 if not self.hosts.find_by_name(h):
@@ -101,18 +101,28 @@ class SecretsService:
 
         if process_hosts:
             for h_sec in self.host_secrets.find_all():
-                if masters and h_sec.master not in masters:
+                if masters and h_sec.name not in masters:
                     continue
                 if hosts and h_sec.host not in hosts:
                     continue
+
+                master = self.master.find_by_name(h_sec.name)
+                if master and tags and all(tag not in tags for tag in master.tags):
+                    continue
+
                 host_plan.append(h_sec)
 
         if process_jails:
             for j_sec in self.jail_secrets.find_all():
-                if masters and j_sec.master not in masters:
+                if masters and j_sec.name not in masters:
                     continue
                 if jails and j_sec.jail not in jails:
                     continue
+
+                master = self.master.find_by_name(j_sec.name)
+                if master and tags and all(tag not in tags for tag in master.tags):
+                    continue
+
                 jail_plan.append(j_sec)
 
         return host_plan, jail_plan
@@ -135,7 +145,7 @@ class SecretsService:
             raise HostSecretNotDefinedError(host_secret_name)
 
         rel_out_path = host_secret.file
-        master_secret = self.master.find_by_name(host_secret.master)
+        master_secret = self.master.find_by_name(host_secret.name)
         master_identities = self.master.get_identities()
         host_recipients = host_record.recipients
 
@@ -146,9 +156,9 @@ class SecretsService:
             raise NoHostRecipientsDefinedError(host_name)
 
         if not master_secret:
-            raise MasterSecretNotDefinedError(host_secret.master)
+            raise MasterSecretNotDefinedError(host_secret.name)
 
-        master_secret_name = host_secret.master
+        master_secret_name = host_secret.name
         rel_in_path = master_secret.file
 
         if not self.fs.exists(rel_in_path):
@@ -186,7 +196,7 @@ class SecretsService:
             raise JailSecretNotDefinedError(jail_secret_name)
 
         rel_out_path = jail_secret.file
-        master_secret = self.master.find_by_name(jail_secret.master)
+        master_secret = self.master.find_by_name(jail_secret.name)
         master_identities = self.master.get_identities()
         jail_recipients = jail_record.recipients
 
@@ -197,7 +207,7 @@ class SecretsService:
             raise NoJailRecipientsDefinedError(jail_name)
 
         if not master_secret:
-            raise MasterSecretNotDefinedError(jail_secret.master)
+            raise MasterSecretNotDefinedError(jail_secret.name)
 
         master_secret_name = master_secret.name
         rel_in_path = master_secret.file

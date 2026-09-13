@@ -11,8 +11,6 @@
 
       factSubmodule =
         { name, config, ... }:
-        let
-        in
         {
           options = {
             file = lib.mkOption {
@@ -30,6 +28,10 @@
             value = lib.mkOption {
               description = "The string value of the fact";
               readOnly = true;
+            };
+            tags = lib.mkOption {
+              default = [ ];
+              type = lib.types.listOf lib.types.str;
             };
             assertions = lib.mkOption {
               type = lib.types.listOf alib.types.assertion;
@@ -89,7 +91,7 @@
         _internal.state = { ... }: {
           facts = lib.mapAttrsToList (factName: fact: {
             name = factName;
-            inherit (fact) file;
+            inherit (fact) file tags;
           }) alloy.facts;
         };
       };

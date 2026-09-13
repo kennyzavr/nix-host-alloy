@@ -697,6 +697,7 @@
                 options = {
                   presharedKeySecret = lib.mkOption { type = lib.types.str; };
                 };
+                config.secrets.${config.presharedKeySecret} = {};
                 config.tags = [ "overlays/wg" ];
                 config.package =
                   { pkgs, ... }:
@@ -717,6 +718,8 @@
                   privateKeySecret = lib.mkOption { type = lib.types.str; };
                   publicKeyFact = lib.mkOption { type = lib.types.str; };
                 };
+                config.facts.${config.publicKeyFact} = {};
+                config.secrets.${config.privateKeySecret} = {};
                 config.tags = [ "overlays/wg" ];
                 config.package =
                   { pkgs, ... }:

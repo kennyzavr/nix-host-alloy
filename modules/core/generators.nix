@@ -39,14 +39,14 @@
             default = [ ];
             type = lib.types.listOf lib.types.str;
           };
-          # facts = lib.mkOption {
-          #   default = { };
-          #   type = lib.types.attrsOf (lib.types.submodule { });
-          # };
-          # secrets = lib.mkOption {
-          #   default = { };
-          #   type = lib.types.attrsOf (lib.types.submodule { });
-          # };
+          facts = lib.mkOption {
+            default = { };
+            type = lib.types.attrsOf (lib.types.submodule { });
+          };
+          secrets = lib.mkOption {
+            default = { };
+            type = lib.types.attrsOf (lib.types.submodule { });
+          };
           package = lib.mkOption {
             type = lib.types.functionTo lib.types.package;
           };
@@ -79,13 +79,23 @@
       config = {
         assertions = lib.flatten (lib.mapAttrsToList (name: g: g.assertions) alloy.generators.instances);
 
-        # facts = lib.mkMerge (
-        #   lib.mapAttrsToList (_: g: lib.mapAttrs (name: f: { }) g.facts) alloy.generators.instances
-        # );
+        facts = lib.mkMerge (
+          lib.mapAttrsToList (
+            _: g:
+            lib.mapAttrs (name: f: {
+              tags = g.tags;
+            }) g.facts
+          ) alloy.generators.instances
+        );
 
-        # secrets = lib.mkMerge (
-        #   lib.mapAttrsToList (_: g: lib.mapAttrs (name: _: { }) g.secrets) alloy.generators.instances
-        # );
+        secrets = lib.mkMerge (
+          lib.mapAttrsToList (
+            _: g:
+            lib.mapAttrs (name: _: {
+              tags = g.tags;
+            }) g.secrets
+          ) alloy.generators.instances
+        );
 
         _internal.state = { pkgs, ... }: {
           generators = lib.mapAttrsToList (generatorName: generator: {
@@ -98,6 +108,8 @@
               tags
               ;
             bin = toString (lib.getExe (generator.package { inherit pkgs; }));
+            secrets = builtins.attrNames generator.secrets;
+            facts = builtins.attrNames generator.facts;
           }) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
         };
       };

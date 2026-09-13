@@ -255,6 +255,8 @@
               };
             };
 
+            config.facts.${config.certFact} = {};
+            config.secrets.${config.keySecret} = {};
             config.tags = [ "tls/ca-cert" ];
             config.package =
               { pkgs, ... }:
@@ -339,10 +341,10 @@
 
                   if parent_cfg:
                       parent_key_pem = run_alloy(
-                          ["secrets", "view", parent_cfg["keySecret"]]
+                          ["secrets", "get", parent_cfg["keySecret"]]
                       )
                       parent_cert_pem = run_alloy(
-                          ["facts", "view", parent_cfg["certFact"]]
+                          ["facts", "get", parent_cfg["certFact"]]
                       )
 
                       issuer_key = serialization.load_pem_private_key(
@@ -505,6 +507,8 @@
               };
             };
 
+            config.facts.${config.certFact} = {};
+            config.secrets.${config.keySecret} = {};
             config.tags = [ "tls/leaf-cert" ];
             config.package =
               { pkgs, ... }:
@@ -589,8 +593,8 @@
                       print("Error: Leaf certificate requires a parent CA.", file=sys.stderr)
                       sys.exit(1)
 
-                  parent_key_pem = run_alloy(["secrets", "view", parent_cfg["keySecret"]])
-                  parent_cert_pem = run_alloy(["facts", "view", parent_cfg["certFact"]])
+                  parent_key_pem = run_alloy(["secrets", "get", parent_cfg["keySecret"]])
+                  parent_cert_pem = run_alloy(["facts", "get", parent_cfg["certFact"]])
 
                   issuer_key = serialization.load_pem_private_key(
                       parent_key_pem.encode(), password=None

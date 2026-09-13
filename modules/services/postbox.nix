@@ -114,16 +114,14 @@
           generators.instances = lib.mapAttrs' (
             userName: user:
             lib.nameValuePair user.hashedPasswdGenerator {
+              secrets.${user.hashedPasswdSecret} = {};
               package =
                 { pkgs, ... }:
                 pkgs.writeShellScriptBin "postbox-gen-passwd" ''
-                  # TODO: add cli command to check secret existance or check just the store file
-                  # if [ "''${ALLOY_FORCE:-0}" = "1" ] || ! [ -r "${alloy.secrets.${user.hashedPasswdSecret}.file}" ]; then
                     read -r -s -p "Enter password for ${userName}: " pass
                     echo
                     hash=$(printf "%s\n" "$pass" | ${pkgs.mkpasswd}/bin/mkpasswd -m sha-512 -s)
                     "$ALLOY_BIN" secrets set "${user.hashedPasswdSecret}" <<< "$hash"
-                  # fi
                 '';
             }
           ) srv.users;

@@ -385,6 +385,7 @@
           options = {
             keySecret = lib.mkOption { type = lib.types.str; };
           };
+          config.secrets.${config.keySecret} = {};
           config.tags = [
             "dns"
             "tsig-key"

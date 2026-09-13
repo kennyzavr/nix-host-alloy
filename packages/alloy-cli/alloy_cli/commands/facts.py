@@ -4,15 +4,15 @@ from ..di import Container
 from ..domain.exceptions import *
 from .utils import resolve_force, resolve_add_to_git, ensure_indexes_consistency
 
+
 def handle_set(args, cli: CLI, container: Container):
     service = container.facts_service
     force = resolve_force(args.force)
     add_to_git = resolve_add_to_git(args.add_to_git)
-    
+
     ensure_indexes_consistency(cli, container)
 
     new_data = sys.stdin.read()
-    cli.step(f"Writing fact '{cli.id(args.fact)}'...")
     try:
         fact_file = service.set(
             args.fact,
@@ -31,11 +31,12 @@ def handle_set(args, cli: CLI, container: Container):
     except GitAddError as e:
         cli.abort(f"Operation failed on '{cli.id(e.target)}': {e.error_msg}")
 
-    cli.ok(f"Fact '{cli.id(args.fact)}' successfully written to {cli.path(cli.root / fact_file)}")
+    cli.ok(f"Fact '{cli.id(args.fact)}' written to {cli.path(cli.root / fact_file)}")
 
-def handle_view(args, cli: CLI, container: Container):
+
+def handle_get(args, cli: CLI, container: Container):
     service = container.facts_service
-    
+
     ensure_indexes_consistency(cli, container)
 
     try:
@@ -43,15 +44,18 @@ def handle_view(args, cli: CLI, container: Container):
     except FactNotDefinedError:
         cli.abort(f"Fact '{cli.id(args.fact)}' is not defined in the configuration.")
     except FactFileNotFoundError as e:
-        cli.abort(f"File for fact '{cli.id(args.fact)}' does not exist at {cli.path(e.fact_file)}.")
+        cli.abort(
+            f"File for fact '{cli.id(args.fact)}' does not exist at {cli.path(e.fact_file)}."
+        )
 
     sys.stdout.write(fact_value)
     sys.stdout.flush()
 
+
 def handle_edit(args, cli: CLI, container: Container):
     service = container.facts_service
     add_to_git = resolve_add_to_git(args.add_to_git)
-    
+
     ensure_indexes_consistency(cli, container)
 
     try:
@@ -83,33 +87,86 @@ def handle_edit(args, cli: CLI, container: Container):
 
     cli.ok(f"Fact '{cli.id(args.fact)}' saved successfully.")
 
+
+def handle_list(args, cli: CLI, container: Container):
+    ensure_indexes_consistency(cli, container)
+    facts = container.facts_service.repo.find_all()
+    if not facts:
+        cli.info("No facts defined.")
+        return
+
+    verbose = args.verbose
+
+    from rich.tree import Tree
+    from datetime import datetime
+    import os
+
+    def get_status_str(file_path):
+        if container.fs.exists(file_path):
+            if verbose:
+                stat = os.stat(container.fs.resolve(file_path))
+                mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+                return f"✅ Present [dim](Modified: {mtime})[/dim]"
+            return "✅ Present"
+        return "❌ Missing"
+
+    from .views import render_tree_view
+
+    def render_leaf(node, key, fact):
+        status = get_status_str(fact.file)
+        leaf = node.add(f"[bold cyan]{key}[/bold cyan]  ({status})")
+
+        if verbose:
+            if fact.tags:
+                leaf.add(f"[dim]Tags:[/dim] {', '.join(fact.tags)}")
+            leaf.add(f"[dim]Path:[/dim] {cli.path(fact.file)}")
+
+    tree = Tree("[bold]Facts[/bold]", guide_style="dim")
+    render_tree_view(tree, facts, lambda f: f.name, render_leaf, flat=args.flat)
+    cli._console.print(tree)
+
+    cli._console.print(
+        f"──────────────────────────\n[dim]Total: {len(facts)} facts[/dim]"
+    )
+
+
 def register_parser(subparsers):
     parser = subparsers.add_parser("facts", help="Manage generic cluster facts")
-    subs = parser.add_subparsers(title="commands", dest="subcommand", required=True, metavar="COMMAND")
+    subs = parser.add_subparsers(
+        title="commands", dest="subcommand", required=True, metavar="COMMAND"
+    )
 
     cmd_set = subs.add_parser("set", help="Set a fact value from stdin")
     cmd_set.add_argument("fact", help="Name of the fact")
     cmd_set.add_argument(
-        "-f", "--force",
+        "-f",
+        "--force",
         action="store_true",
         help="Force overwrite existing fact file. Can also be enabled via ALLOY_FORCE=1 env var.",
     )
     cmd_set.add_argument(
-        "-a", "--add-to-git",
+        "-a",
+        "--add-to-git",
         action="store_true",
         help="Add file to git after writing. Can also be enabled via ALLOY_ADD_TO_GIT=1 env var.",
     )
     cmd_set.set_defaults(func=handle_set)
 
-    cmd_view = subs.add_parser("view", help="View a fact value")
+    cmd_view = subs.add_parser("get", help="Output a fact value to stdout")
     cmd_view.add_argument("fact", help="Name of the fact")
-    cmd_view.set_defaults(func=handle_view)
+    cmd_view.set_defaults(func=handle_get)
 
     cmd_edit = subs.add_parser("edit", help="Edit a fact interactively")
     cmd_edit.add_argument("fact", help="Name of the fact to edit")
     cmd_edit.add_argument(
-        "-a", "--add-to-git",
+        "-a",
+        "--add-to-git",
         action="store_true",
         help="Add the resulting fact file to git. Can also be enabled via ALLOY_ADD_TO_GIT=1 env var.",
     )
     cmd_edit.set_defaults(func=handle_edit)
+
+    cmd_list = subs.add_parser("list", help="List all facts")
+    cmd_list.add_argument("-v", "--verbose", action="store_true", help="Show full paths, modified times, and tags")
+    cmd_list.add_argument("--flat", action="store_true", help="Display facts as a flat list instead of a hierarchy")
+    cmd_list.set_defaults(func=handle_list)

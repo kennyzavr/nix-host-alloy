@@ -9,7 +9,7 @@
     let
       alloy = config;
 
-      masterSubmodule = { name, config, ... }: {
+      masterSecretSubmodule = { name, config, ... }: {
         options = {
           file = lib.mkOption {
             type = lib.types.str;
@@ -23,6 +23,10 @@
             readOnly = true;
             default = builtins.pathExists config.path;
             type = lib.types.bool;
+          };
+          tags = lib.mkOption {
+            default = [];
+            type = lib.types.listOf lib.types.str;
           };
           assertions = lib.mkOption {
             type = lib.types.listOf alib.types.assertion;
@@ -43,7 +47,7 @@
         };
       };
 
-      secretSubmodule =
+      nodeSecretSubmodule =
         contextType: contextName:
         {
           name,
@@ -53,10 +57,6 @@
         }:
         {
           options = {
-            master = lib.mkOption {
-              type = lib.types.str;
-              default = name;
-            };
             file = lib.mkOption { type = lib.types.str; };
             path = lib.mkOption { type = lib.types.str; };
             permissions = lib.mkOption {
@@ -100,8 +100,7 @@
                 message = ''
                   [Alloy] Invalid master secret reference
 
-                  Secret '${name}' attached to ${contextType} '${contextName}' references a master secret '${config.master}', 
-                  which does not exist in 'secrets'.
+                  Master secret corresponding to secret '${name}' attached to ${contextType} '${contextName}' does not exist.
 
                   Location:
                   ${lib.concatStringsSep "\n" (map (f: "  - ${f}") options.master.files)}
@@ -252,7 +251,6 @@
           secrets = lib.filter (s: s.hostName == hostName) hostSecretsList;
           templates = lib.filter (s: s.hostName == hostName) hostTemplatesList;
           mkSecret = secret: {
-
             age.secrets."alloy/secrets/host/${secret.secretName}" = {
               file = alloy.workspace.root + "/${secret.file}";
               path = secret.path;
@@ -313,7 +311,7 @@
         options = {
           secrets = lib.mkOption {
             default = { };
-            type = lib.types.attrsOf (lib.types.submodule (secretSubmodule "host" name));
+            type = lib.types.attrsOf (lib.types.submodule (nodeSecretSubmodule "host" name));
           };
           secretTemplates = lib.mkOption {
             default = { };
@@ -359,7 +357,7 @@
         options = {
           secrets = lib.mkOption {
             default = { };
-            type = lib.types.attrsOf (lib.types.submodule (secretSubmodule "jail" name));
+            type = lib.types.attrsOf (lib.types.submodule (nodeSecretSubmodule "jail" name));
           };
           secretTemplates = lib.mkOption {
             default = { };
@@ -432,7 +430,7 @@
       options = {
         secrets = lib.mkOption {
           default = { };
-          type = lib.types.attrsOf (lib.types.submodule masterSubmodule);
+          type = lib.types.attrsOf (lib.types.submodule masterSecretSubmodule);
         };
 
         workspace.secrets = {
@@ -463,7 +461,7 @@
 
         _internal.state = { ... }: {
           masterSecrets = lib.mapAttrsToList (secretName: secret: {
-            inherit (secret) file;
+            inherit (secret) file tags;
             name = secretName;
           }) alloy.secrets;
 
@@ -475,7 +473,6 @@
             host = secret.hostName;
             name = secret.secretName;
             file = secret.file;
-            master = secret.master;
           }) hostSecretsList;
 
           hostSecretRecipients = lib.pipe alloy.hosts [
@@ -493,7 +490,6 @@
             jail = secret.jailName;
             name = secret.secretName;
             file = secret.file;
-            master = secret.master;
           }) jailSecretsList;
 
           jailSecretRecipients = lib.pipe alloy.jails [

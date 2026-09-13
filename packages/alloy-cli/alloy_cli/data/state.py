@@ -17,10 +17,20 @@ class FactsRepository:
     def __init__(self, db: dict):
         self._db = db
 
+    def find_all(self) -> List[FactRecord]:
+        return [
+            FactRecord(
+                name=item.get("name", ""),
+                file=item.get("file", ""),
+                tags=item.get("tags", []),
+            )
+            for item in self._db.get("facts", [])
+        ]
+
     def find_by_name(self, name: str) -> Optional[FactRecord]:
-        for item in self._db.get("facts", []):
-            if item.get("name") == name:
-                return FactRecord(name=name, file=item.get("file", ""))
+        for item in self.find_all():
+            if item.name == name:
+                return item
         return None
 
 
@@ -28,10 +38,20 @@ class MasterSecretsRepository:
     def __init__(self, db: dict):
         self._db = db
 
+    def find_all(self) -> List[MasterSecretRecord]:
+        return [
+            MasterSecretRecord(
+                name=item.get("name", ""),
+                file=item.get("file", ""),
+                tags=item.get("tags", []),
+            )
+            for item in self._db.get("masterSecrets", [])
+        ]
+
     def find_by_name(self, name: str) -> Optional[MasterSecretRecord]:
-        for item in self._db.get("masterSecrets", []):
-            if item.get("name") == name:
-                return MasterSecretRecord(name=name, file=item.get("file", ""))
+        for item in self.find_all():
+            if item.name == name:
+                return item
         return None
 
     def get_identities(self) -> List[IdentityRecord]:
@@ -54,7 +74,6 @@ class HostSecretsRepository:
             HostSecretRecord(
                 name=item.get("name", ""),
                 host=item.get("host", ""),
-                master=item.get("master", ""),
                 file=item.get("file", ""),
             )
             for item in self._db.get("hostSecrets", [])
@@ -78,7 +97,6 @@ class JailSecretsRepository:
             JailSecretRecord(
                 name=item.get("name", ""),
                 jail=item.get("jail", ""),
-                master=item.get("master", ""),
                 file=item.get("file", ""),
             )
             for item in self._db.get("jailSecrets", [])
@@ -162,6 +180,8 @@ class GeneratorsRepository:
                 before=item.get("before", []),
                 after=item.get("after", []),
                 tags=item.get("tags", []),
+                secrets=item.get("secrets", []),
+                facts=item.get("facts", []),
             )
             for item in self._db.get("generators", [])
         ]

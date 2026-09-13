@@ -153,19 +153,6 @@
         }
       );
 
-      acmeChallengeType = lib.types.submodule (
-        { config, name, ... }: {
-          options = {
-            domain = lib.mkOption {
-              type = alib.types.zoneNode;
-            };
-            tsigKeySecret = lib.mkOption {
-              type = lib.types.str;
-            };
-          };
-        }
-      );
-
       zoneType = lib.types.submodule (
         { config, name, ... }: {
           options = {
@@ -187,19 +174,6 @@
               default = [ ];
               type = lib.types.listOf lib.types.str;
             };
-            acmeChallenge = {
-              enable = lib.mkOption {
-                default = false;
-                type = lib.types.bool;
-              };
-              subzone = lib.mkOption {
-                type = alib.types.dns.name;
-                default = "acme";
-              };
-              endpoint = lib.mkOption {
-                type = lib.types.str;
-              };
-            };
           };
           # TODO: choose unique records
           config.bindConfig = ''
@@ -220,6 +194,10 @@
         in
         {
           options = {
+            domain = lib.mkOption {
+              type = lib.types.str;
+              readOnly = true;
+            };
             overlays = lib.mkOption {
               type = lib.types.attrsOf (
                 lib.types.submodule (
@@ -251,8 +229,10 @@
               };
             };
           };
-          config.nixosModule = {
-            services.resolved.enable = false;
+          config = {
+            domain = "${nodeName}.${type}.${alloy.dns.internalDomain}";
+            nixosModule = {
+              services.resolved.enable = false;
             services.coredns = {
               enable = true;
               config = ''
@@ -261,23 +241,31 @@
                   forward . ${lib.concatStringsSep " " config.dns.upstreamResolvers}
                   cache
                 }
-                ${alloy.dns.discovery.domain} {
+                ${alloy.dns.internalDomain} {
                   bind 127.0.0.1 ::1
                   hosts {
-                    ${lib.concatStringsSep "\n                  " (
+                    ${lib.concatStringsSep "\n" (
                       let
                         allHostRecords = lib.flatten (
                           lib.mapAttrsToList (
-                            hName: h: lib.mapAttrsToList (oName: o: "${o.ipv6} ${o.domain}") h.overlays
+                            hName: h: 
+                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${h.domain}") h.overlays) ++
+                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${o.domain}") h.overlays)
                           ) alloy.hosts
                         );
                         allJailRecords = lib.flatten (
                           lib.mapAttrsToList (
-                            jName: j: lib.mapAttrsToList (oName: o: "${o.ipv6} ${o.domain}") j.overlays
+                            jName: j: 
+                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${j.domain}") j.overlays) ++
+                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${o.domain}") j.overlays)
                           ) alloy.jails
                         );
                         allEndpointRecords = lib.flatten (
-                          lib.mapAttrsToList (eName: e: lib.map (t: "${t.ipv6} ${e.domain}") e.targets) alloy.endpoints
+                          lib.mapAttrsToList (
+                            eName: e: 
+                              (lib.map (t: "${t.ipv6} ${e.domain}") e.targets) ++
+                              (lib.map (t: "${t.ipv6} ${e.overlays.${t.overlay}.domain}") e.targets)
+                          ) alloy.endpoints
                         );
                       in
                       allHostRecords ++ allJailRecords ++ allEndpointRecords
@@ -293,22 +281,17 @@
             ];
           };
         };
+      };
     in
     {
       options.dns = {
-        discovery = {
-          domain = lib.mkOption {
-            type = alib.types.dns.name;
-            default = "alloy.internal";
-          };
+        internalDomain = lib.mkOption {
+          type = alib.types.dns.name;
+          default = "alloy.internal";
         };
         records = lib.mkOption {
           default = [ ];
           type = lib.types.listOf recordType;
-        };
-        acmeChallenges = lib.mkOption {
-          default = [ ];
-          type = lib.types.listOf acmeChallengeType;
         };
         zones = lib.mkOption {
           default = { };
@@ -318,16 +301,6 @@
           type = lib.types.functionTo lib.types.str;
           readOnly = true;
           default = domain: alib.resolveZoneNode config.dns.zones domain;
-        };
-        mkTsigKeyId = lib.mkOption {
-          type = lib.types.functionTo lib.types.str;
-          readOnly = true;
-          default =
-            tsigKeySecret:
-            let
-              fullHash = builtins.hashString "sha256" tsigKeySecret;
-            in
-            "${builtins.substring 0 32 fullHash}.${builtins.substring 32 32 fullHash}";
         };
       };
 
@@ -342,7 +315,7 @@
                 };
               };
               config = {
-                domain = "${name}.${alloy.dns.discovery.domain}";
+                domain = "${name}.overlay.${alloy.dns.internalDomain}";
               };
             }
           )
@@ -352,15 +325,40 @@
       options.endpoints = lib.mkOption {
         type = lib.types.attrsOf (
           lib.types.submodule (
-            { name, ... }: {
+            { name, config, ... }:
+            let
+              epName = name;
+            in
+            {
               options = {
                 domain = lib.mkOption {
                   type = lib.types.str;
                   readOnly = true;
                 };
+                overlays = lib.mkOption {
+                  type = lib.types.attrsOf (
+                    lib.types.submodule (
+                      { name, ... }:
+                      let
+                        oName = name;
+                      in
+                      {
+                        options = {
+                          domain = lib.mkOption {
+                            type = lib.types.str;
+                            readOnly = true;
+                          };
+                        };
+                        config = {
+                          domain = "${epName}.ep.${alloy.overlays.${oName}.domain}";
+                        };
+                      }
+                    )
+                  );
+                };
               };
               config = {
-                domain = "${name}.ep.${alloy.dns.discovery.domain}";
+                domain = "${epName}.ep.${alloy.dns.internalDomain}";
               };
             }
           )
@@ -376,11 +374,6 @@
       };
 
       config = {
-        assertions = lib.map (ch: {
-          assertion = alib.types.dns.name.check (lib.replaceStrings [ "/" ] [ "." ] ch.tsigKeySecret);
-          message = "[Alloy] DNS acmeChallenge for zone '${ch.domain.zone}' has an invalid tsigKeySecret '${ch.tsigKeySecret}'. When slashes are replaced by dots, it must form a valid DNS name.";
-        }) alloy.dns.acmeChallenges;
-
         generators.templates."dns/tsig-key" = { config, ... }: {
           options = {
             keySecret = lib.mkOption { type = lib.types.str; };

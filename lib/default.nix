@@ -137,6 +137,29 @@ in
       };
     };
 
+    types.serverEndpoint = endpoints: lib.types.attrTag {
+      endpoint = lib.mkOption {
+        type = lib.types.str;
+      };
+      address = lib.mkOption {
+        type = lib.types.str;
+      };
+      __toString = lib.mkOption {
+        type = lib.types.unspecified;
+        readOnly = true;
+        internal = true;
+        default =
+          server:
+          if server ? endpoint then
+            let
+              endpoint = endpoints.${server.endpoint};
+            in
+            "${endpoint.domain}:${toString endpoint.port}"
+          else
+            server.address;
+      };
+    };
+
     types.netMatchOpts = {
       iface = lib.mkOption {
         type = lib.types.nullOr lib.types.str;

@@ -79,23 +79,26 @@
       config = {
         assertions = lib.flatten (lib.mapAttrsToList (name: g: g.assertions) alloy.generators.instances);
 
-        facts = lib.mkMerge (
-          lib.mapAttrsToList (
+        facts = lib.pipe alloy.generators.instances [
+          (lib.filterAttrs (_: g: g.enable))
+          (lib.mapAttrsToList (
             _: g:
-            lib.mapAttrs (name: f: {
-              tags = g.tags;
+            lib.mapAttrs (_: f: {
+              inherit (g) tags;
             }) g.facts
-          ) alloy.generators.instances
-        );
-
-        secrets = lib.mkMerge (
-          lib.mapAttrsToList (
+          ))
+          lib.mkMerge
+        ];
+        secrets = lib.pipe alloy.generators.instances [
+          (lib.filterAttrs (_: g: g.enable))
+          (lib.mapAttrsToList (
             _: g:
-            lib.mapAttrs (name: _: {
-              tags = g.tags;
+            lib.mapAttrs (_: f: {
+              inherit (g) tags;
             }) g.secrets
-          ) alloy.generators.instances
-        );
+          ))
+          lib.mkMerge
+        ];
 
         _internal.state = { pkgs, ... }: {
           generators = lib.mapAttrsToList (generatorName: generator: {

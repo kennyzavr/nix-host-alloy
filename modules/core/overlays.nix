@@ -95,16 +95,6 @@
               default = [ ];
               type = lib.types.listOf (lib.types.submodule overlayLinkSubmodule);
             };
-            wg = {
-              presharedKeySecret = lib.mkOption {
-                type = lib.types.str;
-                default = "overlays/${name}/wg/preshared.key";
-              };
-              presharedKeyGenerator = lib.mkOption {
-                type = lib.types.str;
-                default = "overlays/${name}/wg/preshared-key";
-              };
-            };
           };
         };
 
@@ -162,7 +152,9 @@
             ipv6Prefix = lib.mkOption {
               type = lib.types.str;
               readOnly = true;
-              default = "${overlay.ipv6Prefix}:${lib.fixedWidthString 4 "0" (lib.toLower (lib.toHexString host.idx))}";
+              default = "${overlay.ipv6Prefix}:${
+                lib.fixedWidthString 4 "0" (lib.toLower (lib.toHexString host.idx))
+              }";
             };
             ipv6 = lib.mkOption {
               type = lib.types.str;
@@ -180,18 +172,6 @@
               };
             };
             wg = {
-              privateKeySecret = lib.mkOption {
-                type = lib.types.str;
-                default = "overlays/${name}/wg/hosts/${hostName}.key";
-              };
-              publicKeyFact = lib.mkOption {
-                type = lib.types.str;
-                default = "overlays/${name}/wg/hosts/${hostName}.key.pub";
-              };
-              keysGenerator = lib.mkOption {
-                type = lib.types.str;
-                default = "overlays/${name}/wg/keypairs/hosts/${hostName}";
-              };
               port = lib.mkOption {
                 type = lib.types.port;
                 default = 52400 + overlay.idx;
@@ -234,13 +214,30 @@
 
       mkOverlay =
         overlay: overlayName:
+        let
+          pskSecret = "overlay/${overlayName}/wg/preshared.key";
+          pskGen = "overlay/${overlayName}/wg/preshared-key";
+        in
         [
           {
-            secrets.${overlay.wg.presharedKeySecret} = { };
+            secrets.${pskSecret} = { };
 
-            generators.instances.${overlay.wg.presharedKeyGenerator} = {
-              imports = [ alloy.generators.templates."wg/psk" ];
-              presharedKeySecret = overlay.wg.presharedKeySecret;
+            generators.instances.${pskGen} = {
+              tags = [
+                "overlay/wg"
+                "overlay/wg/psk"
+              ];
+              secrets.${pskSecret} = { };
+              package =
+                { pkgs, ... }:
+                pkgs.writeShellApplication {
+                  name = "wg-psk-generator";
+                  runtimeInputs = [ pkgs.wireguard-tools ];
+                  text = ''
+                    preshared_key=$(wg genpsk)
+                    "$ALLOY_BIN" secrets set "${pskSecret}" <<< "$preshared_key"
+                  '';
+                };
             };
           }
         ]
@@ -250,15 +247,34 @@
             hostName: host:
             let
               hostOverlay = host.overlays.${overlayName};
+              privKeySecret = "overlay/${overlayName}/wg/hosts/${hostName}.key";
+              pubKeyFact = "overlay/${overlayName}/wg/hosts/${hostName}.key.pub";
+              keysGen = "overlay/${overlayName}/wg/hosts/${hostName}";
             in
             {
-              secrets.${hostOverlay.wg.privateKeySecret} = { };
-              facts.${hostOverlay.wg.publicKeyFact} = { };
+              secrets.${privKeySecret} = { };
+              facts.${pubKeyFact} = { };
 
-              generators.instances.${hostOverlay.wg.keysGenerator} = {
-                imports = [ alloy.generators.templates."wg/keypair" ];
-                privateKeySecret = hostOverlay.wg.privateKeySecret;
-                publicKeyFact = hostOverlay.wg.publicKeyFact;
+              generators.instances.${keysGen} = {
+                tags = [
+                  "overlay/wg"
+                  "overlay/wg/keypair"
+                ];
+                secrets.${privKeySecret} = { };
+                facts.${pubKeyFact} = { };
+                package =
+                  { pkgs, ... }:
+                  pkgs.writeShellApplication {
+                    name = "wg-keypair-generator";
+                    runtimeInputs = [ pkgs.wireguard-tools ];
+                    text = ''
+                      priv_key=$(wg genkey) 
+                      pub_key=$(wg pubkey <<< "$priv_key")
+
+                      "$ALLOY_BIN" secrets set "${privKeySecret}" <<< "$priv_key"
+                      "$ALLOY_BIN" facts set "${pubKeyFact}" <<< "$pub_key"
+                    '';
+                  };
               };
             }
           ))
@@ -395,8 +411,8 @@
                 systemd.network.netdevs."10-${wgIface}" = {
                   wireguardPeers = [
                     {
-                      PublicKey = alloy.facts.${peerHostOverlay.wg.publicKeyFact}.value;
-                      PresharedKeyFile = host.secrets.${overlay.wg.presharedKeySecret}.path;
+                      PublicKey = alloy.facts."overlay/${overlayName}/wg/hosts/${peerHostName}.key.pub".value;
+                      PresharedKeyFile = host.secrets."overlay/${overlayName}/wg/preshared.key".path;
                       AllowedIPs = "${peerWgIpv6}/128";
                       Endpoint = lib.mkIf (
                         peerHostOverlay.wg.endpoint != null
@@ -463,7 +479,7 @@
           ];
         in
         {
-          secrets.${overlay.wg.presharedKeySecret} = {
+          secrets."overlay/${overlayName}/wg/preshared.key" = {
             permissions = {
               owner = "systemd-network";
               group = "systemd-network";
@@ -471,7 +487,7 @@
             };
           };
 
-          secrets.${hostOverlay.wg.privateKeySecret} = {
+          secrets."overlay/${overlayName}/wg/hosts/${hostName}.key" = {
             permissions = {
               owner = "systemd-network";
               group = "systemd-network";
@@ -490,7 +506,7 @@
                   Name = wgIface;
                 };
                 wireguardConfig = {
-                  PrivateKeyFile = host.secrets.${hostOverlay.wg.privateKeySecret}.path;
+                  PrivateKeyFile = host.secrets."overlay/${overlayName}/wg/hosts/${hostName}.key".path;
                   ListenPort = hostOverlay.wg.port;
                 };
               };
@@ -690,55 +706,7 @@
           secrets = lib.mkMerge (builtins.catAttrs "secrets" overlayConfigs);
           facts = lib.mkMerge (builtins.catAttrs "facts" overlayConfigs);
 
-          generators = lib.mkMerge [
-            (lib.mkMerge (builtins.catAttrs "generators" overlayConfigs))
-            {
-              templates."wg/psk" = { config, ... }: {
-                options = {
-                  presharedKeySecret = lib.mkOption { type = lib.types.str; };
-                };
-                config.secrets.${config.presharedKeySecret} = {};
-                config.tags = [ "overlays/wg" ];
-                config.package =
-                  { pkgs, ... }:
-                  pkgs.writeShellApplication {
-                    name = "wg-psk-generator";
-                    runtimeInputs = [
-                      pkgs.wireguard-tools
-                    ];
-                    text = ''
-                      preshared_key=$(wg genpsk)
-                      "$ALLOY_BIN" secrets set "${config.presharedKeySecret}" <<< "$preshared_key"
-                    '';
-                  };
-
-              };
-              templates."wg/keypair" = { config, ... }: {
-                options = {
-                  privateKeySecret = lib.mkOption { type = lib.types.str; };
-                  publicKeyFact = lib.mkOption { type = lib.types.str; };
-                };
-                config.facts.${config.publicKeyFact} = {};
-                config.secrets.${config.privateKeySecret} = {};
-                config.tags = [ "overlays/wg" ];
-                config.package =
-                  { pkgs, ... }:
-                  pkgs.writeShellApplication {
-                    name = "wg-keypair-generator";
-                    runtimeInputs = [
-                      pkgs.wireguard-tools
-                    ];
-                    text = ''
-                      priv_key=$(wg genkey) 
-                      pub_key=$(wg pubkey <<< "$priv_key")
-
-                      "$ALLOY_BIN" secrets set "${config.privateKeySecret}" <<< "$priv_key"
-                      "$ALLOY_BIN" facts set "${config.publicKeyFact}" <<< "$pub_key"
-                    '';
-                  };
-              };
-            }
-          ];
+          generators = lib.mkMerge (builtins.catAttrs "generators" overlayConfigs);
         };
     };
 }

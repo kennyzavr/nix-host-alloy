@@ -96,7 +96,7 @@
                 message = "[Alloy] Secret '${name}' attached to ${contextType} '${contextName}' not found at ${alloy.workspace.root}/${config.file}. You may need to rekey the secret for this ${contextType}, or add the rekeyed secret to git.";
               }
               {
-                assertion = builtins.hasAttr config.master alloy.secrets;
+                assertion = builtins.hasAttr name alloy.secrets;
                 message = ''
                   [Alloy] Invalid master secret reference
 
@@ -159,9 +159,6 @@
             {
               age.secrets."alloy/secrets/jails/${jailName}/${secret.secretName}" = {
                 file = alloy.workspace.root + "/${secret.file}";
-                owner = "root";
-                group = "root";
-                mode = secret.permissions.mode;
               };
 
               containers."alloy-jail-${jailName}" = {
@@ -204,7 +201,7 @@
                           lib.concatImapStringsSep " | " (
                             idx: secret: ''gsub("${secret.placeholder}"; $secret${toString idx})''
                           ) secrets
-                      }' "${pkgs.writeText "alloy-jail-${jailName}-secret-template-${template.templateName}" template.template}" > "${template.path}.tmp"
+                      }' "${pkgs.writeText "alloy-jail-${jailName}-secret-template" template.template}" > "${template.path}.tmp"
                       install -D -m "${template.permissions.mode}" -o "${template.permissions.owner}" -g "${template.permissions.group}" "${template.path}.tmp" "${template.path}"
                       rm -f "${template.path}.tmp"
                     '';
@@ -272,7 +269,7 @@
                     lib.concatImapStringsSep " | " (
                       idx: secret: ''gsub("${secret.placeholder}"; $secret${toString idx})''
                     ) secrets
-                }' "${pkgs.writeText "alloy-host-${hostName}-secret-template-${template.templateName}" template.template}" > "${template.path}.tmp"
+                }' "${pkgs.writeText "alloy-host-${hostName}-secret-template" template.template}" > "${template.path}.tmp"
                 install -D -m "${template.permissions.mode}" -o "${template.permissions.owner}" -g "${template.permissions.group}" "${template.path}.tmp" "${template.path}"
                 rm -f "${template.path}.tmp"
               '';

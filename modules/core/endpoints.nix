@@ -32,33 +32,64 @@
         };
       };
 
-      endpointType = lib.types.submodule {
-        options = {
-          loadBalancing.policy = lib.mkOption {
-            default = "least-connections";
-            type = lib.types.enum [
-              "round-robin"
-              "least-connections"
-              "ip-hash"
-              "random"
-            ];
+      endpointType = lib.types.submodule (
+        { config, name, ... }: {
+          options = {
+            loadBalancing.policy = lib.mkOption {
+              default = "least-connections";
+              type = lib.types.enum [
+                "round-robin"
+                "least-connections"
+                "ip-hash"
+                "random"
+              ];
+            };
+            targets = lib.mkOption {
+              default = [ ];
+              type = lib.types.unique { message = "the endpoint targets can be set only once"; } (
+                lib.types.listOf targetType
+              );
+            };
+            port = lib.mkOption {
+              type = lib.types.port;
+            };
+            overlays = lib.mkOption {
+              type = lib.types.attrsOf (lib.types.submodule { });
+              readOnly = true;
+            };
           };
-          targets = lib.mkOption {
-            default = [ ];
-            type = lib.types.unique { message = "the endpoint targets can be set only once"; } (
-              lib.types.listOf targetType
-            );
+          config = {
+            overlays = lib.genAttrs (lib.unique (lib.map (t: t.overlay) config.targets)) (_: { });
           };
-          port = lib.mkOption {
-            type = lib.types.port;
-          };
-        };
-      };
+        }
+      );
     in
     {
       options.endpoints = lib.mkOption {
         default = { };
         type = lib.types.attrsOf endpointType;
+      };
+
+      options.hosts = lib.mkOption {
+        type = lib.types.attrsOf (
+          lib.types.submodule {
+            options.endpoints = lib.mkOption {
+              default = { };
+              type = lib.types.attrsOf (lib.types.submodule { });
+            };
+          }
+        );
+      };
+
+      options.jails = lib.mkOption {
+        type = lib.types.attrsOf (
+          lib.types.submodule {
+            options.endpoints = lib.mkOption {
+              default = { };
+              type = lib.types.attrsOf (lib.types.submodule { });
+            };
+          }
+        );
       };
 
       config = {

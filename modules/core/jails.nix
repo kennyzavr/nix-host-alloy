@@ -100,6 +100,15 @@
                 imports = [ module ];
               };
             };
+            hostNixosModule = lib.mkOption {
+              type = lib.types.deferredModule;
+              default = { };
+              apply = module: {
+                _class = "nixos";
+                _file = "jails.${lib.strings.escapeNixIdentifier name}.hostNixosModule";
+                imports = [ module ];
+              };
+            };
             assertions = lib.mkOption {
               type = lib.types.listOf alib.types.assertion;
               default = [ ];
@@ -190,6 +199,11 @@
           in
           {
             nixosModule = { pkgs, ... }: {
+              imports = lib.pipe alloy.jails [
+                (lib.filterAttrs (_: j: j.host == name))
+                (lib.mapAttrsToList (_: j: j.hostNixosModule))
+              ];
+
               systemd.network.netdevs."10-${bridgeIface}" = {
                 netdevConfig = {
                   Kind = "bridge";

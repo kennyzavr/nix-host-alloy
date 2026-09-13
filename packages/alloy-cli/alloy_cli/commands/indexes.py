@@ -53,6 +53,55 @@ def handle_allocate(args, cli: CLI, container: Container):
             )
 
 
+def handle_list(args, cli: CLI, container: Container):
+    service = container.indexes_service
+    records = service.indexes_repo.find_all()
+
+    if not records:
+        cli.info("No indexes defined.")
+        return
+
+    from rich.table import Table
+
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Name")
+    table.add_column("Fact Name")
+    table.add_column("Min")
+    table.add_column("Max")
+    table.add_column("Keys")
+
+    for record in records:
+        table.add_row(
+            record.name,
+            record.fact_name,
+            str(record.min_value),
+            str(record.max_value),
+            str(len(record.keys)),
+        )
+
+    cli._console.print(table)
+
+
+def handle_show(args, cli: CLI, container: Container):
+    record = container.indexes_service.indexes_repo.find_by_name(args.name)
+    if not record:
+        cli.error(f"Index '{args.name}' not found.")
+        return
+
+    from rich.panel import Panel
+    from rich.console import Group
+    from rich.text import Text
+    
+    content = []
+    content.append(Text(f"Fact Name: {record.fact_name}"))
+    content.append(Text(f"Range: {record.min_value} - {record.max_value}"))
+    content.append(Text(f"Defined Keys ({len(record.keys)}):"))
+    for k in sorted(record.keys):
+        content.append(Text(f"  - {k}"))
+
+    cli._console.print(Panel(Group(*content), title=f"Index: [bold]{record.name}[/bold]", expand=False))
+
+
 def register_parser(subparsers):
     parser = subparsers.add_parser("indexes", help="Manage index allocations")
     subcmds = parser.add_subparsers(
@@ -76,3 +125,10 @@ def register_parser(subparsers):
         help="Add the modified fact file to git. Can also be enabled via ALLOY_ADD_TO_GIT=1 env var.",
     )
     gen_parser.set_defaults(func=handle_allocate)
+
+    list_parser = subcmds.add_parser("list", help="List all indexes")
+    list_parser.set_defaults(func=handle_list)
+
+    show_parser = subcmds.add_parser("show", help="Show details of an index")
+    show_parser.add_argument("name", help="Name of the index")
+    show_parser.set_defaults(func=handle_show)

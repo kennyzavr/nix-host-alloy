@@ -8,6 +8,10 @@ from .commands import facts
 from .commands import secrets
 from .commands import indexes
 from .commands import generators
+from .commands import hosts
+from .commands import jails
+from .commands import overlays
+from .commands import state as state_cmd
 
 
 def load_state(cli: CLI) -> dict:
@@ -41,6 +45,10 @@ environment variables:
     secrets.register_parser(subparsers)
     indexes.register_parser(subparsers)
     generators.register_parser(subparsers)
+    hosts.register_parser(subparsers)
+    jails.register_parser(subparsers)
+    overlays.register_parser(subparsers)
+    state_cmd.register_parser(subparsers)
 
     args = parser.parse_args()
 

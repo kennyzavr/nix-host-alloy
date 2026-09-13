@@ -42,12 +42,15 @@ class RecipientRecord:
 @dataclass
 class HostRecord:
     name: str
+    tags: list[str]
     recipients: list[RecipientRecord]
 
 
 @dataclass
 class JailRecord:
     name: str
+    host: str
+    tags: list[str]
     recipients: list[RecipientRecord]
 
 
@@ -71,3 +74,31 @@ class GeneratorRecord:
     tags: list[str]
     secrets: list[str]
     facts: list[str]
+
+
+@dataclass
+class OverlayLinkRecord:
+    host_a: str
+    host_b: str
+
+
+@dataclass
+class OverlayRecord:
+    name: str
+    ipv6Prefix: str
+    tags: list[str]
+    links: list[OverlayLinkRecord]
+
+
+@dataclass
+class HostOverlayRecord:
+    name: str
+    host: str
+    ipv6: str
+
+
+@dataclass
+class JailOverlayRecord:
+    name: str
+    jail: str
+    ipv6: str

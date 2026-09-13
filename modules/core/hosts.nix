@@ -35,6 +35,10 @@
             type = lib.types.listOf lib.types.unspecified;
             default = [ ];
           };
+          tags = lib.mkOption {
+            default = [ ];
+            type = lib.types.listOf lib.types.str;
+          };
         };
         config = {
           idx = alloy.indexes."hosts".get name;
@@ -83,6 +87,7 @@
 
         _internal.state = { ... }: {
           hosts = lib.mapAttrsToList (hostName: host: {
+            inherit (host) tags;
             name = hostName;
           }) alloy.hosts;
         };

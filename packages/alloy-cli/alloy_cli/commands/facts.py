@@ -124,10 +124,9 @@ def handle_list(args, cli: CLI, container: Container):
         status = get_status_str(fact.file)
         leaf = node.add(f"[bold cyan]{key}[/bold cyan]  ({status})")
 
-        if fact.tags:
-            leaf.add(f"[dim]Tags:[/dim] {', '.join(fact.tags)}")
-
         if verbose:
+            if fact.tags:
+                leaf.add(f"[dim]Tags:[/dim] {', '.join(fact.tags)}")
             leaf.add(f"[dim]Path:[/dim] {cli.path(fact.file)}")
 
     tree = Tree("[bold]Facts[/bold]", guide_style="dim")
@@ -137,6 +136,37 @@ def handle_list(args, cli: CLI, container: Container):
     cli._console.print(
         f"──────────────────────────\n[dim]Total: {len(facts)} facts[/dim]"
     )
+
+
+def handle_show(args, cli: CLI, container: Container):
+    ensure_indexes_consistency(cli, container)
+    service = container.facts_service
+    record = service.repo.find_by_name(args.name)
+    
+    if not record:
+        cli.error(f"Fact '{args.name}' not found.")
+        return
+
+    from rich.panel import Panel
+    from rich.console import Group
+    from rich.text import Text
+    import os
+    
+    status = "❌ Missing"
+    mtime_str = ""
+    if container.fs.exists(record.file):
+        from datetime import datetime
+        stat = os.stat(container.fs.resolve(record.file))
+        mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        status = "✅ Present"
+        mtime_str = f" (Modified: {mtime})"
+        
+    content = []
+    content.append(Text.from_markup(f"Path: {cli.path(record.file)}"))
+    content.append(Text(f"Status: {status}{mtime_str}"))
+    content.append(Text(f"Tags: {', '.join(record.tags) if record.tags else '-'}"))
+
+    cli._console.print(Panel(Group(*content), title=f"Fact: [bold]{record.name}[/bold]", expand=False))
 
 
 def register_parser(subparsers):
@@ -195,3 +225,7 @@ def register_parser(subparsers):
         help="Filter facts by tag. Can be specified multiple times.",
     )
     cmd_list.set_defaults(func=handle_list)
+
+    show_parser = subs.add_parser("show", help="Show details of a fact")
+    show_parser.add_argument("name", help="Name of the fact")
+    show_parser.set_defaults(func=handle_show)

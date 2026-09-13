@@ -258,9 +258,9 @@ def handle_list(args, cli: CLI, container: Container):
     def render_global_leaf(node, key, master):
         status = get_status_str(master.file)
         leaf = node.add(f"[bold cyan]{key}[/bold cyan]  ({status})")
-        if master.tags:
-            leaf.add(f"[dim]Tags:[/dim] {', '.join(master.tags)}")
         if verbose:
+            if master.tags:
+                leaf.add(f"[dim]Tags:[/dim] {', '.join(master.tags)}")
             leaf.add(f"[dim]Path:[/dim] {cli.path(master.file)}")
 
         targets_node = leaf.add("[bold]Targets:[/bold]")
@@ -392,6 +392,47 @@ def handle_list(args, cli: CLI, container: Container):
     )
 
 
+def handle_show(args, cli: CLI, container: Container):
+    ensure_indexes_consistency(cli, container)
+    service = container.secrets_service
+    record = service.master.find_by_name(args.name)
+    if not record:
+        cli.error(f"Secret '{args.name}' not found.")
+        return
+
+    from rich.panel import Panel
+    from rich.console import Group
+    from rich.text import Text
+    import os
+    
+    def get_status(file_path):
+        if container.fs.exists(file_path):
+            stat = os.stat(container.fs.resolve(file_path))
+            from datetime import datetime
+            mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            return f"✅ Present (Modified: {mtime})"
+        return "❌ Missing"
+
+    content = []
+    content.append(Text.from_markup(f"Path: {cli.path(record.file)}"))
+    content.append(Text(f"Status: {get_status(record.file)}"))
+    content.append(Text(f"Tags: {', '.join(record.tags) if record.tags else '-'}"))
+
+    host_targets = [s for s in service.host_secrets.find_all() if s.name == record.name]
+    jail_targets = [s for s in service.jail_secrets.find_all() if s.name == record.name]
+    
+    if not host_targets and not jail_targets:
+        content.append(Text("\nTargets: None", style="dim"))
+    else:
+        content.append(Text("\nTargets:", style="bold"))
+        for hs in sorted(host_targets, key=lambda s: s.host):
+            content.append(Text(f"  [Host] {hs.host}: {get_status(hs.file)}"))
+        for js in sorted(jail_targets, key=lambda s: s.jail):
+            content.append(Text(f"  [Jail] {js.jail}: {get_status(js.file)}"))
+
+    cli._console.print(Panel(Group(*content), title=f"Secret: [bold]{record.name}[/bold]", expand=False))
+
+
 def register_parser(subparsers):
     parser = subparsers.add_parser(
         "secrets", help="Manage age-encrypted cluster secrets"
@@ -483,3 +524,7 @@ def register_parser(subparsers):
         help="Display secrets as a flat list instead of a hierarchy",
     )
     cmd_list.set_defaults(func=handle_list)
+
+    show_parser = subs.add_parser("show", help="Show details of a secret")
+    show_parser.add_argument("name", help="Name of the secret")
+    show_parser.set_defaults(func=handle_show)

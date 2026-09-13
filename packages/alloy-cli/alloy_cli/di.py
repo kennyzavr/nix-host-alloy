@@ -3,8 +3,10 @@ from .cli import CLI
 from .data.state import (
     FactsRepository, MasterSecretsRepository, 
     HostSecretsRepository, JailSecretsRepository, 
+    HostSecretsRepository, JailSecretsRepository, 
     HostsRepository, JailsRepository, IndexesRepository,
-    GeneratorsRepository
+    GeneratorsRepository, OverlaysRepository,
+    HostOverlaysRepository, JailOverlaysRepository
 )
 from .infrastructure.fs import FileSystemAdapter
 from .infrastructure.git import GitAdapter
@@ -70,6 +72,21 @@ class Container:
     @lru_cache(maxsize=1)
     def jails_repo(self) -> JailsRepository:
         return JailsRepository(self.db)
+
+    @property
+    @lru_cache(maxsize=1)
+    def overlays_repo(self) -> OverlaysRepository:
+        return OverlaysRepository(self.db)
+
+    @property
+    @lru_cache(maxsize=1)
+    def host_overlays_repo(self) -> HostOverlaysRepository:
+        return HostOverlaysRepository(self.db)
+
+    @property
+    @lru_cache(maxsize=1)
+    def jail_overlays_repo(self) -> JailOverlaysRepository:
+        return JailOverlaysRepository(self.db)
 
     @property
     @lru_cache(maxsize=1)

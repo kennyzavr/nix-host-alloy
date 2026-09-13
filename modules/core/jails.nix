@@ -104,6 +104,10 @@
               type = lib.types.listOf alib.types.assertion;
               default = [ ];
             };
+            tags = lib.mkOption {
+              default = [];
+              type = lib.types.listOf lib.types.str;
+            };
           };
 
           config = {
@@ -394,7 +398,7 @@
         _internal.state = { ... }: {
           jails = lib.mapAttrsToList (jailName: jail: {
             name = jailName;
-            inherit (jail) host;
+            inherit (jail) host tags;
           }) alloy.jails;
         };
       };

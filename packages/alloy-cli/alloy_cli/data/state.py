@@ -10,6 +10,9 @@ from .models import (
     JailRecord,
     IndexRecord,
     GeneratorRecord,
+    OverlayRecord,
+    HostOverlayRecord,
+    JailOverlayRecord,
 )
 
 
@@ -115,15 +118,26 @@ class HostsRepository:
     def __init__(self, db: dict):
         self._db = db
 
-    def find_by_name(self, name: str) -> Optional[HostRecord]:
+    def find_all(self) -> List[HostRecord]:
+        res = []
         for item in self._db.get("hosts", []):
-            if item.get("name") == name:
-                recipients = [
-                    RecipientRecord(key=r.get("value", ""))
-                    for r in self._db.get("hostSecretRecipients", [])
-                    if r.get("host") == name
-                ]
-                return HostRecord(name=name, recipients=recipients)
+            name = item.get("name")
+            recipients = [
+                RecipientRecord(key=r.get("value", ""))
+                for r in self._db.get("hostSecretRecipients", [])
+                if r.get("host") == name
+            ]
+            res.append(HostRecord(
+                name=name,
+                tags=item.get("tags", []),
+                recipients=recipients,
+            ))
+        return res
+
+    def find_by_name(self, name: str) -> Optional[HostRecord]:
+        for item in self.find_all():
+            if item.name == name:
+                return item
         return None
 
 
@@ -131,15 +145,27 @@ class JailsRepository:
     def __init__(self, db: dict):
         self._db = db
 
-    def find_by_name(self, name: str) -> Optional[JailRecord]:
+    def find_all(self) -> List[JailRecord]:
+        res = []
         for item in self._db.get("jails", []):
-            if item.get("name") == name:
-                recipients = [
-                    RecipientRecord(key=r.get("value", ""))
-                    for r in self._db.get("jailSecretRecipients", [])
-                    if r.get("jail") == name
-                ]
-                return JailRecord(name=name, recipients=recipients)
+            name = item.get("name")
+            recipients = [
+                RecipientRecord(key=r.get("value", ""))
+                for r in self._db.get("jailSecretRecipients", [])
+                if r.get("jail") == name
+            ]
+            res.append(JailRecord(
+                name=name,
+                host=item.get("host", ""),
+                tags=item.get("tags", []),
+                recipients=recipients,
+            ))
+        return res
+
+    def find_by_name(self, name: str) -> Optional[JailRecord]:
+        for item in self.find_all():
+            if item.name == name:
+                return item
         return None
 
 
@@ -191,3 +217,70 @@ class GeneratorsRepository:
             if g.name == name:
                 return g
         return None
+
+
+class OverlaysRepository:
+    def __init__(self, db: dict):
+        self._db = db
+
+    def find_all(self) -> List[OverlayRecord]:
+        from .models import OverlayLinkRecord
+        res = []
+        for item in self._db.get("overlays", []):
+            links = []
+            for l in item.get("links", []):
+                ha = l.get("a", {}).get("host")
+                hb = l.get("b", {}).get("host")
+                if ha and hb:
+                    links.append(OverlayLinkRecord(host_a=ha, host_b=hb))
+            res.append(
+                OverlayRecord(
+                    name=item.get("name", ""),
+                    ipv6Prefix=item.get("ipv6Prefix", ""),
+                    tags=item.get("tags", []),
+                    links=links,
+                )
+            )
+        return res
+
+    def find_by_name(self, name: str) -> Optional[OverlayRecord]:
+        for item in self.find_all():
+            if item.name == name:
+                return item
+        return None
+
+
+class HostOverlaysRepository:
+    def __init__(self, db: dict):
+        self._db = db
+
+    def find_all(self) -> List[HostOverlayRecord]:
+        res = []
+        for overlay_list in self._db.get("hostOverlays", []):
+            for item in overlay_list:
+                res.append(
+                    HostOverlayRecord(
+                        name=item.get("name", ""),
+                        host=item.get("host", ""),
+                        ipv6=item.get("ipv6", ""),
+                    )
+                )
+        return res
+
+
+class JailOverlaysRepository:
+    def __init__(self, db: dict):
+        self._db = db
+
+    def find_all(self) -> List[JailOverlayRecord]:
+        res = []
+        for overlay_list in self._db.get("jailOverlays", []):
+            for item in overlay_list:
+                res.append(
+                    JailOverlayRecord(
+                        name=item.get("name", ""),
+                        jail=item.get("jail", ""),
+                        ipv6=item.get("ipv6", ""),
+                    )
+                )
+        return res

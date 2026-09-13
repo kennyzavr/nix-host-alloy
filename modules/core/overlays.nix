@@ -95,6 +95,10 @@
               default = [ ];
               type = lib.types.listOf (lib.types.submodule overlayLinkSubmodule);
             };
+            tags = lib.mkOption {
+              default = [ ];
+              type = lib.types.listOf lib.types.str;
+            };
           };
         };
 
@@ -246,7 +250,6 @@
           (lib.mapAttrsToList (
             hostName: host:
             let
-              hostOverlay = host.overlays.${overlayName};
               privKeySecret = "overlay/${overlayName}/wg/hosts/${hostName}.key";
               pubKeyFact = "overlay/${overlayName}/wg/hosts/${hostName}.key.pub";
               keysGen = "overlay/${overlayName}/wg/hosts/${hostName}";
@@ -707,6 +710,41 @@
           facts = lib.mkMerge (builtins.catAttrs "facts" overlayConfigs);
 
           generators = lib.mkMerge (builtins.catAttrs "generators" overlayConfigs);
+
+          _internal.state = { ... }: {
+            overlays = lib.mapAttrsToList (overlayName: overlay: {
+              name = overlayName;
+              inherit (overlay) ipv6Prefix tags;
+              links = lib.pipe overlay.links [
+                (lib.groupBy (l: l.id))
+                (lib.mapAttrsToList (_: builtins.head))
+                (lib.map (l: {
+                  a.host = l.a.host;
+                  b.host = l.b.host;
+                }))
+              ];
+            }) alloy.overlays;
+            hostOverlays = lib.pipe alloy.hosts [
+              (lib.mapAttrsToList (
+                hostName: host:
+                lib.mapAttrsToList (overlayName: overlay: {
+                  name = overlayName;
+                  host = hostName;
+                  ipv6 = overlay.ipv6;
+                }) host.overlays
+              ))
+            ];
+            jailOverlays = lib.pipe alloy.jails [
+              (lib.mapAttrsToList (
+                jailName: jail:
+                lib.mapAttrsToList (overlayName: overlay: {
+                  name = overlayName;
+                  jail = jailName;
+                  ipv6 = overlay.ipv6;
+                }) jail.overlays
+              ))
+            ];
+          };
         };
     };
 }

@@ -122,7 +122,7 @@ def handle_list(args, cli: CLI, container: Container):
     def render_leaf(node, key, gen):
         leaf = node.add(f"[bold cyan]{key}[/bold cyan]")
         
-        if gen.tags:
+        if verbose and gen.tags:
             leaf.add(f"[dim]Tags:[/dim] {', '.join(gen.tags)}")
             
         has_outputs = False
@@ -170,6 +170,42 @@ def handle_list(args, cli: CLI, container: Container):
     cli._console.print(f"──────────────────────────\n[dim]Total: {len(all_gens)} generators[/dim]")
 
 
+def handle_show(args, cli: CLI, container: Container):
+    ensure_indexes_consistency(cli, container)
+    record = container.generators_service.repo.find_by_name(args.name)
+    if not record:
+        cli.error(f"Generator '{args.name}' not found.")
+        return
+
+    from rich.panel import Panel
+    from rich.console import Group
+    from rich.text import Text
+    
+    content = []
+    content.append(Text(f"Script: {record.script_path}"))
+    content.append(Text(f"Tags: {', '.join(record.tags) if record.tags else '-'}"))
+    
+    if record.wants:
+        content.append(Text(f"Wants: {', '.join(record.wants)}"))
+    if record.wanted_by:
+        content.append(Text(f"Wanted By: {', '.join(record.wanted_by)}"))
+    if record.before:
+        content.append(Text(f"Before: {', '.join(record.before)}"))
+    if record.after:
+        content.append(Text(f"After: {', '.join(record.after)}"))
+        
+    if record.secrets:
+        content.append(Text("\nGenerated Secrets:", style="bold"))
+        for s in record.secrets:
+            content.append(Text(f"  - {s}"))
+    if record.facts:
+        content.append(Text("\nGenerated Facts:", style="bold"))
+        for f in record.facts:
+            content.append(Text(f"  - {f}"))
+
+    cli._console.print(Panel(Group(*content), title=f"Generator: [bold]{record.name}[/bold]", expand=False))
+
+
 def register_parser(subparsers):
     parser = subparsers.add_parser("generators", help="Run state generators")
     subcmds = parser.add_subparsers(
@@ -192,3 +228,7 @@ def register_parser(subparsers):
     list_parser.add_argument("-v", "--verbose", action="store_true", help="Show full paths, modified times, and tags")
     list_parser.add_argument("--flat", action="store_true", help="Display generators as a flat list instead of a hierarchy")
     list_parser.set_defaults(func=handle_list)
+
+    show_parser = subcmds.add_parser("show", help="Show details of a generator")
+    show_parser.add_argument("name", help="Name of the generator")
+    show_parser.set_defaults(func=handle_show)

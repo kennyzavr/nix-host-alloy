@@ -122,7 +122,7 @@ def handle_rekey(args, cli: CLI, container: Container):
 
     try:
         host_plan, jail_plan = service.get_rekey_plan(
-            masters=args.secret, hosts=args.host, jails=args.jail, tags=args.tags
+            masters=args.secret, hosts=args.host, jails=args.jail, tags=args.tag
         )
     except HostNotDefinedError as e:
         cli.error(
@@ -218,12 +218,12 @@ def handle_rekey(args, cli: CLI, container: Container):
 def handle_list(args, cli: CLI, container: Container):
     ensure_indexes_consistency(cli, container)
     service = container.secrets_service
-    
+
     verbose = args.verbose
     hosts_filter = args.host or []
     jails_filter = args.jail or []
     tags_filter = args.tag or []
-    
+
     from rich.tree import Tree
     from datetime import datetime
     import os
@@ -241,10 +241,14 @@ def handle_list(args, cli: CLI, container: Container):
 
     def render_target_leaf(node, key, master, target_type, target_name):
         if target_type == "host":
-            secret = service.host_secrets.find_by_host_and_name(target_name, master.name)
+            secret = service.host_secrets.find_by_host_and_name(
+                target_name, master.name
+            )
         else:
-            secret = service.jail_secrets.find_by_jail_and_name(target_name, master.name)
-        
+            secret = service.jail_secrets.find_by_jail_and_name(
+                target_name, master.name
+            )
+
         if secret:
             status = get_status_str(secret.file)
             leaf = node.add(f"[bold cyan]{key}[/bold cyan]  ({status})")
@@ -254,27 +258,35 @@ def handle_list(args, cli: CLI, container: Container):
     def render_global_leaf(node, key, master):
         status = get_status_str(master.file)
         leaf = node.add(f"[bold cyan]{key}[/bold cyan]  ({status})")
+        if master.tags:
+            leaf.add(f"[dim]Tags:[/dim] {', '.join(master.tags)}")
         if verbose:
-            if master.tags:
-                leaf.add(f"[dim]Tags:[/dim] {', '.join(master.tags)}")
             leaf.add(f"[dim]Path:[/dim] {cli.path(master.file)}")
-        
+
         targets_node = leaf.add("[bold]Targets:[/bold]")
-        
-        host_secrets = [s for s in service.host_secrets.find_all() if s.name == master.name]
-        jail_secrets = [s for s in service.jail_secrets.find_all() if s.name == master.name]
-        
+
+        host_secrets = [
+            s for s in service.host_secrets.find_all() if s.name == master.name
+        ]
+        jail_secrets = [
+            s for s in service.jail_secrets.find_all() if s.name == master.name
+        ]
+
         if not host_secrets and not jail_secrets:
             targets_node.add("[dim]No targets[/dim]")
         else:
             for hs in sorted(host_secrets, key=lambda s: s.host):
                 hs_status = get_status_str(hs.file)
-                hs_node = targets_node.add(f"Host: [cyan]{hs.host}[/cyan] ({hs_status})")
+                hs_node = targets_node.add(
+                    f"Host: [cyan]{hs.host}[/cyan] ({hs_status})"
+                )
                 if verbose:
                     hs_node.add(f"[dim]Path:[/dim] {cli.path(hs.file)}")
             for js in sorted(jail_secrets, key=lambda s: s.jail):
                 js_status = get_status_str(js.file)
-                js_node = targets_node.add(f"Jail: [cyan]{js.jail}[/cyan] ({js_status})")
+                js_node = targets_node.add(
+                    f"Jail: [cyan]{js.jail}[/cyan] ({js_status})"
+                )
                 if verbose:
                     js_node.add(f"[dim]Path:[/dim] {cli.path(js.file)}")
 
@@ -290,58 +302,94 @@ def handle_list(args, cli: CLI, container: Container):
         for h in hosts_filter:
             tree = Tree(f"Host: [bold]{h}[/bold] (Secrets)", guide_style="dim")
             h_secrets = [s for s in service.host_secrets.find_all() if s.host == h]
-            h_masters = [m for m in all_masters if any(hs.name == m.name for hs in h_secrets)]
+            h_masters = [
+                m for m in all_masters if any(hs.name == m.name for hs in h_secrets)
+            ]
             if not h_masters:
                 tree.add("[dim]No secrets[/dim]")
             else:
-                render_tree_view(tree, h_masters, lambda m: m.name, lambda n, k, m: render_target_leaf(n, k, m, "host", h), flat=args.flat)
+                render_tree_view(
+                    tree,
+                    h_masters,
+                    lambda m: m.name,
+                    lambda n, k, m: render_target_leaf(n, k, m, "host", h),
+                    flat=args.flat,
+                )
             cli._console.print(tree)
             cli._console.print("")
-            
+
         for j in jails_filter:
             tree = Tree(f"Jail: [bold]{j}[/bold] (Secrets)", guide_style="dim")
             j_secrets = [s for s in service.jail_secrets.find_all() if s.jail == j]
-            j_masters = [m for m in all_masters if any(js.name == m.name for js in j_secrets)]
+            j_masters = [
+                m for m in all_masters if any(js.name == m.name for js in j_secrets)
+            ]
             if not j_masters:
                 tree.add("[dim]No secrets[/dim]")
             else:
-                render_tree_view(tree, j_masters, lambda m: m.name, lambda n, k, m: render_target_leaf(n, k, m, "jail", j), flat=args.flat)
+                render_tree_view(
+                    tree,
+                    j_masters,
+                    lambda m: m.name,
+                    lambda n, k, m: render_target_leaf(n, k, m, "jail", j),
+                    flat=args.flat,
+                )
             cli._console.print(tree)
             cli._console.print("")
     else:
         tree = Tree("[bold]Master Secrets[/bold]", guide_style="dim")
-        render_tree_view(tree, all_masters, lambda m: m.name, render_global_leaf, flat=args.flat)
+        render_tree_view(
+            tree, all_masters, lambda m: m.name, render_global_leaf, flat=args.flat
+        )
         cli._console.print(tree)
-        
+
     if hosts_filter or jails_filter:
         printed_hosts = set()
         printed_jails = set()
         printed_masters = set()
-        
+
         for h in hosts_filter:
             h_secrets = [s for s in service.host_secrets.find_all() if s.host == h]
-            h_masters = [m for m in all_masters if any(hs.name == m.name for hs in h_secrets)]
+            h_masters = [
+                m for m in all_masters if any(hs.name == m.name for hs in h_secrets)
+            ]
             if h_masters:
                 printed_hosts.add(h)
                 printed_masters.update(m.name for m in h_masters)
-                
+
         for j in jails_filter:
             j_secrets = [s for s in service.jail_secrets.find_all() if s.jail == j]
-            j_masters = [m for m in all_masters if any(js.name == m.name for js in j_secrets)]
+            j_masters = [
+                m for m in all_masters if any(js.name == m.name for js in j_secrets)
+            ]
             if j_masters:
                 printed_jails.add(j)
                 printed_masters.update(m.name for m in j_masters)
-                
+
         total_masters = len(printed_masters)
         total_hosts = len(printed_hosts)
         total_jails = len(printed_jails)
     else:
         total_masters = len(all_masters)
         master_names = {m.name for m in all_masters}
-        total_hosts = len(set(s.host for s in service.host_secrets.find_all() if s.name in master_names))
-        total_jails = len(set(s.jail for s in service.jail_secrets.find_all() if s.name in master_names))
+        total_hosts = len(
+            set(
+                s.host
+                for s in service.host_secrets.find_all()
+                if s.name in master_names
+            )
+        )
+        total_jails = len(
+            set(
+                s.jail
+                for s in service.jail_secrets.find_all()
+                if s.name in master_names
+            )
+        )
 
-    cli._console.print(f"──────────────────────────\n[dim]Total: {total_masters} master secrets | {total_hosts} hosts targets | {total_jails} jail targets[/dim]")
+    cli._console.print(
+        f"──────────────────────────\n[dim]Total: {total_masters} master secrets | {total_hosts} hosts targets | {total_jails} jail targets[/dim]"
+    )
 
 
 def register_parser(subparsers):
@@ -370,11 +418,11 @@ def register_parser(subparsers):
     )
     cmd_set.set_defaults(func=handle_set)
 
-    cmd_view = subs.add_parser(
+    cmd_get = subs.add_parser(
         "get", help="Decrypt and output a master secret to stdout"
     )
-    cmd_view.add_argument("secret", help="Name of the master secret to output")
-    cmd_view.set_defaults(func=handle_get)
+    cmd_get.add_argument("secret", help="Name of the master secret to output")
+    cmd_get.set_defaults(func=handle_get)
 
     cmd_edit = subs.add_parser("edit", help="Edit a master secret interactively")
     cmd_edit.add_argument("secret", help="Name of the master secret to edit")
@@ -410,9 +458,28 @@ def register_parser(subparsers):
     cmd_rekey.set_defaults(func=handle_rekey)
 
     cmd_list = subs.add_parser("list", help="List all secrets")
-    cmd_list.add_argument("--host", action="append", help="Filter by specific hosts and switch to target view")
-    cmd_list.add_argument("--jail", action="append", help="Filter by specific jails and switch to target view")
-    cmd_list.add_argument("--tag", action="append", help="Filter master secrets by specific tags")
-    cmd_list.add_argument("-v", "--verbose", action="store_true", help="Show full paths, modified times, and tags")
-    cmd_list.add_argument("--flat", action="store_true", help="Display secrets as a flat list instead of a hierarchy")
+    cmd_list.add_argument(
+        "--host",
+        action="append",
+        help="Filter by specific hosts and switch to target view",
+    )
+    cmd_list.add_argument(
+        "--jail",
+        action="append",
+        help="Filter by specific jails and switch to target view",
+    )
+    cmd_list.add_argument(
+        "--tag", action="append", help="Filter master secrets by specific tags"
+    )
+    cmd_list.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show full paths, modified times, and tags",
+    )
+    cmd_list.add_argument(
+        "--flat",
+        action="store_true",
+        help="Display secrets as a flat list instead of a hierarchy",
+    )
     cmd_list.set_defaults(func=handle_list)

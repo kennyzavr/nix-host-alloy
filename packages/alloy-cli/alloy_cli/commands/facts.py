@@ -91,8 +91,16 @@ def handle_edit(args, cli: CLI, container: Container):
 def handle_list(args, cli: CLI, container: Container):
     ensure_indexes_consistency(cli, container)
     facts = container.facts_service.repo.find_all()
+
+    if args.tags:
+        required_tags = set(args.tags)
+        facts = [f for f in facts if f.tags and required_tags.issubset(set(f.tags))]
+
     if not facts:
-        cli.info("No facts defined.")
+        if args.tags:
+            cli.info(f"No facts found matching tags: {', '.join(args.tags)}")
+        else:
+            cli.info("No facts defined.")
         return
 
     verbose = args.verbose
@@ -116,9 +124,10 @@ def handle_list(args, cli: CLI, container: Container):
         status = get_status_str(fact.file)
         leaf = node.add(f"[bold cyan]{key}[/bold cyan]  ({status})")
 
+        if fact.tags:
+            leaf.add(f"[dim]Tags:[/dim] {', '.join(fact.tags)}")
+
         if verbose:
-            if fact.tags:
-                leaf.add(f"[dim]Tags:[/dim] {', '.join(fact.tags)}")
             leaf.add(f"[dim]Path:[/dim] {cli.path(fact.file)}")
 
     tree = Tree("[bold]Facts[/bold]", guide_style="dim")
@@ -152,9 +161,9 @@ def register_parser(subparsers):
     )
     cmd_set.set_defaults(func=handle_set)
 
-    cmd_view = subs.add_parser("get", help="Output a fact value to stdout")
-    cmd_view.add_argument("fact", help="Name of the fact")
-    cmd_view.set_defaults(func=handle_get)
+    cmd_get = subs.add_parser("get", help="Output a fact value to stdout")
+    cmd_get.add_argument("fact", help="Name of the fact")
+    cmd_get.set_defaults(func=handle_get)
 
     cmd_edit = subs.add_parser("edit", help="Edit a fact interactively")
     cmd_edit.add_argument("fact", help="Name of the fact to edit")
@@ -167,6 +176,22 @@ def register_parser(subparsers):
     cmd_edit.set_defaults(func=handle_edit)
 
     cmd_list = subs.add_parser("list", help="List all facts")
-    cmd_list.add_argument("-v", "--verbose", action="store_true", help="Show full paths, modified times, and tags")
-    cmd_list.add_argument("--flat", action="store_true", help="Display facts as a flat list instead of a hierarchy")
+    cmd_list.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show full paths, modified times, and tags",
+    )
+    cmd_list.add_argument(
+        "--flat",
+        action="store_true",
+        help="Display facts as a flat list instead of a hierarchy",
+    )
+    cmd_list.add_argument(
+        "-t",
+        "--tag",
+        action="append",
+        dest="tags",
+        help="Filter facts by tag. Can be specified multiple times.",
+    )
     cmd_list.set_defaults(func=handle_list)

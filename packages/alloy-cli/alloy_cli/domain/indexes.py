@@ -38,7 +38,7 @@ class IndexesService:
         Allocates IDs for an index and syncs the backing fact file.
         Returns a tuple (changed: bool, size: int).
         """
-        existing_state = self._read_state(record, force)
+        existing_state, file_exists = self._read_state(record, force)
         current_state = {k: v for k, v in existing_state.items() if k in record.keys}
 
         unallocated_keys = sorted([k for k in record.keys if k not in current_state])
@@ -52,7 +52,7 @@ class IndexesService:
                 current_state[k] = available_values.pop(0)
 
         # if current_state == existing_state and not force:
-        if current_state == existing_state:
+        if current_state == existing_state and file_exists:
             return False, len(current_state)
 
         self.facts_service.set(
@@ -63,7 +63,7 @@ class IndexesService:
         )
         return True, len(current_state)
 
-    def _read_state(self, record: IndexRecord, force: bool) -> dict:
+    def _read_state(self, record: IndexRecord, force: bool) -> Tuple[dict, bool]:
         index_name = record.name
         existing_state = {}
         try:
@@ -98,14 +98,14 @@ class IndexesService:
                     seen_values.add(v)
             except (json.JSONDecodeError, IndexStateCorruptedError) as e:
                 if force:
-                    return {}
+                    return {}, True
                 if isinstance(e, json.JSONDecodeError):
                     raise IndexStateCorruptedError(index_name, record.fact_name)
                 raise e
         except FactFileNotFoundError:
-            return {}
+            return {}, False
 
-        return existing_state
+        return existing_state, True
 
     def _compute_allocations(
         self, used_values: Iterable[int], needed: int, record: IndexRecord
@@ -142,7 +142,7 @@ class IndexesService:
         Checks if the index is in a consistent state.
         Raises IndexStateCorruptedError if not.
         """
-        state = self._read_state(record, force=False)
+        state, _ = self._read_state(record, force=False)
 
         expected_keys = set(record.keys)
         actual_keys = set(state.keys())

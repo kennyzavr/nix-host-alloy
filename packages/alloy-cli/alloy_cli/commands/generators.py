@@ -122,7 +122,7 @@ def handle_list(args, cli: CLI, container: Container):
     def render_leaf(node, key, gen):
         leaf = node.add(f"[bold cyan]{key}[/bold cyan]")
         
-        if verbose and gen.tags:
+        if gen.tags:
             leaf.add(f"[dim]Tags:[/dim] {', '.join(gen.tags)}")
             
         has_outputs = False

@@ -9,6 +9,16 @@
     let
       alloy = config;
 
+      serverToString =
+        server:
+        if server ? endpoint then
+          let
+            endpoint = alloy.endpoints.${server.endpoint};
+          in
+          "${endpoint.domain}:${toString endpoint.port}"
+        else
+          server.address;
+
       mkAttrsOpt =
         opts:
         lib.mkOption {
@@ -159,6 +169,14 @@
             apex = lib.mkOption {
               type = alib.types.dns.name;
             };
+            # TODO: parentZone should be derefferenced to throw error if it does not point to a valid zone
+            parentZone = lib.mkOption {
+              default = null;
+              type = lib.types.nullOr lib.types.str;
+            };
+            nname = lib.mkOption {
+              type = alib.types.dns.name;
+            };
             rname = lib.mkOption {
               type = alib.types.dns.name;
             };
@@ -175,12 +193,11 @@
               type = lib.types.listOf lib.types.str;
             };
           };
-          # TODO: choose unique records
           config.bindConfig = ''
             $ORIGIN ${lib.removeSuffix "." config.apex}.
             $TTL ${toString config.ttl}
             ${lib.concatMapStringsSep "\n" (record: record.bindConfig) (
-              lib.filter (r: r.domain.zone == name) alloy.dns.records
+              lib.unique (lib.filter (r: r.domain.zone == name) alloy.dns.records)
             )}
           '';
         }
@@ -191,6 +208,7 @@
         { name, config, ... }:
         let
           nodeName = name;
+          node = config;
         in
         {
           options = {
@@ -219,75 +237,97 @@
                 )
               );
             };
-            dns = {
-              upstreamResolvers = lib.mkOption {
-                type = lib.types.listOf lib.types.str;
-                default = [
-                  "8.8.8.8"
-                  "1.1.1.1"
-                ];
-              };
-            };
           };
           config = {
             domain = "${nodeName}.${type}.${alloy.dns.internalDomain}";
             nixosModule = {
               services.resolved.enable = false;
-            services.coredns = {
-              enable = true;
-              config = ''
-                . {
-                  bind 127.0.0.1 ::1
-                  forward . ${lib.concatStringsSep " " config.dns.upstreamResolvers}
-                  cache
-                }
-                ${alloy.dns.internalDomain} {
-                  bind 127.0.0.1 ::1
-                  hosts {
-                    ${lib.concatStringsSep "\n" (
-                      let
-                        allHostRecords = lib.flatten (
-                          lib.mapAttrsToList (
-                            hName: h: 
-                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${h.domain}") h.overlays) ++
-                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${o.domain}") h.overlays)
-                          ) alloy.hosts
-                        );
-                        allJailRecords = lib.flatten (
-                          lib.mapAttrsToList (
-                            jName: j: 
-                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${j.domain}") j.overlays) ++
-                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${o.domain}") j.overlays)
-                          ) alloy.jails
-                        );
-                        allEndpointRecords = lib.flatten (
-                          lib.mapAttrsToList (
-                            eName: e: 
-                              (lib.map (t: "${t.ipv6} ${e.domain}") e.targets) ++
-                              (lib.map (t: "${t.ipv6} ${e.overlays.${t.overlay}.domain}") e.targets)
-                          ) alloy.endpoints
-                        );
-                      in
-                      allHostRecords ++ allJailRecords ++ allEndpointRecords
-                    )}
-                    fallthrough
+              services.coredns = {
+                enable = true;
+                config = ''
+                  . {
+                    bind 127.0.0.1 ::1
+                    forward . ${
+                      lib.pipe alloy.dns.resolvers [
+                        (lib.map (
+                          r:
+                          if r ? endpoint then
+                            let
+                              endpoint = alloy.endpoints.${r.endpoint};
+                              targets = lib.map (t: t.ipv6) (
+                                lib.filter (t: builtins.hasAttr t.overlay node.overlays) endpoint.targets
+                              );
+                            in
+                            targets
+                          else
+                            [ r.address ]
+                        ))
+                        lib.flatten
+                        (lib.concatStringsSep " ")
+                      ]
+                    } {
+                      policy sequential
+                    }
+                    cache
                   }
-                }
-              '';
+                  ${alloy.dns.internalDomain} {
+                    bind 127.0.0.1 ::1
+                    hosts {
+                      ${lib.concatStringsSep "\n" (
+                        let
+                          allHostRecords = lib.flatten (
+                            lib.mapAttrsToList (
+                              hName: h:
+                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${h.domain}") h.overlays)
+                              ++ (lib.mapAttrsToList (_: o: "${o.ipv6} ${o.domain}") h.overlays)
+                            ) alloy.hosts
+                          );
+                          allJailRecords = lib.flatten (
+                            lib.mapAttrsToList (
+                              jName: j:
+                              (lib.mapAttrsToList (_: o: "${o.ipv6} ${j.domain}") j.overlays)
+                              ++ (lib.mapAttrsToList (_: o: "${o.ipv6} ${o.domain}") j.overlays)
+                            ) alloy.jails
+                          );
+                          allEndpointRecords = lib.flatten (
+                            lib.mapAttrsToList (
+                              eName: e:
+                              (lib.map (t: "${t.ipv6} ${e.domain}") e.targets)
+                              ++ (lib.map (t: "${t.ipv6} ${e.overlays.${t.overlay}.domain}") e.targets)
+                            ) alloy.endpoints
+                          );
+                        in
+                        allHostRecords ++ allJailRecords ++ allEndpointRecords
+                      )}
+                      fallthrough
+                    }
+                  }
+                '';
+              };
+              networking.nameservers = [
+                "127.0.0.1"
+                "::1"
+              ];
             };
-            networking.nameservers = [
-              "127.0.0.1"
-              "::1"
-            ];
           };
         };
-      };
     in
     {
       options.dns = {
         internalDomain = lib.mkOption {
           type = alib.types.dns.name;
           default = "alloy.internal";
+        };
+        resolvers = lib.mkOption {
+          type = lib.types.listOf alib.types.serverEndpoint;
+          default = [
+            {
+              address = "8.8.8.8";
+            }
+            {
+              address = "1.1.1.1";
+            }
+          ];
         };
         records = lib.mkOption {
           default = [ ];
@@ -378,10 +418,10 @@
           options = {
             keySecret = lib.mkOption { type = lib.types.str; };
           };
-          config.secrets.${config.keySecret} = {};
+          config.secrets.${config.keySecret} = { };
           config.tags = [
             "dns"
-            "tsig-key"
+            "dns/tsig-key"
           ];
           config.package =
             { pkgs, ... }:

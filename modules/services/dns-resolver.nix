@@ -22,48 +22,44 @@
             default = { };
             type = lib.types.attrsOf (lib.types.submodule { });
           };
-        };
-      };
-
-      activeServices = lib.filterAttrs (_: s: s.enable) alloy.services.knot-resolver;
-
-      nodeSubmodule =
-        type:
-        { config, name, ... }:
-        let
-          node = config;
-          resolverIps = lib.flatten (
-            lib.mapAttrsToList (
-              srvName: srv:
-              let
-                jailName = "knot-resolver-${srvName}-${srv.host}";
-                resolverJail = alloy.jails.${jailName};
-                commonOverlays = lib.intersectAttrs node.overlays srv.overlays;
-              in
-              lib.mapAttrsToList (oName: _: resolverJail.overlays.${oName}.ipv6) commonOverlays
-            ) activeServices
-          );
-        in
-        {
-          dns = lib.mkIf (resolverIps != [ ]) {
-            upstreamResolvers = lib.mkBefore resolverIps;
+          endpoint = lib.mkOption {
+            readOnly = true;
+            type = lib.types.str;
+            default = "dns-resolver-${name}";
           };
         };
+      };
 
       mkService =
         srvName: srv:
         let
-          jailName = "knot-resolver-${srvName}-${srv.host}";
+          jailName = "dns-resolver-${srvName}-${srv.host}";
         in
         {
           assertions = [
             {
-              assertion = srv.enable -> builtins.hasAttr srv.host alloy.hosts;
-              message = "[Alloy] Service 'knot-resolver.${srvName}': host '${srv.host}' is unknown. Please ensure it is defined in 'config.hosts'.";
+              assertion = builtins.hasAttr srv.host alloy.hosts;
+              message = "[Alloy] Service 'dns-resolver.${srvName}': host '${srv.host}' is unknown. Please ensure it is defined in 'config.hosts'.";
             }
             {
-              assertion = srv.enable -> srv.overlays != { };
-              message = "[Alloy] Service 'knot-resolver.${srvName}': You must specify at least one network overlay in 'overlays'.";
+              assertion = srv.overlays != { };
+              message = "[Alloy] Service 'dns-resolver.${srvName}': You must specify at least one network overlay in 'overlays'.";
+            }
+          ];
+
+          endpoints.${srv.endpoint} = {
+            port = 53;
+            targets = lib.flatten (
+              lib.mapAttrsToList (overlayName: overlay: {
+                ipv6 = alloy.jails.${jailName}.overlays.${overlayName}.ipv6;
+                overlay = overlayName;
+              }) srv.overlays
+            );
+          };
+
+          dns.resolvers = [
+            {
+              endpoint = srv.endpoint;
             }
           ];
 
@@ -72,6 +68,8 @@
               host = srv.host;
 
               uplink.allowEgress = true;
+
+              endpoints.${srv.endpoint} = { };
 
               overlays = lib.mapAttrs (_: _: { }) srv.overlays;
 
@@ -95,7 +93,7 @@
                     ];
 
                     forward = lib.mapAttrsToList (zName: zone: {
-                      subtree = [ "${zone.apex}." ];
+                      subtree = [ "${lib.removeSuffix "." zone.apex}." ];
                       servers = zone.nameservers;
                       options = {
                         authoritative = true;
@@ -109,25 +107,22 @@
           };
         };
 
-      services = lib.mapAttrsToList mkService activeServices;
+      services = lib.pipe alloy.services.dns-resolver [
+        (lib.filterAttrs (_: s: s.enable))
+        (lib.mapAttrsToList mkService)
+      ];
     in
     {
-      options.services.knot-resolver = lib.mkOption {
+      options.services.dns-resolver = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
-      };
-
-      options.hosts = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.submodule (nodeSubmodule "host"));
-      };
-
-      options.jails = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.submodule (nodeSubmodule "jail"));
       };
 
       config = {
         assertions = lib.mkMerge (lib.map (c: c.assertions) services);
         jails = lib.mkMerge (lib.map (c: c.jails) services);
+        dns = lib.mkMerge (lib.map (c: c.dns) services);
+        endpoints = lib.mkMerge (lib.map (c: c.endpoints) services);
       };
     };
 }

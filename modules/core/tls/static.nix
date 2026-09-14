@@ -146,10 +146,6 @@
       options.tls.ca = lib.mkOption {
         type = lib.types.attrsOf (
           lib.types.submodule {
-            options.certFact = lib.mkOption {
-              default = null;
-              type = lib.types.nullOr lib.types.str;
-            };
           }
         );
       };

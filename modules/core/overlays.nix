@@ -228,8 +228,8 @@
 
             generators.instances.${pskGen} = {
               tags = [
-                "overlay/wg"
-                "overlay/wg/psk"
+                "overlay"
+                "overlay/${overlayName}"
               ];
               secrets.${pskSecret} = { };
               package =
@@ -260,8 +260,8 @@
 
               generators.instances.${keysGen} = {
                 tags = [
-                  "overlay/wg"
-                  "overlay/wg/keypair"
+                  "overlay"
+                  "overlay/${overlayName}"
                 ];
                 secrets.${privKeySecret} = { };
                 facts.${pubKeyFact} = { };

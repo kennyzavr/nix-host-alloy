@@ -39,10 +39,6 @@
             endpoint = lib.mkOption {
               type = lib.types.str;
             };
-            proxyV2 = lib.mkOption {
-              default = true;
-              type = lib.types.bool;
-            };
           };
         };
       };
@@ -73,7 +69,7 @@
         let
           allOverlays = lib.pipe srv.routes [
             (lib.mapAttrsToList (
-              _: route: lib.map (target: target.overlay) alloy.endpoints.${route.upstream.endpoint}.targets
+              _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
             ))
             lib.flatten
             lib.unique
@@ -83,17 +79,17 @@
           assertions = [
             {
               assertion = alib.types.dns.label.check srvName;
-              message = "[Alloy] tcp-gateway name '${srvName}' must be valid dns label.";
+              message = "[Alloy] tls-edge name '${srvName}' must be valid dns label.";
             }
             {
               assertion =
                 srv.allowedOverlays != [ ]
                 -> lib.all (overlayName: builtins.elem overlayName srv.allowedOverlays) allOverlays;
-              message = "[Alloy] tcp-gateway '${srvName}': there are some endpoint targets with addresses outside of the allowed overlays";
+              message = "[Alloy] tls-edge '${srvName}': there are some endpoint targets with addresses outside of the allowed overlays";
             }
             {
               assertion = srv.hosts != { };
-              message = "[Alloy] tcp-gateway '${srvName}': at least one host must be specified";
+              message = "[Alloy] tls-edge '${srvName}': at least one host must be specified";
             }
             {
               assertion = srv.routes != { };
@@ -104,11 +100,11 @@
             lib.mapAttrsToList (hostName: hostCfg: [
               {
                 assertion = builtins.hasAttr hostName alloy.hosts;
-                message = "[Alloy] tcp-gateway '${srvName}': host '${hostName}' is unknown";
+                message = "[Alloy] tls-edge '${srvName}': host '${hostName}' is unknown";
               }
               {
                 assertion = builtins.hasAttr hostName alloy.hosts -> (hostCfg.ipv4 != null || hostCfg.ipv6 != null);
-                message = "[Alloy] tcp-gateway '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
+                message = "[Alloy] tls-edge '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
               }
             ]) srv.hosts
           ))
@@ -116,17 +112,17 @@
             lib.mapAttrsToList (routeName: route: [
               {
                 assertion = alib.types.dns.label.check routeName;
-                message = "[Alloy] tcp-gateway '${srvName}': route name '${routeName}' must be valid dns label.";
+                message = "[Alloy] tls-edge '${srvName}': route name '${routeName}' must be valid dns label.";
               }
               {
                 assertion = builtins.hasAttr route.upstream.endpoint alloy.endpoints;
-                message = "[Alloy] tcp-gateway '${srvName}': route '${routeName}' refers to an unknown endpoint '${route.upstream.endpoint}'.";
+                message = "[Alloy] tls-edge '${srvName}': route '${routeName}' refers to an unknown endpoint '${route.upstream.endpoint}'.";
               }
               {
                 assertion =
                   route.downstream.tls.enable
                   -> route.downstream.tls.cert != null && builtins.hasAttr route.downstream.tls.cert alloy.tls.certs;
-                message = "[Alloy] tcp-gateway '${srvName}': route '${routeName}': downstream.tls.cert must be valid reference to tls.certs entry.";
+                message = "[Alloy] tls-edge '${srvName}': route '${routeName}': downstream.tls.cert must be valid reference to tls.certs entry.";
               }
             ]) srv.routes
           ));
@@ -138,11 +134,11 @@
                 _: hostCfg:
                 [ ]
                 ++ (lib.optional (route.addDnsRecords && hostCfg.ipv4 != null) {
-                  domain = route.domain;
+                  inherit (route) domain;
                   data.a = hostCfg.ipv4;
                 })
                 ++ (lib.optional (route.addDnsRecords && hostCfg.ipv6 != null) {
-                  domain = route.domain;
+                  inherit (route) domain;
                   data.aaaa = hostCfg.ipv6;
                 })
               ) srv.hosts)
@@ -151,7 +147,7 @@
 
           jails = lib.mapAttrs' (
             hostName: hostCfg:
-            lib.nameValuePair "tcp-gateway-${srvName}-${hostName}" (
+            lib.nameValuePair "tls-edge-${srvName}-${hostName}" (
               { config, ... }:
               let
                 jail = config;
@@ -167,7 +163,7 @@
 
                 overlays = lib.genAttrs allOverlays (_: _: { });
 
-                acme.certs = lib.pipe srv.routes [
+                tls.certs = lib.pipe srv.routes [
                   (lib.filterAttrs (_: route: route.downstream.tls.enable && route.downstream.tls.cert != null))
                   (lib.mapAttrsToList (
                     _: route: {
@@ -179,16 +175,10 @@
                   lib.mkMerge
                 ];
 
-                secretTemplates."static-ca-full" = {
-                  template = ''
-                    ${alloy.facts.${jail.static-ca.certFact}.value}
-                    ${jail.secrets.${jail.static-ca.keySecret}.placeholder}
-                  '';
-                  permissions = {
-                    owner = "haproxy";
-                    group = "haproxy";
-                    mode = "0640";
-                  };
+                mtls.permissions = {
+                  owner = "haproxy";
+                  group = "haproxy";
+                  mode = "0640";
                 };
 
                 nixosModule =
@@ -196,7 +186,7 @@
                   {
                     networking.firewall.allowedTCPPorts = lib.mapAttrsToList (_: r: r.downstream.port) srv.routes;
 
-                    users.users.haproxy.extraGroups = lib.mapAttrsToList (_: cert: cert.group) jail.acme.certs;
+                    users.users.haproxy.extraGroups = lib.mapAttrsToList (_: cert: cert.group) jail.tls.certs;
 
                     services.haproxy = {
                       enable = true;
@@ -220,7 +210,7 @@
                             endpoint = alloy.endpoints.${route.upstream.endpoint};
                             policy = endpoint.loadBalancing.policy;
                             hasCert = route.downstream.tls.enable && route.downstream.tls.cert != null;
-                            certCfg = if hasCert then jail.acme.certs.${route.downstream.tls.cert} else null;
+                            certCfg = if hasCert then jail.tls.certs.${route.downstream.tls.cert} else null;
                             bindParams = if hasCert then "ssl crt ${certCfg.fullPath}" else "";
                           in
                           ''
@@ -243,12 +233,7 @@
                                   ""
                               }
                               ${lib.concatImapStringsSep "\n  " (idx: target: ''
-
-                                server target${toString idx} [${target.ipv6}]:${toString endpoint.port} weight ${toString target.weight} ssl verify required ca-file "${
-                                  alloy.facts.${alloy.static-ca.certFact}.path
-                                }" crt "${
-                                  jail.secretTemplates."static-ca-full".path
-                                }" ${lib.optionalString route.upstream.proxyV2 "send-proxy-v2"}
+                                server target${toString idx} [${target.ipv6}]:${toString endpoint.port} weight ${toString target.weight} ssl verify required ca-file "${alloy.mtls.certPath}" crt "${jail.mtls.fullPath}" ${lib.optionalString endpoint.proxyv2 "send-proxy-v2"}
                               '') endpoint.targets}
                           ''
                         ) srv.routes}
@@ -261,14 +246,14 @@
         };
     in
     {
-      options.services.tcp-gateways = lib.mkOption {
+      options.services.tls-edge = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
       };
 
       config =
         let
-          services = lib.pipe alloy.services.tcp-gateways [
+          services = lib.pipe alloy.services.tls-edge [
             (lib.filterAttrs (_: srv: srv.enable))
             (lib.mapAttrsToList mkService)
           ];

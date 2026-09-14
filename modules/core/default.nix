@@ -11,11 +11,7 @@
     ./tls
     ./dns.nix
     ./mtls.nix
-    # ./gateways.nix
     ./endpoints.nix
-    # ./tls.nix
-    # ./acme.nix
-    # ./static-ca.nix
     ./state.nix
     ./volumes.nix
   ];

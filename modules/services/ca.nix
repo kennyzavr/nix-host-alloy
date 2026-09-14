@@ -9,47 +9,60 @@
     let
       alloy = config;
 
-      serviceSubmodule = { name, ... }: {
+      serviceSubmodule = { config, name, ... }: {
         options = {
           enable = lib.mkOption {
             default = true;
             type = lib.types.bool;
           };
           endpoint = lib.mkOption {
-            default = "step-ca-${name}";
+            default = "ca-${name}";
             type = lib.types.str;
           };
-          # TODO: add assertion - only one service per a ca
           ca = lib.mkOption {
             type = lib.types.str;
             default = name;
           };
           root = {
+            subject = lib.mkOption {
+              type = lib.types.str;
+              default = "Root ${config.subject}";
+            };
             certFact = lib.mkOption {
               type = lib.types.str;
-              default = "step-ca/${name}/root/cert.pem";
+              readOnly = true;
+              default = "ca/${name}/root/cert.pem";
             };
             keySecret = lib.mkOption {
               type = lib.types.str;
-              default = "step-ca/${name}/root/key.pem";
+              readOnly = true;
+              default = "ca/${name}/root/key.pem";
             };
             generator = lib.mkOption {
               type = lib.types.str;
-              default = "step-ca/${name}/root";
+              readOnly = true;
+              default = "ca/${name}/root";
             };
           };
           intermediate = {
+            subject = lib.mkOption {
+              type = lib.types.str;
+              default = "Intermediate ${config.subject}";
+            };
             certFact = lib.mkOption {
               type = lib.types.str;
-              default = "step-ca/${name}/intermediate/cert.pem";
+              readOnly = true;
+              default = "ca/${name}/intermediate/cert.pem";
             };
             keySecret = lib.mkOption {
               type = lib.types.str;
-              default = "step-ca/${name}/intermediate/key.pem";
+              readOnly = true;
+              default = "ca/${name}/intermediate/key.pem";
             };
             generator = lib.mkOption {
               type = lib.types.str;
-              default = "step-ca/${name}/intermediate";
+              readOnly = true;
+              default = "ca/${name}/intermediate";
             };
           };
           overlays = lib.mkOption {
@@ -60,7 +73,7 @@
             type = lib.types.str;
           };
           domain = lib.mkOption {
-            type = alib.types.dns.name;
+            type = alib.types.zoneNode;
           };
           acme = {
             enable = lib.mkOption {
@@ -73,8 +86,7 @@
           };
           permittedDomains = lib.mkOption {
             default = [ ];
-            type = lib.types.listOf alib.types.dns.name;
-            apply = lib.map (n: lib.removePrefix "." (lib.removeSuffix "." n));
+            type = lib.types.listOf alib.types.zoneNode;
           };
           permittedIps = lib.mkOption {
             default = [ ];
@@ -92,7 +104,11 @@
         assertions = [
           {
             assertion = builtins.hasAttr srv.host alloy.hosts;
-            message = "[Alloy] ngin '${srvName}': host '${srv.host}' is unknown";
+            message = "[Alloy] ca '${srvName}': host '${srv.host}' is unknown";
+          }
+          {
+            assertion = srv.overlays != { };
+            message = "[Alloy] Service 'ca.${srvName}': you must specify at least one network overlay in 'overlays' for the endpoint targets.";
           }
         ];
 
@@ -100,35 +116,36 @@
           port = 443;
           targets = lib.mapAttrsToList (overlayName: _: {
             overlay = overlayName;
-            ipv6 = alloy.jails."step-ca-${srvName}".overlays.${overlayName}.ipv6;
+            ipv6 = alloy.jails."ca-${srvName}".overlays.${overlayName}.ipv6;
           }) srv.overlays;
         };
 
-        tls.pki.certFacts = [ srv.root.certFact ];
-
-        tls.ca.${srv.ca} = lib.mkIf srv.acme.enable {
-          acme.directory.endpoint = {
-            name = srv.endpoint;
+        tls.ca.${srv.ca} = {
+          certFact = srv.root.certFact;
+          acme.url = {
             path = "/acme/acme/directory";
+            server.endpoint = srv.endpoint;
           };
         };
 
         facts.${srv.root.certFact} = { };
         secrets.${srv.root.keySecret} = { };
         generators.instances.${srv.root.generator} = {
-          imports = [ alloy.generators.templates."tls/ca-cert" ];
+          imports = [ alloy.generators.templates."tls/x509-cert/ca" ];
 
           tags = [
-            "step-ca"
-            "step-ca/${srvName}"
+            "ca"
+            "ca/${srvName}"
           ];
 
           certFact = srv.root.certFact;
           keySecret = srv.root.keySecret;
 
-          subject = "Root ${srv.subject}";
+          subject = srv.root.subject;
           permitted = {
-            domains = srv.permittedDomains;
+            domains = lib.map (
+              d: lib.removePrefix "." (lib.removeSuffix "." (alloy.dns.resolveNode d))
+            ) srv.permittedDomains;
             ips = srv.permittedIps;
           };
           maxPathLen = 1;
@@ -137,11 +154,11 @@
         facts.${srv.intermediate.certFact} = { };
         secrets.${srv.intermediate.keySecret} = { };
         generators.instances.${srv.intermediate.generator} = {
-          imports = [ alloy.generators.templates."tls/ca-cert" ];
+          imports = [ alloy.generators.templates."tls/x509-cert/ca" ];
 
           tags = [
-            "step-ca"
-            "step-ca/${srvName}"
+            "ca"
+            "ca/${srvName}"
           ];
 
           wants = [ srv.root.generator ];
@@ -154,11 +171,11 @@
           certFact = srv.intermediate.certFact;
           keySecret = srv.intermediate.keySecret;
 
-          subject = "Intermediate ${srv.subject}";
+          subject = srv.intermediate.subject;
           maxPathLen = 0;
         };
 
-        jails."step-ca-${srvName}" =
+        jails."ca-${srvName}" =
           { config, ... }:
           let
             jail = config;
@@ -168,9 +185,7 @@
 
             overlays = lib.mapAttrs (_: _: { }) srv.overlays;
 
-            static-ca.domains = [
-              alloy.endpoints.${srv.endpoint}.domain
-            ];
+            endpoints.${srv.endpoint} = { };
 
             volumes."db" = {
               path = "/var/lib/step-ca/db";
@@ -190,12 +205,10 @@
               };
             };
 
-            secrets.${jail.static-ca.keySecret} = {
-              permissions = {
-                owner = "nginx";
-                group = "nginx";
-                mode = "0440";
-              };
+            mtls.permissions = {
+              owner = "nginx";
+              group = "nginx";
+              mode = "0440";
             };
 
             nixosModule = { pkgs, ... }: {
@@ -206,8 +219,8 @@
                 virtualHosts."_" = {
                   default = true;
                   onlySSL = true;
-                  sslCertificate = alloy.facts.${jail.static-ca.certFact}.path;
-                  sslCertificateKey = jail.secrets.${jail.static-ca.keySecret}.path;
+                  sslCertificate = jail.mtls.certPath;
+                  sslCertificateKey = jail.mtls.keyPath;
                   locations."/" = {
                     proxyPass = "https://127.0.0.1:8443";
                     recommendedProxySettings = true;
@@ -230,7 +243,7 @@
                   crt = alloy.facts.${srv.intermediate.certFact}.path;
                   key = jail.secrets.${srv.intermediate.keySecret}.path;
                   dnsNames = [
-                    srv.domain
+                    (lib.removeSuffix "." (alloy.dns.resolveNode srv.domain))
                   ];
                   logger.format = "text";
                   db = {
@@ -278,14 +291,14 @@
       };
     in
     {
-      options.services.step-ca = lib.mkOption {
+      options.services.ca = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
       };
 
       config =
         let
-          services = lib.pipe alloy.services.step-ca [
+          services = lib.pipe alloy.services.ca [
             (lib.filterAttrs (_: srv: srv.enable))
             (lib.mapAttrsToList mkService)
           ];
@@ -295,7 +308,6 @@
           generators.instances = lib.mkMerge (lib.map (s: s.generators.instances) services);
           endpoints = lib.mkMerge (lib.map (s: s.endpoints) services);
           tls.ca = lib.mkMerge (lib.map (s: s.tls.ca) services);
-          tls.pki = lib.mkMerge (lib.map (s: s.tls.pki or [ ]) services);
           facts = lib.mkMerge (lib.map (s: s.facts) services);
           secrets = lib.mkMerge (lib.map (s: s.secrets) services);
           jails = lib.mkMerge (lib.map (s: s.jails) services);

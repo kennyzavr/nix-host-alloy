@@ -9,8 +9,48 @@
     let
       alloy = config;
 
-      hostSubmodule = {
+      hostType = lib.types.submodule {
         options = alib.types.netMatchOpts;
+      };
+
+      routeSubmodule = { config, ... }: {
+        options = {
+          domain = lib.mkOption {
+            type = alib.types.zoneNode;
+          };
+          addDnsRecords = lib.mkOption {
+            default = true;
+            type = lib.types.bool;
+          };
+          downstream = {
+            http2 = lib.mkOption {
+              default = true;
+              type = lib.types.bool;
+            };
+            http3 = lib.mkOption {
+              default = false;
+              type = lib.types.bool;
+            };
+            tls.mode = lib.mkOption {
+              default = "none";
+              type = lib.types.enum [
+                "none"
+                "add"
+                "force"
+                "only"
+              ];
+            };
+            tls.cert = lib.mkOption {
+              default = null;
+              type = lib.types.nullOr lib.types.str;
+            };
+          };
+          upstream = {
+            endpoint = lib.mkOption {
+              type = lib.types.str;
+            };
+          };
+        };
       };
 
       serviceSubmodule = { name, ... }: {
@@ -19,17 +59,17 @@
             default = true;
             type = lib.types.bool;
           };
-          gateway = lib.mkOption {
-            default = name;
-            type = lib.types.str;
-          };
           allowedOverlays = lib.mkOption {
             default = [ ];
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
           };
           hosts = lib.mkOption {
             default = { };
-            type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
+            type = lib.types.attrsOf hostType;
+          };
+          routes = lib.mkOption {
+            default = { };
+            type = lib.types.attrsOf (lib.types.submodule routeSubmodule);
           };
         };
       };
@@ -37,12 +77,9 @@
       mkService =
         srvName: srv:
         let
-          gateway = alloy.gateways.${srv.gateway};
-          routes = gateway.http.routes;
-
-          allOverlays = lib.pipe routes [
+          allOverlays = lib.pipe srv.routes [
             (lib.mapAttrsToList (
-              _: route: lib.map (target: target.overlay) alloy.endpoints.${route.upstream.endpoint}.targets
+              _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
             ))
             lib.flatten
             lib.unique
@@ -54,47 +91,49 @@
               assertion =
                 srv.allowedOverlays != [ ]
                 -> lib.all (overlayName: builtins.elem overlayName srv.allowedOverlays) allOverlays;
-              message = "[Alloy] nginx '${srvName}': there are some endpoint targets with addresses outside of the allowed overlays";
+              message = "[Alloy] http-edge '${srvName}': there are some endpoint targets with addresses outside of the allowed overlays";
             }
             {
               assertion = srv.hosts != { };
-              message = "[Alloy] nginx '${srvName}': at least one host must be specified";
+              message = "[Alloy] http-edge '${srvName}': at least one host must be specified";
             }
           ]
           ++ (lib.flatten (
             lib.mapAttrsToList (hostName: hostCfg: [
               {
                 assertion = builtins.hasAttr hostName alloy.hosts;
-                message = "[Alloy] ngin '${srvName}': host '${hostName}' is unknown";
+                message = "[Alloy] http-edge '${srvName}': host '${hostName}' is unknown";
               }
               {
                 assertion = builtins.hasAttr hostName alloy.hosts -> (hostCfg.ipv4 != null || hostCfg.ipv6 != null);
-                message = "[Alloy] nginx '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
+                message = "[Alloy] http-edge '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
               }
             ]) srv.hosts
           ));
 
-          gateways.${srv.gateway}.http.entrypoints = lib.mapAttrs (_: hostCfg: {
-            inherit (hostCfg) ipv4 ipv6;
-          }) srv.hosts;
-
-          hosts = lib.mapAttrs (hostName: hostCfg: {
-            nixosModule = {
-              networking.firewall.interfaces = lib.optionalAttrs (hostCfg.iface != null) {
-                ${hostCfg.iface}.allowedUDPPorts = [
-                  443
-                ];
-                ${hostCfg.iface}.allowedTCPPorts = [
-                  80
-                  443
-                ];
-              };
-            };
-          }) srv.hosts;
+          dns.records = lib.pipe srv.routes [
+            (lib.filterAttrs (_: route: route.addDnsRecords))
+            (lib.mapAttrsToList (
+              _: route:
+              lib.mapAttrsToList (
+                _: host:
+                [ ]
+                ++ (lib.optional (host.ipv4 != null) {
+                  inherit (route) domain;
+                  data.a = host.ipv4;
+                })
+                ++ (lib.optional (host.ipv6 != null) {
+                  inherit (route) domain;
+                  data.aaaa = host.ipv6;
+                })
+              ) srv.hosts
+            ))
+            lib.flatten
+          ];
 
           jails = lib.mapAttrs' (
             hostName: hostCfg:
-            lib.nameValuePair "nginx-${srvName}-${hostName}" (
+            lib.nameValuePair "http-edge-${srvName}-${hostName}" (
               { config, ... }:
               let
                 jail = config;
@@ -122,7 +161,7 @@
 
                 overlays = lib.genAttrs allOverlays (_: _: { });
 
-                acme.certs = lib.pipe routes [
+                tls.certs = lib.pipe srv.routes [
                   (lib.filterAttrs (_: r: r.downstream.tls.mode != "none" && r.downstream.tls.cert != null))
                   (lib.mapAttrsToList (
                     _: route: {
@@ -134,6 +173,12 @@
                   lib.mkMerge
                 ];
 
+                mtls.permissions = {
+                  owner = "nginx";
+                  group = "nginx";
+                  mode = "0640";
+                };
+
                 nixosModule = { pkgs, ... }: {
                   networking.firewall.allowedUDPPorts = [
                     443
@@ -144,7 +189,7 @@
                   ];
 
                   users.users.nginx = {
-                    extraGroups = lib.mapAttrsToList (_: cert: cert.group) jail.acme.certs;
+                    extraGroups = lib.mapAttrsToList (_: cert: cert.group) jail.tls.certs;
                   };
 
                   services.nginx = {
@@ -175,32 +220,42 @@
                             '') endpoint.targets}
                           }
                         ''
-                      ) routes}
+                      ) srv.routes}
                     '';
                     virtualHosts = lib.mapAttrs' (
                       routeName: route:
                       lib.nameValuePair "route-${routeName}" (
                         let
-                          isSsl = route.downstream.tls.mode != "none";
-                          acmeCert = jail.acme.certs.${route.downstream.tls.cert};
+                          isTls = route.downstream.tls.mode != "none";
+                          cert = jail.tls.certs.${route.downstream.tls.cert};
+                          endpoint = alloy.endpoints.${route.upstream.endpoint};
                         in
                         {
                           serverName = alloy.dns.resolveNode route.domain;
                           addSSL = route.downstream.tls.mode == "add";
                           onlySSL = route.downstream.tls.mode == "only";
                           forceSSL = route.downstream.tls.mode == "force";
-                          sslCertificate = lib.mkIf isSsl acmeCert.certPath;
-                          sslCertificateKey = lib.mkIf isSsl acmeCert.keyPath;
+                          sslCertificate = lib.mkIf isTls cert.certPath;
+                          sslCertificateKey = lib.mkIf isTls cert.keyPath;
                           http2 = route.downstream.http2;
                           http3 = route.downstream.http3;
                           quic = route.downstream.http3;
                           locations."/" = {
                             recommendedProxySettings = true;
-                            proxyPass = "${if route.upstream.tls.enable then "https" else "http"}://route-${routeName}";
+                            proxyPass = "https://route-${routeName}";
                           };
+                          extraConfig = ''
+                            proxy_ssl_certificate ${jail.mtls.certPath};
+                            proxy_ssl_certificate_key ${jail.mtls.keyPath};
+
+                            proxy_ssl_trusted_certificate ${alloy.mtls.certPath};
+                            proxy_ssl_verify on;
+                            proxy_ssl_verify_depth 1;
+                            proxy_ssl_name ${endpoint.domain};
+                          '';
                         }
                       )
-                    ) routes;
+                    ) srv.routes;
                   };
                 };
               }
@@ -209,23 +264,22 @@
         };
     in
     {
-      options.services.nginx = lib.mkOption {
+      options.services.http-edge = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
       };
 
       config =
         let
-          services = lib.pipe alloy.services.nginx [
+          services = lib.pipe alloy.services.http-edge [
             (lib.filterAttrs (_: srv: srv.enable))
             (lib.mapAttrsToList mkService)
           ];
         in
         {
           assertions = lib.mkMerge (lib.map (s: s.assertions) services);
-          gateways = lib.mkMerge (lib.map (s: s.gateways) services);
-          hosts = lib.mkMerge (lib.map (s: s.hosts) services);
           jails = lib.mkMerge (lib.map (s: s.jails) services);
+          dns = lib.mkMerge (lib.map (s: s.dns) services);
         };
     };
 }

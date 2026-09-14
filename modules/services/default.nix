@@ -1,15 +1,14 @@
 {
   imports = [
-    # ./knot.nix
-    # ./knot-acme.nix
-    # ./knot-resolver.nix
-    # ./dnsdist.nix
-    # ./nginx.nix
-    # ./step-ca.nix
-    # ./smtp-relays.nix
-    # ./tcp-gateways.nix
-    # ./postbox.nix
-    # ./haproxy.nix
+    ./dns-edge.nix
+    ./dns-auth.nix
+    ./dns-acme.nix
+    ./dns-resolver.nix
+    ./http-edge.nix
+    ./smtp-edge.nix
+    ./tls-edge.nix
+    ./postbox.nix
+    ./ca.nix
   ];
 
   flake.alloyModules.services = { };

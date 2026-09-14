@@ -53,6 +53,10 @@
             port = lib.mkOption {
               type = lib.types.port;
             };
+            proxyv2 = lib.mkOption {
+              default = false;
+              type = lib.types.bool;
+            };
             overlays = lib.mkOption {
               type = lib.types.attrsOf (lib.types.submodule { });
               readOnly = true;

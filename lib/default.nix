@@ -137,26 +137,12 @@ in
       };
     };
 
-    types.serverEndpoint = endpoints: lib.types.attrTag {
+    types.serverEndpoint = lib.types.attrTag {
       endpoint = lib.mkOption {
         type = lib.types.str;
       };
       address = lib.mkOption {
         type = lib.types.str;
-      };
-      __toString = lib.mkOption {
-        type = lib.types.unspecified;
-        readOnly = true;
-        internal = true;
-        default =
-          server:
-          if server ? endpoint then
-            let
-              endpoint = endpoints.${server.endpoint};
-            in
-            "${endpoint.domain}:${toString endpoint.port}"
-          else
-            server.address;
       };
     };
 

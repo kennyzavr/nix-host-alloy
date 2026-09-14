@@ -11,12 +11,12 @@
 
       routeSubmodule = { config, name, ... }: {
         options = {
-          domains = lib.mkOption {
-            type = lib.types.listOf alib.types.zoneNode;
+          domain = lib.mkOption {
+            type = alib.types.zoneNode;
           };
           postmaster = lib.mkOption {
             type = lib.types.str;
-            default = "postmaster@${alloy.dns.resolveNode (builtins.head config.domains)}";
+            default = "postmaster@${alloy.dns.resolveNode config.domain}";
           };
           upstream.endpoint = lib.mkOption {
             type = lib.types.str;
@@ -37,7 +37,7 @@
           endpoint = lib.mkOption {
             type = lib.types.str;
             readOnly = true;
-            default = "smtp-relay-${name}";
+            default = "smtp-edge-${name}";
           };
           hostname = lib.mkOption {
             type = alib.types.zoneNode;
@@ -90,17 +90,17 @@
               ];
             };
             privKeySecret = lib.mkOption {
-              default = "smtp-relays/${name}/dkim/pub-key";
+              default = "smtp-edge/${name}/dkim/pub.key";
               readOnly = true;
               type = lib.types.str;
             };
             pubKeyFact = lib.mkOption {
-              default = "smtp-relays/${name}/dkim/priv-key";
+              default = "smtp-edge/${name}/dkim/priv.key";
               readOnly = true;
               type = lib.types.str;
             };
             keyGenerator = lib.mkOption {
-              default = "smtp-relays/${name}/dkim";
+              default = "smtp-edge/${name}/dkim";
               readOnly = true;
               type = lib.types.str;
             };
@@ -115,7 +115,7 @@
       };
     in
     {
-      options.services.smtp-relays = lib.mkOption {
+      options.services.smtp-edge = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
       };
@@ -137,29 +137,29 @@
               assertions = [
                 {
                   assertion = alib.types.dns.label.check srvName;
-                  message = "[Alloy] smtp-relay name '${srvName}' must be valid dns label.";
+                  message = "[Alloy] smtp-edge name '${srvName}' must be valid dns label.";
                 }
                 {
                   assertion =
                     srv.allowedOverlays != [ ]
                     -> lib.all (overlayName: builtins.elem overlayName srv.allowedOverlays) allOverlays;
-                  message = "[Alloy] smtp-relay '${srvName}': there are some endpoint targets with addresses outside of the allowed overlays";
+                  message = "[Alloy] smtp-edge '${srvName}': there are some endpoint targets with addresses outside of the allowed overlays";
                 }
                 {
                   assertion = srv.hosts != { };
-                  message = "[Alloy] smtp-relay '${srvName}': at least one host must be specified";
+                  message = "[Alloy] smtp-edge '${srvName}': at least one host must be specified";
                 }
                 {
                   assertion = srv.routes != { };
-                  message = "[Alloy] smtp-relay '${srvName}': at least one route must be specified";
+                  message = "[Alloy] smtp-edge '${srvName}': at least one route must be specified";
                 }
                 {
                   assertion = srv.explicitTLS.mode != "none" -> srv.explicitTLS.cert != null;
-                  message = "[Alloy] smtp-relay '${srvName}' specifies explicitTLS.mode '${srv.explicitTLS.mode}' but explicitTLS.cert is not set. You must specify a valid certificate reference in 'explicitTLS.cert'.";
+                  message = "[Alloy] smtp-edge '${srvName}' specifies explicitTLS.mode '${srv.explicitTLS.mode}' but explicitTLS.cert is not set. You must specify a valid certificate reference in 'explicitTLS.cert'.";
                 }
                 {
                   assertion = (srv.explicitTLS.cert != null) -> builtins.hasAttr srv.explicitTLS.cert alloy.tls.certs;
-                  message = "[Alloy] smtp-relay '${srvName}' explicitTLS.cert refers to an unknown TLS certificate '${srv.explicitTLS.cert}'. Please ensure it is defined in 'config.tls.certs'.";
+                  message = "[Alloy] smtp-edge '${srvName}' explicitTLS.cert refers to an unknown TLS certificate '${srv.explicitTLS.cert}'. Please ensure it is defined in 'config.tls.certs'.";
                 }
                 {
                   assertion =
@@ -167,18 +167,18 @@
                     -> (srv.explicitTLS.cert != null)
                     -> builtins.hasAttr srv.explicitTLS.cert alloy.tls.certs
                     -> builtins.elem srv.hostname alloy.tls.certs.${srv.explicitTLS.cert}.domains;
-                  message = "[Alloy] smtp-relay '${srvName}' explicitTLS.cert does not contain hostname of the smtp-relay";
+                  message = "[Alloy] smtp-edge '${srvName}' explicitTLS.cert does not contain hostname of the smtp-edge";
                 }
               ]
               ++ (lib.flatten (
                 lib.mapAttrsToList (hostName: hostCfg: [
                   {
                     assertion = builtins.hasAttr hostName alloy.hosts;
-                    message = "[Alloy] smtp-relay '${srvName}': host '${hostName}' is unknown";
+                    message = "[Alloy] smtp-edge '${srvName}': host '${hostName}' is unknown";
                   }
                   {
                     assertion = builtins.hasAttr hostName alloy.hosts -> (hostCfg.ipv4 != null || hostCfg.ipv6 != null);
-                    message = "[Alloy] smtp-relay '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
+                    message = "[Alloy] smtp-edge '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
                   }
                 ]) srv.hosts
               ))
@@ -186,15 +186,11 @@
                 lib.mapAttrsToList (routeName: route: [
                   {
                     assertion = alib.types.dns.label.check routeName;
-                    message = "[Alloy] smtp-relay '${srvName}': route name '${routeName}' must be valid dns label.";
-                  }
-                  {
-                    assertion = route.domains != [ ];
-                    message = "[Alloy] smtp-relay '${srvName}': route '${routeName}' must contains at least one domain.";
+                    message = "[Alloy] smtp-edge '${srvName}': route name '${routeName}' must be valid dns label.";
                   }
                   {
                     assertion = builtins.hasAttr route.upstream.endpoint alloy.endpoints;
-                    message = "[Alloy] smtp-relay '${srvName}': route '${routeName}' refers to an unknown endpoint '${route.upstream.endpoint}'.";
+                    message = "[Alloy] smtp-edge '${srvName}': route '${routeName}' refers to an unknown endpoint '${route.upstream.endpoint}'.";
                   }
                 ]) srv.routes
               ));
@@ -216,30 +212,27 @@
                   ) srv.hosts)
                   ++ (lib.mapAttrsToList (
                     _: route:
-                    lib.map (
-                      domain:
-                      [
-                        {
-                          domain = domain;
-                          data.mx = {
-                            preference = 10;
-                            exchange = alloy.dns.resolveNode srv.hostname;
-                          };
-                        }
-                        {
-                          domain = domain;
-                          data.txt = "v=spf1 mx -all";
-                        }
-                      ]
-                      ++ (lib.optional srv.dkim.enable {
-                        domain = alib.extendZoneNode domain "relay._domainkey";
-                        data.txt = "v=DKIM1; k=rsa; p=${lib.removeSuffix "\n" alloy.facts.${srv.dkim.pubKeyFact}.value}";
-                      })
-                      ++ (lib.optional srv.dkim.enable {
-                        domain = alib.extendZoneNode domain "_dmarc";
-                        data.txt = "v=DMARC1; p=${srv.dkim.dmarcPolicy}; rua=mailto:${route.postmaster}; ruf=mailto:${route.postmaster}";
-                      })
-                    ) route.domains
+                    [
+                      {
+                        domain = route.domain;
+                        data.mx = {
+                          preference = 10;
+                          exchange = alloy.dns.resolveNode srv.hostname;
+                        };
+                      }
+                      {
+                        domain = route.domain;
+                        data.txt = "v=spf1 mx -all";
+                      }
+                    ]
+                    ++ (lib.optional srv.dkim.enable {
+                      domain = alib.extendZoneNode route.domain "relay._domainkey";
+                      data.txt = "v=DKIM1; k=rsa; p=${lib.removeSuffix "\n" alloy.facts.${srv.dkim.pubKeyFact}.value}";
+                    })
+                    ++ (lib.optional srv.dkim.enable {
+                      domain = alib.extendZoneNode route.domain "_dmarc";
+                      data.txt = "v=DMARC1; p=${srv.dkim.dmarcPolicy}; rua=mailto:${route.postmaster}; ruf=mailto:${route.postmaster}";
+                    })
                   ) srv.routes)
                 )
               );
@@ -250,42 +243,35 @@
                   lib.mapAttrsToList (
                     hostName: _:
                     lib.map (overlayName: {
-                      ipv6 = alloy.jails."smtp-relay-${srvName}-${hostName}".overlays.${overlayName}.ipv6;
+                      ipv6 = alloy.jails."smtp-edge-${srvName}-${hostName}".overlays.${overlayName}.ipv6;
                       overlay = overlayName;
                     }) allOverlays
                   ) srv.hosts
                 );
               };
 
-              facts = lib.optionalAttrs srv.dkim.enable {
-                ${srv.dkim.pubKeyFact} = { };
-              };
-
-              secrets = lib.optionalAttrs srv.dkim.enable {
-                ${srv.dkim.privKeySecret} = { };
-              };
-
               generators.instances.${srv.dkim.keyGenerator} = {
                 enable = srv.dkim.enable;
                 tags = [
-                  "smtp-relays"
-                  "smtp-relays/${srvName}"
+                  "smtp-edge"
+                  "smtp-edge/${srvName}"
                 ];
+                facts.${srv.dkim.pubKeyFact} = { };
+                secrets.${srv.dkim.privKeySecret} = { };
                 package =
                   { pkgs, ... }:
                   pkgs.writeShellApplication {
-                    name = "smtp-relay-dkim-generator";
+                    name = "smtp-edge-dkim-generator";
                     runtimeInputs = [
                       pkgs.openssl
                       pkgs.coreutils
                       pkgs.gnugrep
                     ];
-                    # TODO: add generator skip feature (check delcared by a generator facts & secrets to exitsance)
                     text = ''
                       set -euo pipefail
 
                       priv=$(openssl genrsa 2048 2>/dev/null)
-                      pub=$(print "%s" "$priv" | openssl rsa -pubout -outform PEM 2>/dev/null | grep -v '^-'  | tr -d '\n' | tr -d '\r')
+                      pub=$(printf "%s" "$priv" | openssl rsa -pubout -outform PEM 2>/dev/null | grep -v '^-'  | tr -d '\n' | tr -d '\r')
 
                       "$ALLOY_BIN" facts set "${srv.dkim.pubKeyFact}" <<< "$pub"
                       "$ALLOY_BIN" secrets set "${srv.dkim.privKeySecret}" <<< "$priv"
@@ -295,7 +281,7 @@
 
               jails = lib.mapAttrs' (
                 hostName: hostCfg:
-                lib.nameValuePair "smtp-relay-${srvName}-${hostName}" (
+                lib.nameValuePair "smtp-edge-${srvName}-${hostName}" (
                   { config, ... }:
                   let
                     jail = config;
@@ -316,25 +302,21 @@
 
                     overlays = lib.genAttrs allOverlays (_: _: { });
 
-                    static-ca.domains = [
-                      alloy.endpoints.${srv.endpoint}.domain
-                    ];
+                    endpoints.${srv.endpoint} = { };
 
-                    acme.certs = lib.optionalAttrs (srv.explicitTLS.mode != "none" && srv.explicitTLS.cert != null) {
+                    mtls.permissions = {
+                      owner = "root";
+                      group = "postfix";
+                      mode = "0640";
+                    };
+
+                    tls.certs = lib.optionalAttrs (srv.explicitTLS.mode != "none" && srv.explicitTLS.cert != null) {
                       ${srv.explicitTLS.cert} = {
                         restartServices = [ "postfix.service" ];
                       };
                     };
-                    secrets = {
-                      ${jail.static-ca.keySecret} = {
-                        permissions = {
-                          owner = "root";
-                          group = "postfix";
-                          mode = "0640";
-                        };
-                      };
-                    }
-                    // (lib.optionalAttrs srv.dkim.enable {
+
+                    secrets = lib.optionalAttrs srv.dkim.enable {
                       ${srv.dkim.privKeySecret} = {
                         permissions = {
                           owner = "rspamd";
@@ -342,13 +324,13 @@
                           mode = "0640";
                         };
                       };
-                    });
+                    };
 
                     nixosModule =
                       { pkgs, config, ... }:
                       let
                         hasCert = srv.explicitTLS.mode != "none" && srv.explicitTLS.cert != null;
-                        certCfg = if hasCert then jail.acme.certs.${srv.explicitTLS.cert} else null;
+                        certCfg = if hasCert then jail.tls.certs.${srv.explicitTLS.cert} else null;
                         mkDomain = d: lib.removeSuffix "." (alloy.dns.resolveNode d);
                       in
                       {
@@ -426,7 +408,7 @@
                         users.users.postfix = {
                           isSystemUser = true;
                           group = "postfix";
-                          extraGroups = [ "rspamd" ] ++ (lib.mapAttrsToList (certName: cert: cert.group) jail.acme.certs);
+                          extraGroups = [ "rspamd" ] ++ (lib.mapAttrsToList (certName: cert: cert.group) jail.tls.certs);
                         };
 
                         systemd.services.postfix.wants = [ "network-online.target" ];
@@ -434,20 +416,13 @@
 
                         services.postfix = {
                           enable = true;
-                          transport = lib.pipe srv.routes [
-                            (lib.mapAttrsToList (
-                              routeName: route:
-                              lib.map (
-                                domain:
-                                let
-                                  endpoint = alloy.endpoints.${route.upstream.endpoint};
-                                in
-                                "${mkDomain domain} route_${routeName}:[${endpoint.domain}]:${toString endpoint.port}"
-                              ) route.domains
-                            ))
-                            lib.flatten
-                            (lib.concatStringsSep "\n")
-                          ];
+                          transport = lib.concatMapAttrsStringSep "\n" (
+                            routeName: route:
+                            let
+                              endpoint = alloy.endpoints.${route.upstream.endpoint};
+                            in
+                            "${mkDomain route.domain} route_${routeName}:[${endpoint.domain}]:${toString endpoint.port}"
+                          ) srv.routes;
                           settings.main = {
                             myhostname = mkDomain srv.hostname;
                             mydestination = "";
@@ -457,12 +432,8 @@
                               ))
                               lib.flatten
                             ];
-
                             smtpd_relay_restrictions = "permit_mynetworks, reject_unauth_destination";
-                            relay_domains = lib.pipe srv.routes [
-                              (lib.mapAttrsToList (_: route: lib.map mkDomain route.domains))
-                              lib.flatten
-                            ];
+                            relay_domains = lib.mapAttrsToList (_: route: mkDomain route.domain) srv.routes;
                           }
                           // (lib.optionalAttrs (srv.dkim.enable || srv.antivirus.enable) {
                             smtpd_milters = "unix:/run/rspamd/rspamd-milter.sock";
@@ -494,9 +465,9 @@
                               private = false;
                               command = "smtpd";
                               args = [
-                                "-o smtpd_tls_cert_file=${alloy.facts.${jail.static-ca.certFact}.path}"
-                                "-o smtpd_tls_key_file=${jail.secrets.${jail.static-ca.keySecret}.path}"
-                                "-o smtpd_tls_CAfile=${alloy.facts.${alloy.static-ca.certFact}.path}"
+                                "-o smtpd_tls_cert_file=${jail.mtls.certPath}"
+                                "-o smtpd_tls_key_file=${jail.mtls.keyPath}"
+                                "-o smtpd_tls_CAfile=${alloy.mtls.certPath}"
                                 "-o smtpd_tls_security_level=encrypt"
                                 "-o smtpd_tls_req_ccert=yes"
                                 "-o smtpd_client_restrictions=permit_mynetworks,reject"
@@ -509,9 +480,9 @@
                               type = "unix";
                               command = "smtp";
                               args = [
-                                "-o smtp_tls_cert_file=${alloy.facts.${jail.static-ca.certFact}.path}"
-                                "-o smtp_tls_key_file=${jail.secrets.${jail.static-ca.keySecret}.path}"
-                                "-o smtp_tls_CAfile=${alloy.facts.${alloy.static-ca.certFact}.path}"
+                                "-o smtp_tls_cert_file=${jail.mtls.certPath}"
+                                "-o smtp_tls_key_file=${jail.mtls.keyPath}"
+                                "-o smtp_tls_CAfile=${alloy.mtls.certPath}"
                                 "-o smtp_tls_security_level=encrypt"
                               ];
                             }
@@ -523,7 +494,7 @@
               ) srv.hosts;
             };
 
-          services = lib.pipe alloy.services.smtp-relays [
+          services = lib.pipe alloy.services.smtp-edge [
             (lib.filterAttrs (_: srv: srv.enable))
             (lib.mapAttrsToList mkService)
           ];
@@ -531,8 +502,8 @@
         {
           assertions = lib.mkMerge (lib.map (s: s.assertions) services);
           generators = lib.mkMerge (lib.map (s: s.generators) services);
-          secrets = lib.mkMerge (lib.map (s: s.secrets) services);
-          facts = lib.mkMerge (lib.map (s: s.facts) services);
+          secrets = lib.mkMerge (lib.map (s: s.secrets or {}) services);
+          facts = lib.mkMerge (lib.map (s: s.facts or {}) services);
           dns = lib.mkMerge (lib.map (s: s.dns) services);
           endpoints = lib.mkMerge (lib.map (s: s.endpoints) services);
           jails = lib.mkMerge (lib.map (s: s.jails) services);

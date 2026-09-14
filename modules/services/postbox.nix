@@ -14,18 +14,18 @@
           loginFact = lib.mkOption {
             # TODO check value format
             type = lib.types.str;
-            readOnly = true;
-            default = "postboxes/${srvName}/users/${name}/login";
+            # readOnly = true;
+            default = "postbox/${srvName}/users/${name}/login";
           };
           hashedPasswdSecret = lib.mkOption {
             type = lib.types.str;
-            readOnly = true;
-            default = "postboxes/${srvName}/users/${name}/hashed-passwd";
+            # readOnly = true;
+            default = "postbox/${srvName}/users/${name}/hashed-passwd";
           };
           hashedPasswdGenerator = lib.mkOption {
             type = lib.types.str;
-            readOnly = true;
-            default = "postboxes/${srvName}/users/${name}/hashed-passwd";
+            # readOnly = true;
+            default = "postbox/${srvName}/users/${name}/hashed-passwd";
           };
         };
       };
@@ -50,7 +50,7 @@
             };
           };
           smtps = {
-            proxyV2 = lib.mkOption {
+            proxyv2 = lib.mkOption {
               default = true;
               type = lib.types.bool;
             };
@@ -61,7 +61,7 @@
             };
           };
           imap = {
-            proxyV2 = lib.mkOption {
+            proxyv2 = lib.mkOption {
               default = true;
               type = lib.types.bool;
             };
@@ -72,10 +72,6 @@
             };
           };
           https = {
-            proxyV2 = lib.mkOption {
-              default = false;
-              type = lib.types.bool;
-            };
             endpoint = lib.mkOption {
               type = lib.types.str;
               readOnly = true;
@@ -114,14 +110,18 @@
           generators.instances = lib.mapAttrs' (
             userName: user:
             lib.nameValuePair user.hashedPasswdGenerator {
-              secrets.${user.hashedPasswdSecret} = {};
+              tags = [
+                "postbox"
+                "postbox/${srvName}"
+              ];
+              secrets.${user.hashedPasswdSecret} = { };
               package =
                 { pkgs, ... }:
                 pkgs.writeShellScriptBin "postbox-gen-passwd" ''
-                    read -r -s -p "Enter password for ${userName}: " pass
-                    echo
-                    hash=$(printf "%s\n" "$pass" | ${pkgs.mkpasswd}/bin/mkpasswd -m sha-512 -s)
-                    "$ALLOY_BIN" secrets set "${user.hashedPasswdSecret}" <<< "$hash"
+                  read -r -s -p "Enter password for ${userName}: " pass
+                  echo
+                  hash=$(printf "%s\n" "$pass" | ${pkgs.mkpasswd}/bin/mkpasswd -m sha-512 -s)
+                  "$ALLOY_BIN" secrets set "${user.hashedPasswdSecret}" <<< "$hash"
                 '';
             }
           ) srv.users;
@@ -137,6 +137,7 @@
 
             ${srv.smtps.endpoint} = {
               port = 465;
+              inherit (srv.smtps) proxyv2;
               targets = lib.mapAttrsToList (overlayName: _: {
                 ipv6 = alloy.jails."postbox-${srvName}".overlays.${overlayName}.ipv6;
                 overlay = overlayName;
@@ -145,6 +146,7 @@
 
             ${srv.imap.endpoint} = {
               port = 993;
+              inherit (srv.imap) proxyv2;
               targets = lib.mapAttrsToList (overlayName: _: {
                 ipv6 = alloy.jails."postbox-${srvName}".overlays.${overlayName}.ipv6;
                 overlay = overlayName;
@@ -170,12 +172,10 @@
 
               overlays = lib.mapAttrs (_: _: { }) srv.overlays;
 
-              static-ca.domains = [
-                alloy.endpoints.${srv.smtp.endpoint}.domain
-                alloy.endpoints.${srv.smtps.endpoint}.domain
-                alloy.endpoints.${srv.imap.endpoint}.domain
-                alloy.endpoints.${srv.https.endpoint}.domain
-              ];
+              endpoints.${srv.smtp.endpoint} = { };
+              endpoints.${srv.smtps.endpoint} = { };
+              endpoints.${srv.imap.endpoint} = { };
+              endpoints.${srv.https.endpoint} = { };
 
               volumes."dovecot" = {
                 path = "/var/lib/dovecot";
@@ -187,24 +187,20 @@
                 };
               };
 
-              secrets =
-                lib.pipe srv.users [
-                  (lib.mapAttrsToList (
-                    userName: user: {
-                      ${user.hashedPasswdSecret} = { };
-                    }
-                  ))
-                  lib.mkMerge
-                ]
-                // {
-                  ${jail.static-ca.keySecret} = {
-                    permissions = {
-                      owner = "root";
-                      group = "postfix";
-                      mode = "0640";
-                    };
-                  };
-                };
+              mtls.permissions = {
+                owner = "root";
+                group = "postfix";
+                mode = "0640";
+              };
+
+              secrets = lib.pipe srv.users [
+                (lib.mapAttrsToList (
+                  userName: user: {
+                    ${user.hashedPasswdSecret} = { };
+                  }
+                ))
+                lib.mkMerge
+              ];
 
               secretTemplates."userdb" = {
                 template = lib.concatMapAttrsStringSep "\n" (
@@ -241,17 +237,17 @@
                         addr = "[::]";
                         port = 443;
                         ssl = true;
-                        proxyProtocol = srv.https.proxyV2;
                       }
                     ];
-                    sslCertificate = alloy.facts.${jail.static-ca.certFact}.path;
-                    sslCertificateKey = jail.secrets.${jail.static-ca.keySecret}.path;
-                    
-                    locations."/mail/config-v1.1.xml".alias = pkgs.writeText "autoconfig.xml" ''
+                    sslCertificate = jail.mtls.certPath;
+                    sslCertificateKey = jail.mtls.keyPath;
+
+                    locations."= /mail/config-v1.1.xml".alias = pkgs.writeText "autoconfig.xml" ''
                       <?xml version="1.0" encoding="UTF-8"?>
                       <clientConfig version="1.1">
                         <emailProvider id="${mkDomain srv.domain}">
                           <domain>${mkDomain srv.domain}</domain>
+                          ${lib.concatMapStringsSep "\n      " (d: "<domain>${mkDomain d}</domain>") srv.extraDomains}
                           <displayName>${mkDomain srv.domain} Mail</displayName>
                           <displayShortName>${mkDomain srv.domain}</displayShortName>
                           <incomingServer type="imap">
@@ -272,7 +268,7 @@
                       </clientConfig>
                     '';
 
-                    locations."/autodiscover/autodiscover.xml" = {
+                    locations."= /autodiscover/autodiscover.xml" = {
                       extraConfig = ''
                         error_page 405 =200 $uri;
                       '';
@@ -311,7 +307,7 @@
                       '';
                     };
 
-                    locations."/.well-known/mta-sts.txt".alias = pkgs.writeText "mta-sts.txt" ''
+                    locations."= /.well-known/mta-sts.txt".alias = pkgs.writeText "mta-sts.txt" ''
                       version: STSv1
                       mode: enforce
                       mx: ${mkDomain srv.domain}
@@ -343,6 +339,8 @@
                           "root@${mkDomain domain} ${admin}@${mkDomain srv.domain}"
                         ]
                       ))
+                      lib.flatten
+                      (lib.concatStringsSep "\n")
                     ]
                   );
                   settings.main = {
@@ -355,14 +353,14 @@
                     virtual_transport = "lmtp:unix:/run/dovecot2/lmtp";
                     relayhost = [ "[${relayEndpoint.domain}]:${toString relayEndpoint.port}" ];
 
-                    smtpd_tls_cert_file = alloy.facts.${jail.static-ca.certFact}.path;
-                    smtpd_tls_key_file = jail.secrets.${jail.static-ca.keySecret}.path;
-                    smtpd_tls_CAfile = alloy.facts.${alloy.static-ca.certFact}.path;
+                    smtpd_tls_cert_file = jail.mtls.certPath;
+                    smtpd_tls_key_file = jail.mtls.keyPath;
+                    smtpd_tls_CAfile = alloy.mtls.certPath;
                     smtpd_tls_security_level = "encrypt";
 
-                    smtp_tls_cert_file = alloy.facts.${jail.static-ca.certFact}.path;
-                    smtp_tls_key_file = jail.secrets.${jail.static-ca.keySecret}.path;
-                    smtp_tls_CAfile = alloy.facts.${alloy.static-ca.certFact}.path;
+                    smtp_tls_cert_file = jail.mtls.certPath;
+                    smtp_tls_key_file = jail.mtls.keyPath;
+                    smtp_tls_CAfile = alloy.mtls.certPath;
                     smtp_tls_security_level = "encrypt";
                   };
                   settings.master = {
@@ -390,7 +388,7 @@
                         "-o smtpd_sasl_path=/run/dovecot2/auth"
                         "-o smtpd_client_restrictions=permit_sasl_authenticated,reject"
                       ]
-                      ++ lib.optional srv.smtps.proxyV2 "-o smtpd_upstream_proxy_protocol=haproxy";
+                      ++ lib.optional srv.smtps.proxyv2 "-o smtpd_upstream_proxy_protocol=haproxy";
                     };
                   };
                 };
@@ -413,9 +411,9 @@
                     mail_path = "/var/lib/dovecot/mail/%{user | username}";
 
                     ssl = "required";
-                    ssl_server_cert_file = alloy.facts.${jail.static-ca.certFact}.path;
-                    ssl_server_key_file = jail.secrets.${jail.static-ca.keySecret}.path;
-                    ssl_server_ca_file = alloy.facts.${alloy.static-ca.certFact}.path;
+                    ssl_server_cert_file = jail.mtls.certPath;
+                    ssl_server_key_file = jail.mtls.keyPath;
+                    ssl_server_ca_file = alloy.mtls.certPath;
                     ssl_server_request_client_cert = true;
 
                     haproxy_trusted_networks = lib.mapAttrsToList (
@@ -441,7 +439,7 @@
                         "inet_listener imaps" = {
                           port = 993;
                           ssl = "yes";
-                          haproxy = if srv.imap.proxyV2 then "yes" else "no";
+                          haproxy = if srv.imap.proxyv2 then "yes" else "no";
                         };
                         "inet_listener imap" = {
                           port = 0;

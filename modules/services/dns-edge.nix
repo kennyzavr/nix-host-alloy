@@ -13,15 +13,25 @@
         options = alib.types.netMatchOpts;
       };
 
+      routeSubmodule = { name, ... }: {
+        options = {
+          zone = lib.mkOption {
+            default = name;
+            type = lib.types.str;
+          };
+          upstream = {
+            endpoint = lib.mkOption {
+              type = lib.types.str;
+            };
+          };
+        };
+      };
+
       serviceSubmodule = { config, name, ... }: {
         options = {
           enable = lib.mkOption {
             default = true;
             type = lib.types.bool;
-          };
-          gateway = lib.mkOption {
-            default = name;
-            type = lib.types.str;
           };
           allowedOverlays = lib.mkOption {
             default = [ ];
@@ -31,29 +41,28 @@
             default = { };
             type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
           };
+          routes = lib.mkOption {
+            default = { };
+            type = lib.types.attrsOf (lib.types.submodule routeSubmodule);
+          };
         };
       };
 
       mkService =
         srvName: srv:
         let
-          gateway = alloy.gateways.${srv.gateway};
-          routes = gateway.dns.routes;
-
-          allOverlays = lib.pipe routes [
+          allOverlays = lib.pipe srv.routes [
             (lib.mapAttrsToList (
-              _: route: lib.map (target: target.overlay) alloy.endpoints.${route.upstream.endpoint}.targets
+              _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
             ))
             lib.flatten
             lib.unique
           ];
 
-          suffixes = lib.pipe routes [
-            (lib.mapAttrsToList (
-              routeName: route: lib.map (suffix: { inherit routeName route suffix; }) route.suffixes
-            ))
-            lib.flatten
-            (lib.sort (a: b: builtins.stringLength a.suffix > builtins.stringLength b.suffix))
+          sortedRoutes = lib.pipe srv.routes [
+            (lib.mapAttrsToList (name: route: route // { inherit name; }))
+            (lib.imap (idx: route: route // { inherit idx; }))
+            (builtins.sort (a: b: builtins.stringLength alloy.dns.zones.${a.zone}.apex > builtins.stringLength alloy.dns.zones.${b.zone}.apex))
           ];
         in
         {
@@ -62,42 +71,102 @@
               assertion =
                 srv.allowedOverlays != [ ]
                 -> lib.all (overlayName: builtins.elem overlayName srv.allowedOverlays) allOverlays;
-              message = "[Alloy] dnsdist '${srvName}': there are some dns endpoint targets with addresses outside of the allowed overlays";
+              message = "[Alloy] dns-edge '${srvName}': there are some dns endpoint targets with addresses outside of the allowed overlays";
             }
             {
               assertion = srv.hosts != { };
-              message = "[Alloy] dnsdist '${srvName}': at least one host must be specified";
+              message = "[Alloy] dns-edge '${srvName}': at least one host must be specified";
             }
           ]
           ++ (lib.flatten (
             lib.mapAttrsToList (hostName: hostCfg: [
               {
                 assertion = builtins.hasAttr hostName alloy.hosts;
-                message = "[Alloy] dnsdist '${srvName}': host '${hostName}' is unknown";
+                message = "[Alloy] dns-edge '${srvName}': host '${hostName}' is unknown";
               }
               {
                 assertion = builtins.hasAttr hostName alloy.hosts -> (hostCfg.ipv4 != null || hostCfg.ipv6 != null);
-                message = "[Alloy] dnsdist '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
+                message = "[Alloy] dns-edge '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
               }
             ]) srv.hosts
           ));
 
-          gateways.${srv.gateway}.dns.entrypoints = lib.mapAttrs (_: hostCfg: {
-            inherit (hostCfg) ipv4 ipv6;
-          }) srv.hosts;
+          dns.zones = lib.mapAttrs' (
+            _: route:
+            lib.nameValuePair route.zone {
+              nname = "ns1";
+              nameservers = lib.flatten (
+                lib.mapAttrsToList (
+                  _: host:
+                  [ ] ++ (lib.optional (host.ipv4 != null) host.ipv4) ++ (lib.optional (host.ipv6 != null) host.ipv6)
+                ) srv.hosts
+              );
+            }
+          ) srv.routes;
 
-          hosts = lib.mapAttrs (hostName: hostCfg: {
-            nixosModule = {
-              networking.firewall.interfaces = lib.optionalAttrs (hostCfg.iface != null) {
-                ${hostCfg.iface}.allowedUDPPorts = [ 53 ];
-                ${hostCfg.iface}.allowedTCPPorts = [ 53 ];
-              };
-            };
-          }) srv.hosts;
+          dns.records = lib.flatten (
+            lib.map (
+              route:
+              (lib.imap1 (
+                hostIdx: host:
+                let
+                  nsPrefix = "ns${toString hostIdx}";
+                  parentZone = alloy.dns.zones.${route.zone}.parentZone;
+                  zoneApex = lib.removeSuffix "." alloy.dns.zones.${route.zone}.apex;
+                  parentZoneApex = lib.removeSuffix "." alloy.dns.zones.${parentZone}.apex;
+                  subzone = lib.removeSuffix ".${parentZoneApex}" zoneApex;
+                in
+                [
+                  {
+                    domain = {
+                      zone = route.zone;
+                      name = "@";
+                    };
+                    data.ns = nsPrefix;
+                  }
+                ]
+                ++ (lib.optional (parentZone != null) {
+                  domain = {
+                    zone = parentZone;
+                    name = subzone;
+                  };
+                  data.ns = "${nsPrefix}.${subzone}";
+                })
+                ++ (lib.optional (host.ipv4 != null) {
+                  domain = {
+                    zone = route.zone;
+                    name = nsPrefix;
+                  };
+                  data.a = host.ipv4;
+                })
+                ++ (lib.optional (parentZone != null && host.ipv4 != null) {
+                  domain = {
+                    zone = parentZone;
+                    name = "${nsPrefix}.${subzone}";
+                  };
+                  data.a = host.ipv4;
+                })
+                ++ (lib.optional (host.ipv6 != null) {
+                  domain = {
+                    zone = route.zone;
+                    name = nsPrefix;
+                  };
+                  data.aaaa = host.ipv6;
+                })
+                ++ (lib.optional (parentZone != null && host.ipv6 != null) {
+                  domain = {
+                    zone = parentZone;
+                    name = "${nsPrefix}.${subzone}";
+                  };
+                  data.aaaa = host.ipv6;
+                })
+              ) (builtins.attrValues srv.hosts))
+            ) sortedRoutes
+          );
 
           jails = lib.mapAttrs' (
             hostName: hostCfg:
-            lib.nameValuePair "dnsdist-${hostName}" (
+            lib.nameValuePair "dns-edge-${hostName}" (
               { config, ... }:
               let
                 jail = config;
@@ -141,8 +210,8 @@
                         '::/0'
                       })
 
-                      ${lib.concatMapAttrsStringSep "\n" (
-                        routeName: route:
+                      ${lib.concatMapStringsSep "\n" (
+                        route:
                         let
                           endpoint = alloy.endpoints.${route.upstream.endpoint};
                         in
@@ -152,8 +221,8 @@
                             lib.optionalString (!target.down) ''
                               newServer({
                                 address = "[${target.ipv6}]:${toString endpoint.port}",
-                                pool = "${routeName}",
-                                name = "${routeName}-${toString targetIdx}",
+                                pool = "${route.name}",
+                                name = "${route.name}-${toString targetIdx}",
                                 order = ${toString (if target.backup then 2 else 1)},
                                 weight = ${toString target.weight}
                               })
@@ -169,15 +238,13 @@
                               "leastOutstanding"
                             else
                               "roundrobin"
-                          }, "${routeName}")
-                        ''
-                      ) routes}
+                          }, "${route.name}")
 
-                      ${lib.concatMapStringsSep "\n" ({ suffix, routeName, ... }: ''
-                        smn_${lib.replaceStrings [ "." "-" ] [ "_" "_" ] suffix} = newSuffixMatchNode()
-                        smn_${lib.replaceStrings [ "." "-" ] [ "_" "_" ] suffix}:add(newDNSName("${suffix}"))
-                        addAction(SuffixMatchNodeRule(smn_${lib.replaceStrings [ "." "-" ] [ "_" "_" ] suffix}), PoolAction("${routeName}"))
-                      '') suffixes}
+                          smn${toString route.idx} = newSuffixMatchNode()
+                          smn${toString route.idx}:add(newDNSName("${alloy.dns.zones.${route.zone}.apex}"))
+                          addAction(SuffixMatchNodeRule(smn${toString route.idx}), PoolAction("${route.name}"))
+                        ''
+                      ) sortedRoutes}
                     '';
                   };
                 };
@@ -187,22 +254,21 @@
         };
     in
     {
-      options.services.dnsdist = lib.mkOption {
+      options.services.dns-edge = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
       };
 
       config =
         let
-          services = lib.pipe alloy.services.dnsdist [
+          services = lib.pipe alloy.services.dns-edge [
             (lib.filterAttrs (_: srv: srv.enable))
             (lib.mapAttrsToList mkService)
           ];
         in
         {
           assertions = lib.mkMerge (lib.map (s: s.assertions) services);
-          gateways = lib.mkMerge (lib.map (s: s.gateways) services);
-          hosts = lib.mkMerge (lib.map (s: s.hosts) services);
+          dns = lib.mkMerge (lib.map (s: s.dns) services);
           jails = lib.mkMerge (lib.map (s: s.jails) services);
         };
     };

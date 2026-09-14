@@ -9,6 +9,16 @@
     let
       alloy = config;
 
+      serverToString =
+        server:
+        if server ? endpoint then
+          let
+            endpoint = alloy.endpoints.${server.endpoint};
+          in
+          "${endpoint.domain}:${toString endpoint.port}"
+        else
+          server.address;
+
       mkAssertions =
         req:
         lib.mkIf (req.gCert.src ? acme) (
@@ -19,8 +29,8 @@
             primaryZone = builtins.head zones;
           in
           {
-            assertions =
-              (lib.optional (ca.acme.url.server ? endpoint) (
+            assertions = (
+              lib.optional (ca.acme.url.server ? endpoint) (
                 let
                   missing = lib.pipe (alloy.endpoints.${ca.acme.url.server.endpoint}.targets) [
                     (lib.map (t: t.overlay))
@@ -31,23 +41,24 @@
                   assertion = missing == [ ];
                   message = "[Alloy] ${req.nodeType} '${req.nodeName}' missing acme url overlays for cert '${req.certName}'";
                 }
-              ))
-              ++ (lib.optionals (opts.challenge ? dns && opts.challenge.dns ? dnsupdate) [
-                {
-                  assertion =
-                    !(primaryZone.tls.acme.server ? endpoint)
-                    || (
-                      let
-                        missing = lib.pipe (alloy.endpoints.${primaryZone.tls.acme.server.endpoint}.targets) [
-                          (lib.map (t: t.overlay))
-                          (lib.filter (o: !(builtins.hasAttr o req.node.overlays)))
-                        ];
-                      in
-                      missing == [ ]
-                    );
-                  message = "[Alloy] ${req.nodeType} '${req.nodeName}' missing dnsupdate overlays for cert '${req.certName}'";
-                }
-              ]);
+              )
+            );
+            # ++ (lib.optionals (opts.challenge ? dns && opts.challenge.dns ? dnsupdate) [
+            #   {
+            #     assertion =
+            #       !(primaryZone.acme.server ? endpoint)
+            #       || (
+            #         let
+            #           missing = lib.pipe (alloy.endpoints.${primaryZone.acme.server.endpoint}.targets) [
+            #             (lib.map (t: t.overlay))
+            #             (lib.filter (o: !(builtins.hasAttr o req.node.overlays)))
+            #           ];
+            #         in
+            #         missing == [ ]
+            #       );
+            #     message = "[Alloy] ${req.nodeType} '${req.nodeName}' missing dnsupdate overlays for cert '${req.certName}'";
+            #   }
+            # ]);
           }
         );
 
@@ -85,6 +96,7 @@
                 nodeType = "Jail";
                 node = jail;
                 lCert = jail.tls.certs.${certName};
+                host = config;
               });
 
           mkHostInfrastructure =
@@ -122,8 +134,9 @@
                           DNSUPDATE_TSIG_KEY=${dnsOpts.tsigKey.name}
                           DNSUPDATE_TSIG_ALGORITHM=${dnsOpts.tsigKey.alg}
                           DNSUPDATE_TSIG_SECRET=${node.secrets.${dnsOpts.tsigKey.secret}.placeholder}
-                          DNSUPDATE_NAMESERVER=${toString primaryZone.tls.acme.server}
+                          DNSUPDATE_NAMESERVER=${serverToString dnsOpts.server}
                           DNSUPDATE_PROPAGATION_TIMEOUT=5
+                          DNSUPDATE_TTL=5
                         '';
                       };
                       nixosModule = {
@@ -137,11 +150,17 @@
                 in
                 lib.mkMerge [
                   {
-                    nixosModule = {
+                    nixosModule = { pkgs, ... }: {
+                      users.groups.${req.lCert.group} = {
+                        gid = req.lCert.gid;
+                      };
+                      systemd.services."acme-order-renew-tls-acme-${req.certName}" = {
+                        serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString (req.host.idx * 120)}";
+                      };
                       security.acme.acceptTerms = true;
                       security.acme.certs."tls-acme-${req.certName}" = {
                         email = opts.email;
-                        server = ca.acme.url;
+                        server = toString ca.acme.url;
                         domain = primaryDomain;
                         extraDomainNames = globalExtraDomains;
                         group = lib.mkForce req.lCert.group;
@@ -155,6 +174,11 @@
                         hostPath = "/var/lib/acme/tls-acme-${req.certName}";
                         mountPoint = "/var/lib/alloy/certs/${req.certName}";
                         isReadOnly = true;
+                      };
+                      config = {
+                        users.groups.${req.lCert.group} = {
+                          gid = req.lCert.gid;
+                        };
                       };
                     };
                   })
@@ -226,12 +250,15 @@
         certName:
         lib.types.submodule {
           options = {
+            server = lib.mkOption {
+              type = alib.types.serverEndpoint;
+            };
             tsigKey.alg = lib.mkOption {
-              type = lib.types.str;
+              type = alib.types.dns.name;
               default = "hmac-sha256.";
             };
             tsigKey.name = lib.mkOption {
-              type = lib.types.str;
+              type = alib.types.dns.name;
               default = "key.dnsupdate.acme.${certName}";
             };
             tsigKey.secret = lib.mkOption {
@@ -302,25 +329,15 @@
                   type = lib.types.str;
                 };
                 server = lib.mkOption {
-                  type = alib.types.serverEndpoint alloy.endpoints;
+                  type = alib.types.serverEndpoint;
                 };
                 __toString = lib.mkOption {
                   type = lib.types.unspecified;
                   readOnly = true;
                   internal = true;
-                  default = url: "${toString url.server}/${lib.removePrefix "/" url.path}";
+                  default = url: "https://${serverToString url.server}/${lib.removePrefix "/" url.path}";
                 };
               };
-            };
-          }
-        );
-      };
-
-      options.dns.zones = lib.mkOption {
-        type = lib.types.attrsOf (
-          lib.types.submodule {
-            options.tls.acme.server = lib.mkOption {
-              type = alib.types.serverEndpoint alloy.endpoints;
             };
           }
         );

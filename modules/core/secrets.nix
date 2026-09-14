@@ -317,7 +317,7 @@
           workspace.secrets = {
             baseDir = lib.mkOption {
               type = lib.types.str;
-              default = "secrets/hosts/${name}";
+              default = "${alloy.workspace.baseDir}/secrets/hosts/${name}";
             };
             basePath = lib.mkOption {
               type = lib.types.str;
@@ -363,7 +363,7 @@
           workspace.secrets = {
             baseDir = lib.mkOption {
               type = lib.types.str;
-              default = "secrets/jails/${name}";
+              default = "${alloy.workspace.baseDir}/secrets/jails/${name}";
             };
             basePath = lib.mkOption {
               type = lib.types.str;
@@ -433,7 +433,7 @@
         workspace.secrets = {
           baseDir = lib.mkOption {
             type = lib.types.str;
-            default = "secrets/masters";
+            default = "${alloy.workspace.baseDir}/secrets/masters";
           };
           age.keyPairs = lib.mkOption {
             default = [ ];

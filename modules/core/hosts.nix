@@ -57,6 +57,7 @@
                 networking.useNetworkd = true;
                 systemd.network.enable = true;
                 networking.nftables.enable = true;
+                networking.hostName = name;
 
                 boot.kernel.sysctl = {
                   "net.ipv4.ip_forward" = true;

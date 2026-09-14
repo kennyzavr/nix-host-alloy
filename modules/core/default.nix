@@ -14,12 +14,17 @@
     ./endpoints.nix
     ./state.nix
     ./volumes.nix
+    ./users.nix
   ];
 
   flake.alloyModules.core = { alib, lib, ... }: {
     options.workspace = {
       root = lib.mkOption {
         type = lib.types.path;
+      };
+      baseDir = lib.mkOption {
+        default = ".";
+        type = lib.types.str;
       };
     };
 

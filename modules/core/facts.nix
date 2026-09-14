@@ -80,7 +80,7 @@
         workspace.facts = {
           baseDir = lib.mkOption {
             type = lib.types.str;
-            default = "facts";
+            default = "${alloy.workspace.baseDir}/facts";
           };
         };
       };

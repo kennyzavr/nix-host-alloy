@@ -245,6 +245,7 @@
                             proxyPass = "https://route-${routeName}";
                           };
                           extraConfig = ''
+                            ${if endpoint.httpBuffering != false then "proxy_buffering on;" else "proxy_buffering off;"}
                             proxy_ssl_certificate ${jail.mtls.certPath};
                             proxy_ssl_certificate_key ${jail.mtls.keyPath};
 

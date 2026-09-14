@@ -54,8 +54,12 @@
               type = lib.types.port;
             };
             proxyv2 = lib.mkOption {
-              default = false;
-              type = lib.types.bool;
+              default = null;
+              type = lib.types.nullOr lib.types.bool;
+            };
+            httpBuffering = lib.mkOption {
+              default = null;
+              type = lib.types.nullOr lib.types.bool;
             };
             overlays = lib.mkOption {
               type = lib.types.attrsOf (lib.types.submodule { });

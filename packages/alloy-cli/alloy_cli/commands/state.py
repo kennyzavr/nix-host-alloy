@@ -15,7 +15,7 @@ def handle_show(args, cli: CLI, container: Container):
         from rich.syntax import Syntax
         formatted_json = json.dumps(container.db, indent=2, sort_keys=True)
         syntax = Syntax(formatted_json, "json", theme="ansi_dark", word_wrap=True)
-        cli._console.print(syntax)
+        cli.console.print(syntax)
 
 def register_parser(subparsers):
     parser = subparsers.add_parser("state", help="Inspect cluster state")

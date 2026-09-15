@@ -1,13 +1,13 @@
 { self, ... }: {
   imports = [
     ./core
-    ./services
+    # ./services
   ];
 
   flake.alloyModules.default = {
     imports = [
       self.alloyModules.core
-      self.alloyModules.services
+      # self.alloyModules.services
     ];
   };
 }

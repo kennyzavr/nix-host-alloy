@@ -11,6 +11,7 @@ from .commands import generators
 from .commands import hosts
 from .commands import jails
 from .commands import overlays
+from .commands import qemu
 from .commands import state as state_cmd
 
 
@@ -48,6 +49,7 @@ environment variables:
     hosts.register_parser(subparsers)
     jails.register_parser(subparsers)
     overlays.register_parser(subparsers)
+    qemu.register_parser(subparsers)
     state_cmd.register_parser(subparsers)
 
     args = parser.parse_args()

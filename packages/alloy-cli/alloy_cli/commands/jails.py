@@ -41,7 +41,7 @@ def handle_list(args, cli: CLI, container: Container):
             row.append(", ".join(ips) if ips else "-")
         table.add_row(*row)
 
-    cli._console.print(table)
+    cli.console.print(table)
 
 
 def handle_show(args, cli: CLI, container: Container):
@@ -75,7 +75,7 @@ def handle_show(args, cli: CLI, container: Container):
         for ho in jail_overlays:
             content.append(Text(f"  {ho.name}: ", style="cyan").append(ho.ipv6))
 
-    cli._console.print(Panel(Group(*content), title=f"Jail: [bold]{record.name}[/bold]", expand=False))
+    cli.console.print(Panel(Group(*content), title=f"Jail: [bold]{record.name}[/bold]", expand=False))
 
 def register_parser(subparsers):
     parser = subparsers.add_parser("jails", help="Manage jails")

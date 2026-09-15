@@ -1,4 +1,3 @@
-import argparse
 from ..cli import CLI
 from ..di import Container
 from .utils import resolve_force, resolve_add_to_git
@@ -79,7 +78,7 @@ def handle_list(args, cli: CLI, container: Container):
             str(len(record.keys)),
         )
 
-    cli._console.print(table)
+    cli.console.print(table)
 
 
 def handle_show(args, cli: CLI, container: Container):
@@ -91,7 +90,7 @@ def handle_show(args, cli: CLI, container: Container):
     from rich.panel import Panel
     from rich.console import Group
     from rich.text import Text
-    
+
     content = []
     content.append(Text(f"Fact Name: {record.fact_name}"))
     content.append(Text(f"Range: {record.min_value} - {record.max_value}"))
@@ -99,7 +98,9 @@ def handle_show(args, cli: CLI, container: Container):
     for k in sorted(record.keys):
         content.append(Text(f"  - {k}"))
 
-    cli._console.print(Panel(Group(*content), title=f"Index: [bold]{record.name}[/bold]", expand=False))
+    cli.console.print(
+        Panel(Group(*content), title=f"Index: [bold]{record.name}[/bold]", expand=False)
+    )
 
 
 def register_parser(subparsers):

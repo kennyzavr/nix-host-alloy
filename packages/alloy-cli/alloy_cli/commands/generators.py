@@ -165,9 +165,9 @@ def handle_list(args, cli: CLI, container: Container):
 
     tree = Tree("[bold]Generators[/bold]", guide_style="dim")
     render_tree_view(tree, all_gens, lambda g: g.name, render_leaf, flat=args.flat)
-    cli._console.print(tree)
+    cli.console.print(tree)
     
-    cli._console.print(f"──────────────────────────\n[dim]Total: {len(all_gens)} generators[/dim]")
+    cli.console.print(f"──────────────────────────\n[dim]Total: {len(all_gens)} generators[/dim]")
 
 
 def handle_show(args, cli: CLI, container: Container):
@@ -203,7 +203,7 @@ def handle_show(args, cli: CLI, container: Container):
         for f in record.facts:
             content.append(Text(f"  - {f}"))
 
-    cli._console.print(Panel(Group(*content), title=f"Generator: [bold]{record.name}[/bold]", expand=False))
+    cli.console.print(Panel(Group(*content), title=f"Generator: [bold]{record.name}[/bold]", expand=False))
 
 
 def register_parser(subparsers):

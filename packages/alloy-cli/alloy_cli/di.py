@@ -1,22 +1,36 @@
 from functools import lru_cache
+import os
+from pathlib import Path
 from .cli import CLI
 from .data.state import (
-    FactsRepository, MasterSecretsRepository, 
-    HostSecretsRepository, JailSecretsRepository, 
-    HostSecretsRepository, JailSecretsRepository, 
-    HostsRepository, JailsRepository, IndexesRepository,
-    GeneratorsRepository, OverlaysRepository,
-    HostOverlaysRepository, JailOverlaysRepository
+    FactsRepository,
+    MasterSecretsRepository,
+    HostSecretsRepository,
+    JailSecretsRepository,
+    HostSecretsRepository,
+    JailSecretsRepository,
+    HostsRepository,
+    JailsRepository,
+    IndexesRepository,
+    GeneratorsRepository,
+    OverlaysRepository,
+    HostOverlaysRepository,
+    JailOverlaysRepository,
+    QemuNetRepository,
+    QemuQuestRepository,
 )
 from .infrastructure.fs import FileSystemAdapter
 from .infrastructure.git import GitAdapter
 from .infrastructure.crypto import RageAdapter
 from .infrastructure.editor import EditorAdapter
 from .infrastructure.script_runner import ScriptRunnerAdapter
+from .infrastructure.qemu import QemuAdapter, VdeAdapter
 from .domain.facts import FactsService
 from .domain.secrets import SecretsService
 from .domain.indexes import IndexesService
 from .domain.generators import GeneratorsService
+from .domain.qemu import QemuService
+
 
 class Container:
     def __init__(self, cli: CLI, db: dict):
@@ -99,7 +113,7 @@ class Container:
             jails_repo=self.jails_repo,
             fs=self.fs,
             git=self.git,
-            rage=self.rage
+            rage=self.rage,
         )
 
     @property
@@ -111,8 +125,7 @@ class Container:
     @lru_cache(maxsize=1)
     def indexes_service(self) -> IndexesService:
         return IndexesService(
-            indexes_repo=self.indexes_repo,
-            facts_service=self.facts_service
+            indexes_repo=self.indexes_repo, facts_service=self.facts_service
         )
 
     @property
@@ -129,6 +142,50 @@ class Container:
     @lru_cache(maxsize=1)
     def generators_service(self) -> GeneratorsService:
         return GeneratorsService(
-            generators_repo=self.generators_repo,
-            script_runner=self.script_runner
+            generators_repo=self.generators_repo, script_runner=self.script_runner
+        )
+
+    @property
+    @lru_cache(maxsize=1)
+    def qemu_net_repo(self) -> QemuNetRepository:
+        return QemuNetRepository(self.db)
+
+    @property
+    @lru_cache(maxsize=1)
+    def qemu_quest_repo(self) -> QemuQuestRepository:
+        return QemuQuestRepository(self.db)
+
+    @property
+    @lru_cache(maxsize=1)
+    def qemu(self) -> QemuAdapter:
+        override = os.environ.get("ALLOY_QEMU_DIR")
+        if override:
+            vms_dir = Path(override)
+        else:
+            name = self.db.get("name", "default")
+            vms_dir = self.cli.root / ".alloy" / name / "vms"
+        return QemuAdapter(vms_dir)
+
+    @property
+    @lru_cache(maxsize=1)
+    def vde(self) -> VdeAdapter:
+        override = os.environ.get("ALLOY_QEMU_DIR")
+        name = self.db.get("name", "default")
+        if override:
+            vms_dir = Path(override)
+        else:
+            vms_dir = self.cli.root / ".alloy" / name / "vms"
+        return VdeAdapter(
+            alloy_name=name,
+            state_dir=vms_dir,
+        )
+
+    @property
+    @lru_cache(maxsize=1)
+    def qemu_quest_service(self) -> QemuService:
+        return QemuService(
+            quest_repo=self.qemu_quest_repo,
+            net_repo=self.qemu_net_repo,
+            qemu=self.qemu,
+            vde=self.vde,
         )

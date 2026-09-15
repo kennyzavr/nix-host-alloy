@@ -315,8 +315,8 @@ def handle_list(args, cli: CLI, container: Container):
                     lambda n, k, m: render_target_leaf(n, k, m, "host", h),
                     flat=args.flat,
                 )
-            cli._console.print(tree)
-            cli._console.print("")
+            cli.console.print(tree)
+            cli.console.print("")
 
         for j in jails_filter:
             tree = Tree(f"Jail: [bold]{j}[/bold] (Secrets)", guide_style="dim")
@@ -334,14 +334,14 @@ def handle_list(args, cli: CLI, container: Container):
                     lambda n, k, m: render_target_leaf(n, k, m, "jail", j),
                     flat=args.flat,
                 )
-            cli._console.print(tree)
-            cli._console.print("")
+            cli.console.print(tree)
+            cli.console.print("")
     else:
         tree = Tree("[bold]Master Secrets[/bold]", guide_style="dim")
         render_tree_view(
             tree, all_masters, lambda m: m.name, render_global_leaf, flat=args.flat
         )
-        cli._console.print(tree)
+        cli.console.print(tree)
 
     if hosts_filter or jails_filter:
         printed_hosts = set()
@@ -387,7 +387,7 @@ def handle_list(args, cli: CLI, container: Container):
             )
         )
 
-    cli._console.print(
+    cli.console.print(
         f"──────────────────────────\n[dim]Total: {total_masters} master secrets | {total_hosts} hosts targets | {total_jails} jail targets[/dim]"
     )
 
@@ -404,11 +404,12 @@ def handle_show(args, cli: CLI, container: Container):
     from rich.console import Group
     from rich.text import Text
     import os
-    
+
     def get_status(file_path):
         if container.fs.exists(file_path):
             stat = os.stat(container.fs.resolve(file_path))
             from datetime import datetime
+
             mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
             return f"✅ Present (Modified: {mtime})"
         return "❌ Missing"
@@ -420,7 +421,7 @@ def handle_show(args, cli: CLI, container: Container):
 
     host_targets = [s for s in service.host_secrets.find_all() if s.name == record.name]
     jail_targets = [s for s in service.jail_secrets.find_all() if s.name == record.name]
-    
+
     if not host_targets and not jail_targets:
         content.append(Text("\nTargets: None", style="dim"))
     else:
@@ -430,7 +431,11 @@ def handle_show(args, cli: CLI, container: Container):
         for js in sorted(jail_targets, key=lambda s: s.jail):
             content.append(Text(f"  [Jail] {js.jail}: {get_status(js.file)}"))
 
-    cli._console.print(Panel(Group(*content), title=f"Secret: [bold]{record.name}[/bold]", expand=False))
+    cli.console.print(
+        Panel(
+            Group(*content), title=f"Secret: [bold]{record.name}[/bold]", expand=False
+        )
+    )
 
 
 def register_parser(subparsers):

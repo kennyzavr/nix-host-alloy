@@ -1,37 +1,53 @@
 {
   imports = [
     ./hosts.nix
-    ./jails.nix
+    # ./jails.nix
     ./cli.nix
-    ./secrets.nix
-    ./facts.nix
-    ./generators.nix
-    ./indexes.nix
-    ./overlays.nix
-    ./tls
-    ./dns.nix
-    ./mtls.nix
-    ./endpoints.nix
+    # ./secrets.nix
+    # ./facts.nix
+    # ./generators.nix
+    # ./indexes.nix
+    # ./overlays.nix
+    # ./tls
+    # ./dns.nix
+    # ./mtls.nix
+    # ./endpoints.nix
     ./state.nix
-    ./volumes.nix
-    ./users.nix
+    # ./volumes.nix
+    # ./users.nix
+    # ./nets.nix
+    ./qemu.nix
   ];
 
-  flake.alloyModules.core = { alib, lib, ... }: {
-    options.workspace = {
-      root = lib.mkOption {
-        type = lib.types.path;
-      };
-      baseDir = lib.mkOption {
-        default = ".";
+  flake.alloyModules.core =
+    {
+      alib,
+      lib,
+      config,
+      ...
+    }:
+    {
+      options.name = lib.mkOption {
         type = lib.types.str;
       };
-    };
 
-    options.assertions = lib.mkOption {
-      type = lib.types.listOf alib.types.assertion;
-      default = [ ];
-      description = "List of assertions to validate the global configuration.";
+      options.workspace = {
+        root = lib.mkOption {
+          type = lib.types.path;
+        };
+        baseDir = lib.mkOption {
+          default = ".";
+          type = lib.types.str;
+        };
+      };
+
+      options.assertions = lib.mkOption {
+        type = lib.types.listOf alib.types.assertion;
+        default = [ ];
+      };
+
+      config._internal.state = { ... }: {
+        name = config.name;
+      };
     };
-  };
 }

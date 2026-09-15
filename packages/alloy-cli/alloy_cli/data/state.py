@@ -5,6 +5,7 @@ from .models import (
     HostSecretRecord,
     JailSecretRecord,
     IdentityRecord,
+    QemuNetRecord,
     RecipientRecord,
     HostRecord,
     JailRecord,
@@ -13,6 +14,8 @@ from .models import (
     OverlayRecord,
     HostOverlayRecord,
     JailOverlayRecord,
+    QemuQuestRecord,
+    QemuPortForwardRecord,
 )
 
 
@@ -127,11 +130,13 @@ class HostsRepository:
                 for r in self._db.get("hostSecretRecipients", [])
                 if r.get("host") == name
             ]
-            res.append(HostRecord(
-                name=name,
-                tags=item.get("tags", []),
-                recipients=recipients,
-            ))
+            res.append(
+                HostRecord(
+                    name=name,
+                    tags=item.get("tags", []),
+                    recipients=recipients,
+                )
+            )
         return res
 
     def find_by_name(self, name: str) -> Optional[HostRecord]:
@@ -154,12 +159,14 @@ class JailsRepository:
                 for r in self._db.get("jailSecretRecipients", [])
                 if r.get("jail") == name
             ]
-            res.append(JailRecord(
-                name=name,
-                host=item.get("host", ""),
-                tags=item.get("tags", []),
-                recipients=recipients,
-            ))
+            res.append(
+                JailRecord(
+                    name=name,
+                    host=item.get("host", ""),
+                    tags=item.get("tags", []),
+                    recipients=recipients,
+                )
+            )
         return res
 
     def find_by_name(self, name: str) -> Optional[JailRecord]:
@@ -225,6 +232,7 @@ class OverlaysRepository:
 
     def find_all(self) -> List[OverlayRecord]:
         from .models import OverlayLinkRecord
+
         res = []
         for item in self._db.get("overlays", []):
             links = []
@@ -284,3 +292,72 @@ class JailOverlaysRepository:
                     )
                 )
         return res
+
+
+class QemuNetRepository:
+    def __init__(self, db: dict):
+        self._db = db
+
+    def find_all(self) -> list[QemuNetRecord]:
+        return [
+            QemuNetRecord(net.get("name"), net.get("idx"))
+            for net in self._db.get("qemuNets", [])
+        ]
+
+
+class QemuQuestRepository:
+    def __init__(self, db: dict):
+        self._db = db
+
+    def find_all(self) -> List[QemuQuestRecord]:
+        from .models import QemuQuestNetRecord, QemuNetRecord, QemuPortForwardRecord
+
+        res = []
+        hosts_tags = {
+            h.get("name"): h.get("tags", []) for h in self._db.get("hosts", [])
+        }
+        for item in self._db.get("qemuQuests", []):
+            name = item.get("host", "")
+            path = item.get("path", "")
+            variant = item.get("variant")
+            variants = {}
+            if variant and path:
+                variants[variant] = path
+
+            nets = [
+                QemuQuestNetRecord(
+                    net=n.get("name", ""),
+                    iface=n.get("iface", ""),
+                    mac=n.get("mac", ""),
+                )
+                for n in item.get("nets", [])
+            ]
+
+            forward_ports = [
+                QemuPortForwardRecord(
+                    name=pf.get("name", ""),
+                    proto=pf.get("proto", "tcp"),
+                    host=pf.get("hostPort", 0),
+                    guest=pf.get("guestPort", 0),
+                )
+                for pf in item.get("forwardPorts", [])
+            ]
+
+            res.append(
+                QemuQuestRecord(
+                    name=name,
+                    tags=hosts_tags.get(name, []),
+                    path=path,
+                    nets=nets,
+                    forward_ports=forward_ports,
+                    variant=variant,
+                    variants=variants,
+                )
+            )
+        return res
+
+    def find_by_name(self, name: str) -> Optional[QemuQuestRecord]:
+        for item in self.find_all():
+            if item.name == name:
+                return item
+        return None

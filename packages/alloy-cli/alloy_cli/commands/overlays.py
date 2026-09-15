@@ -33,7 +33,7 @@ def handle_list(args, cli: CLI, container: Container):
             record.ipv6Prefix
         )
 
-    cli._console.print(table)
+    cli.console.print(table)
 
 def handle_show(args, cli: CLI, container: Container):
     record = container.overlays_repo.find_by_name(args.name)
@@ -68,7 +68,7 @@ def handle_show(args, cli: CLI, container: Container):
     sorted_hosts = sorted(list(hosts))
     if not sorted_hosts:
         content.append(Text("\nTopology: No links defined.", style="dim"))
-        cli._console.print(Panel(Group(*content), title=f"Overlay: [bold]{record.name}[/bold]", expand=False))
+        cli.console.print(Panel(Group(*content), title=f"Overlay: [bold]{record.name}[/bold]", expand=False))
         return
 
     matrix = Table(show_header=True, header_style="bold magenta", title="Topology (Adjacency Matrix)")
@@ -93,7 +93,7 @@ def handle_show(args, cli: CLI, container: Container):
     content.append(Text(""))
     content.append(matrix)
 
-    cli._console.print(Panel(Group(*content), title=f"Overlay: [bold]{record.name}[/bold]", expand=False))
+    cli.console.print(Panel(Group(*content), title=f"Overlay: [bold]{record.name}[/bold]", expand=False))
 
 def register_parser(subparsers):
     parser = subparsers.add_parser("overlays", help="Manage overlays")

@@ -131,9 +131,9 @@ def handle_list(args, cli: CLI, container: Container):
 
     tree = Tree("[bold]Facts[/bold]", guide_style="dim")
     render_tree_view(tree, facts, lambda f: f.name, render_leaf, flat=args.flat)
-    cli._console.print(tree)
+    cli.console.print(tree)
 
-    cli._console.print(
+    cli.console.print(
         f"──────────────────────────\n[dim]Total: {len(facts)} facts[/dim]"
     )
 
@@ -166,7 +166,7 @@ def handle_show(args, cli: CLI, container: Container):
     content.append(Text(f"Status: {status}{mtime_str}"))
     content.append(Text(f"Tags: {', '.join(record.tags) if record.tags else '-'}"))
 
-    cli._console.print(Panel(Group(*content), title=f"Fact: [bold]{record.name}[/bold]", expand=False))
+    cli.console.print(Panel(Group(*content), title=f"Fact: [bold]{record.name}[/bold]", expand=False))
 
 
 def register_parser(subparsers):

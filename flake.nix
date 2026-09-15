@@ -9,6 +9,10 @@
       url = "github:ryantm/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -22,6 +26,7 @@
           ./parts.nix
           ./lib
           ./modules
+          ./test.nix
         ];
 
         flake.flakeModules = {
@@ -51,6 +56,7 @@
                   pkgs.rage
                   pkgs.git
                   pkgs.nano
+                  pkgs.vde2
                 ])
               ];
             };

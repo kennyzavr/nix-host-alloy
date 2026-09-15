@@ -18,6 +18,10 @@ class CLI:
         assert self._root is not None
         return self._root
 
+    @property
+    def console(self) -> Console:
+        return self._console
+
     def init(self):
         root_env = os.environ.get("ALLOY_CLI_ROOT")
         if root_env:

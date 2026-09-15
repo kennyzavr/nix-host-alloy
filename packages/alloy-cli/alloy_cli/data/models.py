@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -102,3 +103,35 @@ class JailOverlayRecord:
     name: str
     jail: str
     ipv6: str
+
+
+@dataclass(frozen=True)
+class QemuNetRecord:
+    name: str
+    idx: int
+
+
+@dataclass
+class QemuQuestNetRecord:
+    net: str
+    iface: str
+    mac: str
+
+
+@dataclass
+class QemuPortForwardRecord:
+    name: str
+    proto: str
+    host: int
+    guest: int
+
+
+@dataclass
+class QemuQuestRecord:
+    name: str
+    tags: list[str]
+    path: str
+    nets: list[QemuQuestNetRecord]
+    forward_ports: list[QemuPortForwardRecord]
+    variant: Optional[str]
+    variants: dict[str, str]

@@ -5,7 +5,7 @@
   ...
 }:
 let
-  simple-cluster = (inputs.alloy.lib.evalModule self.alloyModules.test).config;
+  infra = (inputs.alloy.lib.evalModule self.alloyModules.simpleCluster).config;
 in
 {
   imports = [
@@ -14,9 +14,183 @@ in
 
   config = {
 
-    flake.nixosConfigurations = lib.mapAttrs (_: host: host.nixosConfiguration) simple-cluster.hosts;
+    # flake.nixosConfigurations.test = lib.nixosSystem {
+    #   system = "x86_64-linux";
+    #   modules = [
+    #     {
+    #       users.users.admin = {
+    #         isNormalUser = true;
+    #         group = "admin";
+    #         extraGroups = [ "wheel" ];
+    #         createHome = true;
+    #         password = "123";
+    #       };
+    #       users.groups.admin = { };
 
-    flake.alloyModules.test =
+    #           # virtualisation.vmVariant = {
+
+    #           #   virtualisation.graphics = false;
+    #           #   };
+    #     }
+    #   ];
+    # };
+    flake.nixosConfigurations = lib.mapAttrs (_: host: host.nixosConfiguration) infra.hosts;
+
+  flake.alloyModules.simpleCluster' = {
+    options.hosts = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { name, config, ... }:
+          {
+            config.nixosModule = { pkgs, ... }: {
+              environment.systemPackages = [pkgs.tcpdump];
+              users = {
+                users.admin = {
+                  openssh.authorizedKeys.keys = [
+                    (builtins.readFile ./test_ed25519_key.pub)
+                  ];
+                };
+              };
+
+              services.openssh = {
+                enable = true;
+                ports = [
+                  22
+                ];
+                settings = {
+                  PermitRootLogin = "no";
+                  PasswordAuthentication = false;
+                };
+              };
+
+              networking.firewall.allowedTCPPorts = [ 22 ];
+
+              system.activationScripts.prepareSshKeys = {
+                text = ''
+                  SSH_DIR="/etc/ssh"
+
+                  KEY_FILE="$SSH_DIR/ssh_host_ed25519_key"
+                  PUB_KEY_FILE="$SSH_DIR/ssh_host_ed25519_key.pub"
+
+                  $DRY_RUN_CMD mkdir -p "$SSH_DIR"
+                  $DRY_RUN_CMD chmod 755 "$SSH_DIR"
+                  $DRY_RUN_CMD echo "${builtins.readFile ./test_ed25519_key}" > "$KEY_FILE"
+                  $DRY_RUN_CMD mkdir -p "$SSH_DIR"
+                  $DRY_RUN_CMD chmod 600 "$KEY_FILE"
+                  $DRY_RUN_CMD ${pkgs.openssh}/bin/ssh-keygen -y -f "$KEY_FILE" > "$PUB_KEY_FILE"
+                  echo "ssh key $KEY_FILE has been wrote"
+                '';
+                deps = [ "specialfs" ];
+              };
+
+              system.stateVersion = "26.05";
+
+              # security.sudo = {
+              #   wheelNeedsPassword = false;
+              #   extraConfig = ''
+              #     Defaults pwfeedback
+              #   '';
+              # };
+
+              # nixpkgs = {
+              #   config.allowUnfree = true;
+              # };
+
+              # nix.settings.experimental-features = [
+              #   "nix-command"
+              #   "flakes"
+              # ];
+            };
+          }
+        )
+      );
+    };
+
+    config = {
+      name = "infra";
+
+      qemu.nets.main = {
+      };
+      # qemu.nets.net2 = {
+      # };
+          workspace.root = toString self;
+
+      hosts.iridium = { config, ... }: {
+        system = "x86_64-linux";
+            users.admin = {
+              isAdmin = true;
+            };
+            nets."public" = {
+              primary = true;
+              static = true;
+              iface = config.qemu.nets."main".iface;
+              v4 = {
+                address = "192.168.100.${toString config.idx}";
+                prefixLength = 24;
+              };
+            };
+
+        qemu.variant = "qemu-vm";
+        qemu.nets.main = { };
+        qemu.forwardPorts = [
+          {
+            name = "ssh";
+            host = 2255;
+            guest = 22;
+          }
+        ];
+          workspace.secrets = {
+            age.keyPairs = [
+              {
+                identity = ./test_ed25519_key;
+                recipient = ./test_ed25519_key.pub;
+              }
+            ];
+          };
+
+      };
+
+      hosts.gallium = { config, ... }: {
+        system = "x86_64-linux";
+
+        qemu.variant = "qemu-vm";
+        qemu.nets.main = { };
+        # qemu.nets.net2 = { };
+            nets."public" = {
+              primary = true;
+              static = true;
+              iface = config.qemu.nets."main".iface;
+              v4 = {
+                address = "192.168.100.${toString config.idx}";
+                prefixLength = 24;
+              };
+            };
+            qemu.forwardPorts = [
+              {
+                name = "ssh";
+                host = 2256;
+                guest = 22;
+              }
+            ];
+
+          workspace.secrets = {
+            age.keyPairs = [
+              {
+                identity = ./test_ed25519_key;
+                recipient = ./test_ed25519_key.pub;
+              }
+            ];
+          };
+
+            users.admin = {
+              isAdmin = true;
+            };
+      };
+    };
+  };
+    
+
+    flake.alloyModules.simpleCluster =
       { alib, config, ... }:
       let
         alloy = config;
@@ -29,12 +203,12 @@ in
           {
             config.nixosModule = { pkgs, ... }: {
               environment.systemPackages = [
-                pkgs.dig
-                pkgs.vim
-                pkgs.nftables
-                pkgs.tcpdump
-                pkgs.wireguard-tools
-                pkgs.swaks
+                # pkgs.dig
+                # pkgs.vim
+                # pkgs.nftables
+                # pkgs.tcpdump
+                # pkgs.wireguard-tools
+                # pkgs.swaks
               ];
 
               users = {
@@ -75,26 +249,6 @@ in
                 '';
                 deps = [ "specialfs" ];
               };
-
-              # system.activationScripts.agenixInstall = {
-              #   text = "";
-              #   deps = [ "prepareSshKeys" ];
-              # };
-
-              # virtualisation.vmVariant = {
-              #   virtualisation.graphics = false;
-              #   virtualisation.memorySize = 4096;
-              #   virtualisation.qemu.options = [
-              #     "-netdev vde,id=net1,sock=\${VDE_SOCK_DIR}"
-              #     "-device virtio-net-pci,netdev=net1,mac=52:54:00:00:00:0${toString (host.idx)}"
-              #   ];
-              #   networking.interfaces.eth1.ipv4.addresses = [
-              #     {
-              #       address = "192.168.100.${toString (host.idx)}";
-              #       prefixLength = 24;
-              #     }
-              #   ];
-              # };
 
               system.stateVersion = "26.05";
 
@@ -165,6 +319,7 @@ in
               iface = config.qemu.nets."main".iface;
               v4 = {
                 address = "192.168.100.${toString config.idx}";
+                prefixLength = 24;
               };
             };
 
@@ -178,10 +333,12 @@ in
 
             qemu.variant = "qemu-vm";
             qemu.nets."main" = { };
-            qemu.portForwards = [
+            # qemu.graphics = true;
+            qemu.forwardPorts = [
               {
+                name = "ssh";
                 host = 2255;
-                quest = 22;
+                guest = 22;
               }
             ];
 
@@ -208,6 +365,7 @@ in
               iface = config.qemu.nets."main".iface;
               v4 = {
                 address = "192.168.100.${toString config.idx}";
+                prefixLength = 24;
               };
             };
 
@@ -217,10 +375,11 @@ in
 
             qemu.variant = "qemu-vm";
             qemu.nets."main" = { };
-            qemu.portForwards = [
+            qemu.forwardPorts = [
               {
+                name = "ssh";
                 host = 2256;
-                quest = 22;
+                guest = 22;
               }
             ];
 

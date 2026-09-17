@@ -12,7 +12,7 @@
       netSubmodule = { name, ... }: {
         options = {
           idx = lib.mkOption {
-            # default = alloy.indexes."qemu-nets".get name;
+            default = alloy.indexes."qemu-nets".get name;
             readOnly = true;
             type = lib.types.ints.unsigned;
           };
@@ -129,7 +129,7 @@
           };
 
           config = {
-            qemu.variants.qemu-vm.package = { pkgs, ... }: (host.nixosConfiguration.extendModules {
+            qemu.variants.qemu-vm.package = { pkgs, ... }: let f = (host.nixosConfiguration.extendModules {
               modules = [
                 {
 
@@ -167,7 +167,10 @@
                   
                 }
               ];
-            }).config.system.build.vm;
+            }).config.system.build.vm; in pkgs.writeShellScriptBin "sff" ''
+                env > foo_${name}
+                ${lib.getExe f}
+              '';
 
 
 
@@ -211,11 +214,11 @@
           }
         ];
 
-        # indexes."qemu-nets" = {
-        #   minValue = 1;
-        #   maxValue = 99;
-        #   keys = builtins.attrNames alloy.qemu.nets;
-        # };
+        indexes."qemu-nets" = {
+          minValue = 1;
+          maxValue = 99;
+          keys = builtins.attrNames alloy.qemu.nets;
+        };
 
         _internal.state =
           { pkgs, ... }:
@@ -224,7 +227,7 @@
               inherit name;
               idx = net.idx;
             }) alloy.qemu.nets;
-            qemuQuests = lib.pipe alloy.hosts [
+            qemuGuests = lib.pipe alloy.hosts [
               (lib.filterAttrs (_: host: host.qemu.variant != null))
               (lib.mapAttrsToList (
                 hostName: host: {

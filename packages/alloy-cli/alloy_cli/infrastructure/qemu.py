@@ -74,7 +74,8 @@ class VdeAdapter:
         self._state_dir = state_dir
 
     def socket_path(self, idx: int) -> Path:
-        return self._state_dir / f"vde_net{idx}.sock"
+        # return self._state_dir / f"vde_net{idx}.sock"
+        return Path(f"/tmp/alloy/{self._alloy_name}/vde{idx}")
 
     def pid_path(self, idx: int) -> Path:
         return self._state_dir / f"vde_net{idx}.pid"
@@ -94,6 +95,8 @@ class VdeAdapter:
                     sock.unlink()
                 except OSError:
                     pass
+
+            sock.mkdir(parents=True, exist_ok=True)
 
             cmd = ["vde_switch", "-s", str(sock), "--nostdin"]
             if detach:

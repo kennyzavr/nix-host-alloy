@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import List, Optional
 
-from ..data.state import QemuNetRepository, QemuQuestRepository
-from ..data.models import QemuQuestRecord, QemuNetRecord
+from ..data.state import QemuNetRepository, QemuGuestRepository
+from ..data.models import QemuGuestRecord, QemuNetRecord
 from ..infrastructure.qemu import QemuAdapter, QemuProcess, VdeAdapter, VdeSwitch
 from .exceptions import (
     QemuNotDefinedError,
@@ -13,7 +13,7 @@ from .exceptions import (
 class QemuService:
     def __init__(
         self,
-        quest_repo: QemuQuestRepository,
+        quest_repo: QemuGuestRepository,
         net_repo: QemuNetRepository,
         qemu: QemuAdapter,
         vde: VdeAdapter,
@@ -27,7 +27,7 @@ class QemuService:
         self,
         names: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
-    ) -> List[QemuQuestRecord]:
+    ) -> List[QemuGuestRecord]:
         quests = self.quest_repo.find_all()
 
         if tags:
@@ -44,7 +44,7 @@ class QemuService:
         return quests
 
     def get_run_script(
-        self, quests: QemuQuestRecord, variant: Optional[str] = None
+        self, quests: QemuGuestRecord, variant: Optional[str] = None
     ) -> str:
         variant_name = variant or quests.variant
         if variant_name is None or variant_name not in quests.variants:
@@ -55,7 +55,7 @@ class QemuService:
         return quests.variants[variant_name]
 
     def collect_vde_networks(
-        self, quests: List[QemuQuestRecord]
+        self, quests: List[QemuGuestRecord]
     ) -> list[QemuNetRecord]:
         all_nets = self.net_repo.find_all()
         qnets = [qnet.net for quest in quests for qnet in quest.nets]
@@ -73,16 +73,16 @@ class QemuService:
 
     def launch_all(
         self,
-        quests: List[QemuQuestRecord],
+        guests: List[QemuGuestRecord],
         variant: Optional[str] = None,
         sockets: Optional[dict[int, Path]] = None,
         detach: bool = False,
     ) -> List[QemuProcess]:
         processes = []
-        for quest in quests:
-            run_script = self.get_run_script(quest, variant)
+        for guest in guests:
+            run_script = self.get_run_script(guest, variant)
             proc = self.qemu.launch(
-                quest.name, run_script, sockets=sockets, detach=detach
+                guest.name, run_script, sockets=sockets, detach=detach
             )
             processes.append(proc)
         return processes

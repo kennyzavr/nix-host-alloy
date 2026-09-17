@@ -10,7 +10,7 @@ from .utils import ensure_indexes_consistency
 
 def _resolve_records(args, cli, container):
     """Resolve VM records from args, aborting on errors."""
-    service = container.qemu_quest_service
+    service = container.qemu_guest_service
     names = getattr(args, "name", None) or None
     tags = getattr(args, "tag", None) or None
     try:
@@ -106,7 +106,7 @@ def handle_list(args, cli: CLI, container: Container):
 def handle_run(args, cli: CLI, container: Container):
     ensure_indexes_consistency(cli, container)
 
-    service = container.qemu_quest_service
+    service = container.qemu_guest_service
     records = _resolve_records(args, cli, container)
     if not records:
         cli.abort("No VMs match the criteria.")
@@ -192,14 +192,14 @@ def handle_run(args, cli: CLI, container: Container):
 
 def handle_stop(args, cli: CLI, container: Container):
     cli.step("Stopping all detached VMs and VDE switches...")
-    container.qemu_quest_service.stop_all()
+    container.qemu_guest_service.stop_all()
     cli.ok("Stopped.")
 
 
 def handle_show(args, cli: CLI, container: Container):
     ensure_indexes_consistency(cli, container)
 
-    record = container.qemu_quest_service.repo.find_by_name(args.name)
+    record = container.qemu_guest_service.repo.find_by_name(args.name)
     if not record:
         cli.abort(f"VM '{cli.id(args.name)}' not found.")
 

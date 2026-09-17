@@ -17,7 +17,7 @@ from .data.state import (
     HostOverlaysRepository,
     JailOverlaysRepository,
     QemuNetRepository,
-    QemuQuestRepository,
+    QemuGuestRepository,
 )
 from .infrastructure.fs import FileSystemAdapter
 from .infrastructure.git import GitAdapter
@@ -152,8 +152,8 @@ class Container:
 
     @property
     @lru_cache(maxsize=1)
-    def qemu_quest_repo(self) -> QemuQuestRepository:
-        return QemuQuestRepository(self.db)
+    def qemu_guest_repo(self) -> QemuGuestRepository:
+        return QemuGuestRepository(self.db)
 
     @property
     @lru_cache(maxsize=1)
@@ -182,9 +182,9 @@ class Container:
 
     @property
     @lru_cache(maxsize=1)
-    def qemu_quest_service(self) -> QemuService:
+    def qemu_guest_service(self) -> QemuService:
         return QemuService(
-            quest_repo=self.qemu_quest_repo,
+            guest_repo=self.qemu_guest_repo,
             net_repo=self.qemu_net_repo,
             qemu=self.qemu,
             vde=self.vde,

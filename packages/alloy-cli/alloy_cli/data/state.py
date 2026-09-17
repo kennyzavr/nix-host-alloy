@@ -1,3 +1,4 @@
+# TODO remove default values
 from typing import Dict, List, Optional
 from .models import (
     FactRecord,

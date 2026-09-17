@@ -112,7 +112,7 @@ class QemuNetRecord:
 
 
 @dataclass
-class QemuQuestNetRecord:
+class QemuGuestNetRecord:
     net: str
     iface: str
     mac: str
@@ -122,16 +122,16 @@ class QemuQuestNetRecord:
 class QemuPortForwardRecord:
     name: str
     proto: str
-    host: int
+    hypervisor: int
     guest: int
 
 
 @dataclass
-class QemuQuestRecord:
+class QemuGuestRecord:
     name: str
     tags: list[str]
     path: str
-    nets: list[QemuQuestNetRecord]
+    nets: list[QemuGuestNetRecord]
     forward_ports: list[QemuPortForwardRecord]
     variant: Optional[str]
     variants: dict[str, str]

@@ -43,7 +43,7 @@ def _print_port_table(cli, records):
                 record.name,
                 pf.name,
                 f":{pf.guest}",
-                f"localhost:{pf.host}",
+                f"localhost:{pf.hypervisor}",
                 pf.proto,
             )
 
@@ -73,7 +73,7 @@ def handle_list(args, cli: CLI, container: Container):
         tags = ", ".join(record.tags) if record.tags else "-"
         ports_str = (
             ", ".join(
-                f"{pf.name}({pf.proto} {pf.host}->{pf.guest})"
+                f"{pf.name}({pf.proto} {pf.hypervisor}->{pf.guest})"
                 for pf in record.forward_ports
             )
             if record.forward_ports
@@ -230,7 +230,7 @@ def handle_show(args, cli: CLI, container: Container):
         content.append(Text("\nPort Forwards:", style="bold"))
         for pf in record.forward_ports:
             content.append(
-                Text(f"  {pf.name}: {pf.proto} localhost:{pf.host} -> guest:{pf.guest}")
+                Text(f"  {pf.name}: {pf.proto} localhost:{pf.hypervisor} -> guest:{pf.guest}")
             )
     else:
         content.append(Text("\nPort Forwards: none", style="dim"))

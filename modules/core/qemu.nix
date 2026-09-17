@@ -54,7 +54,7 @@
             ];
             default = "tcp";
           };
-          host = lib.mkOption {
+          hypervisor = lib.mkOption {
             type = lib.types.port;
           };
           guest = lib.mkOption {
@@ -129,7 +129,8 @@
           };
 
           config = {
-            qemu.variants.qemu-vm.package = { pkgs, ... }: let f = (host.nixosConfiguration.extendModules {
+            qemu.variant = lib.mkDefault "direct-boot";
+            qemu.variants.direct-boot.package = { pkgs, ... }: (host.nixosConfiguration.extendModules {
               modules = [
                 {
 
@@ -137,7 +138,7 @@
                     virtualisation.forwardPorts = lib.map (fp: {
                       proto = fp.proto;
                       guest.port = fp.guest;
-                      host.port = fp.host;
+                      host.port = fp.hypervisor;
                     }) qemuCfg.forwardPorts;
 
                   virtualisation.graphics = true;
@@ -167,16 +168,13 @@
                   
                 }
               ];
-            }).config.system.build.vm; in pkgs.writeShellScriptBin "sff" ''
-                env > foo_${name}
-                ${lib.getExe f}
-              '';
+            }).config.system.build.vm;
 
 
 
             assertions = [
               {
-                assertion = lib.allUnique (lib.map (pf: "${pf.proto}:${toString pf.host}") qemuCfg.forwardPorts);
+                assertion = lib.allUnique (lib.map (pf: "${pf.proto}:${toString pf.hypervisor}") qemuCfg.forwardPorts);
                 message = "[Alloy] VM '${name}': duplicate host port in forwardPorts.";
               }
             ];
@@ -188,7 +186,7 @@
           hostName: host:
           lib.map (fwr: {
             inherit (fwr) proto;
-            hostPort = fwr.host;
+            hypervisorPort = fwr.hypervisor;
             host = hostName;
           }) host.qemu.forwardPorts
         ) alloy.hosts
@@ -205,7 +203,7 @@
       config = {
         assertions = [
           {
-            assertion = lib.allUnique (lib.map (p: "${p.proto}:${toString p.hostPort}") allPortKeys);
+            assertion = lib.allUnique (lib.map (p: "${p.proto}:${toString p.hypervisorPort}") allPortKeys);
             message = "[Alloy] VM port conflict: multiple VMs forward the same hypervisor port.";
           }
           {
@@ -242,7 +240,7 @@
                   }) host.qemu.nets;
                   forwardPorts = lib.map (fp: {
                     proto = fp.proto;
-                    hostPort = fp.host;
+                    hypervisorPort = fp.hypervisor;
                     guestPort = fp.guest;
                     name = fp.name;
                   }) host.qemu.forwardPorts;

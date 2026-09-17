@@ -15,7 +15,7 @@ from .models import (
     OverlayRecord,
     HostOverlayRecord,
     JailOverlayRecord,
-    QemuQuestRecord,
+    QemuGuestRecord,
     QemuPortForwardRecord,
 )
 
@@ -306,18 +306,18 @@ class QemuNetRepository:
         ]
 
 
-class QemuQuestRepository:
+class QemuGuestRepository:
     def __init__(self, db: dict):
         self._db = db
 
-    def find_all(self) -> List[QemuQuestRecord]:
-        from .models import QemuQuestNetRecord, QemuNetRecord, QemuPortForwardRecord
+    def find_all(self) -> List[QemuGuestRecord]:
+        from .models import QemuGuestNetRecord, QemuNetRecord, QemuPortForwardRecord
 
         res = []
         hosts_tags = {
             h.get("name"): h.get("tags", []) for h in self._db.get("hosts", [])
         }
-        for item in self._db.get("qemuQuests", []):
+        for item in self._db.get("qemuGuests", []):
             name = item.get("host", "")
             path = item.get("path", "")
             variant = item.get("variant")
@@ -326,7 +326,7 @@ class QemuQuestRepository:
                 variants[variant] = path
 
             nets = [
-                QemuQuestNetRecord(
+                QemuGuestNetRecord(
                     net=n.get("name", ""),
                     iface=n.get("iface", ""),
                     mac=n.get("mac", ""),
@@ -338,14 +338,14 @@ class QemuQuestRepository:
                 QemuPortForwardRecord(
                     name=pf.get("name", ""),
                     proto=pf.get("proto", "tcp"),
-                    host=pf.get("hostPort", 0),
+                    hypervisor=pf.get("hypervisorPort", 0),
                     guest=pf.get("guestPort", 0),
                 )
                 for pf in item.get("forwardPorts", [])
             ]
 
             res.append(
-                QemuQuestRecord(
+                QemuGuestRecord(
                     name=name,
                     tags=hosts_tags.get(name, []),
                     path=path,
@@ -357,7 +357,7 @@ class QemuQuestRepository:
             )
         return res
 
-    def find_by_name(self, name: str) -> Optional[QemuQuestRecord]:
+    def find_by_name(self, name: str) -> Optional[QemuGuestRecord]:
         for item in self.find_all():
             if item.name == name:
                 return item

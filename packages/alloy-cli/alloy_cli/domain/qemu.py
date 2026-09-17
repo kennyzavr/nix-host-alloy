@@ -13,12 +13,12 @@ from .exceptions import (
 class QemuService:
     def __init__(
         self,
-        quest_repo: QemuGuestRepository,
+        guest_repo: QemuGuestRepository,
         net_repo: QemuNetRepository,
         qemu: QemuAdapter,
         vde: VdeAdapter,
     ):
-        self.quest_repo = quest_repo
+        self.guest_repo = guest_repo
         self.net_repo = net_repo
         self.qemu = qemu
         self.vde = vde
@@ -28,37 +28,37 @@ class QemuService:
         names: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
     ) -> List[QemuGuestRecord]:
-        quests = self.quest_repo.find_all()
+        guests = self.guest_repo.find_all()
 
         if tags:
             tag_set = set(tags)
-            quests = [quest for quest in quests if tag_set & set(quest.tags)]
+            guests = [guest for guest in guests if tag_set & set(guest.tags)]
 
         if names:
             name_set = set(names)
             for name in name_set:
-                if not any(quest.name == name for quest in self.quest_repo.find_all()):
+                if not any(guest.name == name for guest in self.guest_repo.find_all()):
                     raise QemuNotDefinedError(name)
-            quests = [quest for quest in quests if quest.name in name_set]
+            guests = [guest for guest in guests if guest.name in name_set]
 
-        return quests
+        return guests
 
     def get_run_script(
-        self, quests: QemuGuestRecord, variant: Optional[str] = None
+        self, guests: QemuGuestRecord, variant: Optional[str] = None
     ) -> str:
-        variant_name = variant or quests.variant
-        if variant_name is None or variant_name not in quests.variants:
-            available = list(quests.variants.keys())
+        variant_name = variant or guests.variant
+        if variant_name is None or variant_name not in guests.variants:
+            available = list(guests.variants.keys())
             raise QemuVariantNotFoundError(
-                quests.name, variant_name or "<none>", available
+                guests.name, variant_name or "<none>", available
             )
-        return quests.variants[variant_name]
+        return guests.variants[variant_name]
 
     def collect_vde_networks(
-        self, quests: List[QemuGuestRecord]
+        self, guests: List[QemuGuestRecord]
     ) -> list[QemuNetRecord]:
         all_nets = self.net_repo.find_all()
-        qnets = [qnet.net for quest in quests for qnet in quest.nets]
+        qnets = [qnet.net for guest in guests for qnet in guest.nets]
         return [net for net in all_nets if net.name in qnets]
 
     def start_vde_switches(

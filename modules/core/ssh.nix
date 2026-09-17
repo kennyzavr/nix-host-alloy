@@ -87,7 +87,7 @@
               (lib.filter (l: l.hypervisorPort != null))
               (lib.map (l: {
                 name = "ssh";
-                host = l.hypervisorPort;
+                hypervisor = l.hypervisorPort;
                 guest = l.port;
                 proto = "tcp";
               }))

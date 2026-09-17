@@ -41,7 +41,7 @@
           };
         };
         config = {
-          # idx = alloy.indexes."hosts".get name;
+          idx = alloy.indexes."hosts".get name;
           assertions = [
             {
               assertion = alib.types.dns.label.check name;
@@ -59,7 +59,6 @@
                 networking.nftables.enable = true;
                 networking.hostName = name;
 
-                # virtualisation.vmVariant.useVirtiofs = false;
                 boot.kernel.sysctl = {
                   "net.ipv4.ip_forward" = true;
                   "net.ipv6.conf.all.forwarding" = true;
@@ -81,11 +80,11 @@
       config = {
         assertions = lib.flatten (lib.mapAttrsToList (_: host: host.assertions) alloy.hosts);
 
-        # indexes."hosts" = {
-        #   keys = builtins.attrNames alloy.hosts;
-        #   minValue = 1;
-        #   maxValue = 99;
-        # };
+        indexes."hosts" = {
+          keys = builtins.attrNames alloy.hosts;
+          minValue = 1;
+          maxValue = 99;
+        };
 
         _internal.state = { ... }: {
           hosts = lib.mapAttrsToList (hostName: host: {

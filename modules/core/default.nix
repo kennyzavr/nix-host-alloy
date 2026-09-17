@@ -1,22 +1,23 @@
 {
   imports = [
     ./hosts.nix
-    # ./jails.nix
+    ./jails.nix
     ./cli.nix
-    # ./secrets.nix
-    # ./facts.nix
-    # ./generators.nix
-    # ./indexes.nix
-    # ./overlays.nix
-    # ./tls
-    # ./dns.nix
-    # ./mtls.nix
-    # ./endpoints.nix
+    ./secrets.nix
+    ./facts.nix
+    ./generators.nix
+    ./indexes.nix
+    ./overlays.nix
+    ./tls
+    ./dns.nix
+    ./mtls.nix
+    ./endpoints.nix
     ./state.nix
-    # ./volumes.nix
-    # ./users.nix
-    # ./nets.nix
+    ./volumes.nix
+    ./users.nix
+    ./nets.nix
     ./qemu.nix
+    ./ssh.nix
   ];
 
   flake.alloyModules.core =

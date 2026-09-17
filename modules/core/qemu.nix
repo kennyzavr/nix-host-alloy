@@ -71,12 +71,6 @@
         };
       };
 
-      mkHostfwdArgs =
-        forwardPorts:
-        lib.concatMapStringsSep "" (
-          pf: ",hostfwd=${pf.proto}::${toString pf.host}-:${toString pf.guest}"
-        ) forwardPorts;
-
       hostQemuSubmodule =
         hostName: hostIdx:
         { config, ... }:
@@ -119,57 +113,6 @@
               default = null;
               description = "Which entry of `variants` the CLI runs when `--variant` is not given.";
             };
-            extraQemuOptions = lib.mkOption {
-              default = [ ];
-              type = lib.types.listOf lib.types.str;
-              description = "Additional raw QEMU command-line options.";
-            };
-            qemuOptions = lib.mkOption {
-              readOnly = true;
-              type = lib.types.listOf lib.types.str;
-              description = "Fully-assembled QEMU options: user-mode NIC + one VDE NIC per attached net + extraQemuOptions.";
-            };
-            nixosModule = lib.mkOption {
-              type = lib.types.deferredModule;
-              default = { };
-              apply = module: {
-                _class = "nixos";
-                _file = "hosts.${lib.strings.escapeNixIdentifier hostName}.vm.nixosModule";
-                imports = [ module ];
-              };
-            };
-          };
-
-          config = {
-            qemuOptions =
-              # eth0: user-mode NAT with port-forwards (replaces NixOS default NIC)
-              [
-                "-netdev user,id=net0${mkHostfwdArgs qemuCfg.forwardPorts}"
-                "-device virtio-net-pci,netdev=net0"
-              ]
-              # eth<net.idx>: one VDE NIC per attached qemu.nets entry.
-              # ALLOY_VDE_SOCKET_<idx> is injected by the CLI at launch time.
-              ++ lib.concatLists (
-                lib.mapAttrsToList (
-                  netName: netHost:
-                  let
-                    idx = toString alloy.qemu.nets.${netName}.idx;
-                  in
-                  [
-                    "-netdev vde,id=net${idx},sock=$ALLOY_VDE_SOCKET_${idx}"
-                    "-device virtio-net-pci,netdev=net${idx},mac=${netHost.mac}"
-                  ]
-                ) qemuCfg.nets
-              )
-              ++ lib.optionals (!qemuCfg.graphics) [
-                "-display"
-                "none"
-                # We use file:/dev/stdout instead of stdio so QEMU doesn't try to read from stdin,
-                # which causes it to freeze when run in detached mode (stdin closed).
-                "-serial"
-                "file:/dev/stdout"
-              ]
-              ++ qemuCfg.extraQemuOptions;
           };
         };
 
@@ -186,7 +129,47 @@
           };
 
           config = {
-            qemu.variants.qemu-vm.package = { pkgs, ... }: host.nixosConfiguration.config.system.build.vm;
+            qemu.variants.qemu-vm.package = { pkgs, ... }: (host.nixosConfiguration.extendModules {
+              modules = [
+                {
+
+                  virtualisation.vmVariant = {
+                    virtualisation.forwardPorts = lib.map (fp: {
+                      proto = fp.proto;
+                      guest.port = fp.guest;
+                      host.port = fp.host;
+                    }) qemuCfg.forwardPorts;
+
+                  virtualisation.graphics = true;
+                  virtualisation.memorySize = qemuCfg.memory;
+                  virtualisation.cores = qemuCfg.cores;
+                    virtualisation.qemu.options = [] ++ lib.optionals (!qemuCfg.graphics) [
+                      "-display"
+                      "none"
+                      # We use file:/dev/stdout instead of stdio so QEMU doesn't try to read from stdin,
+                      # which causes it to freeze when run in detached mode (stdin closed).
+                      "-serial"
+                      "file:/dev/stdout"
+                    ]
+                    ++ lib.concatLists (
+                      lib.mapAttrsToList (
+                        netName: netHost:
+                        let
+                          idx = toString alloy.qemu.nets.${netName}.idx;
+                        in
+                        [
+                          "-netdev vde,id=net${idx},sock=$ALLOY_VDE_SOCKET_${idx}"
+                          "-device virtio-net-pci,netdev=net${idx},mac=${netHost.mac}"
+                        ]
+                      ) qemuCfg.nets
+                    );
+                  };
+                  
+                }
+              ];
+            }).config.system.build.vm;
+
+
 
             assertions = [
               {
@@ -194,52 +177,6 @@
                 message = "[Alloy] VM '${name}': duplicate host port in forwardPorts.";
               }
             ];
-
-            # NixOS module applied to the default qemu-vm variant.
-            nixosModule = lib.mkIf (qemuCfg.variant != null) {
-              virtualisation.vmVariant = {
-                imports = [
-                  qemuCfg.nixosModule
-                  # Workaround: OVMFFull (default efi.OVMF) has systemManagementModeRequired=true,
-                  # which unconditionally appends "-machine q35,smm=on" and
-                  # "-global driver=cfi.pflash01,property=secure,value=on" to the QEMU command
-                  # even when useEFIBoot=false (no firmware is loaded).  QEMU then crashes with a
-                  # glibc buffer overflow during q35 SMM initialisation without the pflash image.
-                  # Switch to pkgs.OVMF (no Secure Boot) which sets systemManagementModeRequired=false
-                  # so those flags are never appended.
-                  # (
-                  #   { pkgs, ... }:
-                  #   {
-                  #     virtualisation.efi.OVMF = pkgs.OVMF;
-                  #   }
-                  # )
-                ];
-
-
-                # Force to true so NixOS doesn't inject '-nographic' which breaks CLI detach mode
-                # by attaching the serial console to stdin and freezing on EOF.
-                # We handle headless mode manually in qemuOptions instead.
-                # virtualisation.graphics = true;
-                # virtualisation.memorySize = qemuCfg.memory;
-                # virtualisation.cores = qemuCfg.cores;
-
-                # Our hand-assembled networking flags replace NixOS's defaults.
-                # virtualisation.qemu.options = qemuCfg.qemuOptions;
-                # virtualisation.qemu.networkingOptions = [ ];
-
-                # Workaround: virtiofsd 1.14.0 crashes with a glibc buffer overflow on
-                # --translate-uid=host:65534:0:1 (hardcoded in NixOS qemu-vm.nix) for
-                # every vhost-user-fs connection, regardless of the shared directory size.
-                # There is no NixOS option to remove the flag, so we eliminate virtiofsd
-                # entirely:
-                #   - useNixStoreImage: build an erofs image for /nix/store (no virtiofsd)
-                #   - sharedDirectories = {}: drop the xchg/shared virtiofs shares too
-                # The xchg/shared mounts are only used by NixOS activation script helpers
-                # and are not required for normal VM boot.
-                # virtualisation.useNixStoreImage = true;
-                # virtualisation.sharedDirectories = lib.mkForce { };
-              };
-            };
           };
         };
 

@@ -26,7 +26,6 @@
           ./parts.nix
           ./lib
           ./modules
-          ./test.nix
         ];
 
         flake.flakeModules = {

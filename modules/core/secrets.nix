@@ -346,6 +346,12 @@
             );
           in
           {
+            assertions = [
+              {
+                assertion = config.workspace.secrets.age.keyPairs != [];
+                message = "[Alloy] host '${name}': the option secrets.age.keyPairs must be set";
+              }
+            ];
             nixosModule = lib.mkMerge (lib.catAttrs "nixosModule" configs);
           };
       };

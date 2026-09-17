@@ -112,8 +112,8 @@ in
           #   ];
           # };
 
-          facts."test_ssh_pub_key" = {};
-          facts."test_ssh_key" = {};
+          facts."test_ssh_pub_key" = { };
+          facts."test_ssh_key" = { };
 
           hosts.iridium = { config, ... }: {
             system = "x86_64-linux";
@@ -166,7 +166,6 @@ in
               ];
             };
 
-            qemu.variant = "qemu-vm";
             qemu.nets."main" = { };
           };
 
@@ -217,7 +216,6 @@ in
               ];
             };
 
-            qemu.variant = "qemu-vm";
             qemu.nets."main" = { };
 
             # overlays."main" = {

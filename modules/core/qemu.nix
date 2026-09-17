@@ -130,51 +130,55 @@
 
           config = {
             qemu.variant = lib.mkDefault "direct-boot";
-            qemu.variants.direct-boot.package = { pkgs, ... }: (host.nixosConfiguration.extendModules {
-              modules = [
-                {
+            qemu.variants.direct-boot.package =
+              { pkgs, ... }:
+              (host.nixosConfiguration.extendModules {
+                modules = [
+                  {
 
-                  virtualisation.vmVariant = {
-                    virtualisation.forwardPorts = lib.map (fp: {
-                      proto = fp.proto;
-                      guest.port = fp.guest;
-                      host.port = fp.hypervisor;
-                    }) qemuCfg.forwardPorts;
+                    virtualisation.vmVariant = {
+                      virtualisation.forwardPorts = lib.map (fp: {
+                        proto = fp.proto;
+                        guest.port = fp.guest;
+                        host.port = fp.hypervisor;
+                      }) qemuCfg.forwardPorts;
 
-                  virtualisation.graphics = true;
-                  virtualisation.memorySize = qemuCfg.memory;
-                  virtualisation.cores = qemuCfg.cores;
-                    virtualisation.qemu.options = [] ++ lib.optionals (!qemuCfg.graphics) [
-                      "-display"
-                      "none"
-                      # We use file:/dev/stdout instead of stdio so QEMU doesn't try to read from stdin,
-                      # which causes it to freeze when run in detached mode (stdin closed).
-                      "-serial"
-                      "file:/dev/stdout"
-                    ]
-                    ++ lib.concatLists (
-                      lib.mapAttrsToList (
-                        netName: netHost:
-                        let
-                          idx = toString alloy.qemu.nets.${netName}.idx;
-                        in
-                        [
-                          "-netdev vde,id=net${idx},sock=$ALLOY_VDE_SOCKET_${idx}"
-                          "-device virtio-net-pci,netdev=net${idx},mac=${netHost.mac}"
+                      virtualisation.graphics = true;
+                      virtualisation.memorySize = qemuCfg.memory;
+                      virtualisation.cores = qemuCfg.cores;
+                      virtualisation.qemu.options =
+                        [ ]
+                        ++ lib.optionals (!qemuCfg.graphics) [
+                          "-display"
+                          "none"
+                          # We use file:/dev/stdout instead of stdio so QEMU doesn't try to read from stdin,
+                          # which causes it to freeze when run in detached mode (stdin closed).
+                          "-serial"
+                          "file:/dev/stdout"
                         ]
-                      ) qemuCfg.nets
-                    );
-                  };
-                  
-                }
-              ];
-            }).config.system.build.vm;
+                        ++ lib.concatLists (
+                          lib.mapAttrsToList (
+                            netName: netHost:
+                            let
+                              idx = toString alloy.qemu.nets.${netName}.idx;
+                            in
+                            [
+                              "-netdev vde,id=net${idx},sock=$ALLOY_VDE_SOCKET_${idx}"
+                              "-device virtio-net-pci,netdev=net${idx},mac=${netHost.mac}"
+                            ]
+                          ) qemuCfg.nets
+                        );
+                    };
 
-
+                  }
+                ];
+              }).config.system.build.vm;
 
             assertions = [
               {
-                assertion = lib.allUnique (lib.map (pf: "${pf.proto}:${toString pf.hypervisor}") qemuCfg.forwardPorts);
+                assertion = lib.allUnique (
+                  lib.map (pf: "${pf.proto}:${toString pf.hypervisor}") qemuCfg.forwardPorts
+                );
                 message = "[Alloy] VM '${name}': duplicate host port in forwardPorts.";
               }
             ];

@@ -502,8 +502,8 @@
         {
           assertions = lib.mkMerge (lib.map (s: s.assertions) services);
           generators = lib.mkMerge (lib.map (s: s.generators) services);
-          secrets = lib.mkMerge (lib.map (s: s.secrets or {}) services);
-          facts = lib.mkMerge (lib.map (s: s.facts or {}) services);
+          secrets = lib.mkMerge (lib.map (s: s.secrets or { }) services);
+          facts = lib.mkMerge (lib.map (s: s.facts or { }) services);
           dns = lib.mkMerge (lib.map (s: s.dns) services);
           endpoints = lib.mkMerge (lib.map (s: s.endpoints) services);
           jails = lib.mkMerge (lib.map (s: s.jails) services);

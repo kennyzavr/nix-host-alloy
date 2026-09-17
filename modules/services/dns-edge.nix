@@ -62,7 +62,11 @@
           sortedRoutes = lib.pipe srv.routes [
             (lib.mapAttrsToList (name: route: route // { inherit name; }))
             (lib.imap (idx: route: route // { inherit idx; }))
-            (builtins.sort (a: b: builtins.stringLength alloy.dns.zones.${a.zone}.apex > builtins.stringLength alloy.dns.zones.${b.zone}.apex))
+            (builtins.sort (
+              a: b:
+              builtins.stringLength alloy.dns.zones.${a.zone}.apex
+              > builtins.stringLength alloy.dns.zones.${b.zone}.apex
+            ))
           ];
         in
         {

@@ -60,7 +60,7 @@
           {
             assertions = [
               {
-                assertion = config.users != {};
+                assertion = config.users != { };
                 message = "[Alloy] Host '${name}': at least one user must be specified";
               }
             ];

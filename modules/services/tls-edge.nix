@@ -233,7 +233,9 @@
                                   ""
                               }
                               ${lib.concatImapStringsSep "\n  " (idx: target: ''
-                                server target${toString idx} [${target.ipv6}]:${toString endpoint.port} weight ${toString target.weight} ssl verify required ca-file "${alloy.mtls.certPath}" crt "${jail.mtls.fullPath}" ${lib.optionalString (endpoint.proxyv2 == true) "send-proxy-v2"}
+                                server target${toString idx} [${target.ipv6}]:${toString endpoint.port} weight ${toString target.weight} ssl verify required ca-file "${alloy.mtls.certPath}" crt "${jail.mtls.fullPath}" ${
+                                  lib.optionalString (endpoint.proxyv2 == true) "send-proxy-v2"
+                                }
                               '') endpoint.targets}
                           ''
                         ) srv.routes}

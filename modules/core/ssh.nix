@@ -46,7 +46,7 @@
           ed25519KeyFact = lib.mkOption {
             type = lib.types.nullOr lib.types.str;
           };
-          key.ed25519.fact = lib.mkOption {};
+          key.ed25519.fact = lib.mkOption { };
         };
 
         options.users = lib.mkOption {
@@ -55,7 +55,7 @@
 
         config = lib.mkMerge [
           {
-            nixosModule = {pkgs, ...}: {             
+            nixosModule = { pkgs, ... }: {
               system.activationScripts.prepareSshKeys = {
                 text = lib.optionalString (config.ssh.ed25519KeyFact != null) ''
                   SSH_DIR="/etc/ssh"
@@ -93,7 +93,7 @@
               }))
             ];
 
-            nixosModule = {pkgs, ...}: {
+            nixosModule = { pkgs, ... }: {
               services.openssh = {
                 enable = true;
                 listenAddresses = lib.pipe config.ssh.listen [

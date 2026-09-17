@@ -121,12 +121,14 @@
                 message = "[Alloy] Host '${name}': one primary net must be configured, got: ${toString (builtins.length primaryNets)}";
               }
             ]
-            ++ lib.concatLists (lib.mapAttrsToList (netName: net: [
-              {
-                assertion = net.v4 != null || net.v6 != null;
-                message = "[Alloy] Host '${name}', net '${netName}': at least of one ip block must be specified (v4 or v6)";
-              }
-            ]) config.nets);
+            ++ lib.concatLists (
+              lib.mapAttrsToList (netName: net: [
+                {
+                  assertion = net.v4 != null || net.v6 != null;
+                  message = "[Alloy] Host '${name}', net '${netName}': at least of one ip block must be specified (v4 or v6)";
+                }
+              ]) config.nets
+            );
 
             primaryNet = config.nets.${builtins.head primaryNets};
 

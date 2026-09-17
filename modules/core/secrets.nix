@@ -25,7 +25,7 @@
             type = lib.types.bool;
           };
           tags = lib.mkOption {
-            default = [];
+            default = [ ];
             type = lib.types.listOf lib.types.str;
           };
           assertions = lib.mkOption {
@@ -348,7 +348,7 @@
           {
             assertions = [
               {
-                assertion = config.workspace.secrets.age.keyPairs != [];
+                assertion = config.workspace.secrets.age.keyPairs != [ ];
                 message = "[Alloy] host '${name}': the option secrets.age.keyPairs must be set";
               }
             ];

@@ -105,7 +105,7 @@
               default = [ ];
             };
             tags = lib.mkOption {
-              default = [];
+              default = [ ];
               type = lib.types.listOf lib.types.str;
             };
           };

@@ -321,7 +321,9 @@
             message = "[Alloy] Service 'xhttp-proxy.${srvName}': you must specify at least one profile.";
           }
           {
-            assertion = lib.all (o: builtins.hasAttr o srv.overlays) (builtins.attrNames alloy.endpoints.${srv.fallbackEndpoint}.overlays);
+            assertion = lib.all (o: builtins.hasAttr o srv.overlays) (
+              builtins.attrNames alloy.endpoints.${srv.fallbackEndpoint}.overlays
+            );
             message = "[Alloy] Service 'xhttp-proxy.${srvName}': all overlays from fallbackEndpoint '${srv.fallbackEndpoint}' must be present in the service's 'overlays'.";
           }
         ];

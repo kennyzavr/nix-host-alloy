@@ -13,182 +13,14 @@ in
   ];
 
   config = {
-
-    # flake.nixosConfigurations.test = lib.nixosSystem {
-    #   system = "x86_64-linux";
-    #   modules = [
-    #     {
-    #       users.users.admin = {
-    #         isNormalUser = true;
-    #         group = "admin";
-    #         extraGroups = [ "wheel" ];
-    #         createHome = true;
-    #         password = "123";
-    #       };
-    #       users.groups.admin = { };
-
-    #           # virtualisation.vmVariant = {
-
-    #           #   virtualisation.graphics = false;
-    #           #   };
-    #     }
-    #   ];
-    # };
     flake.nixosConfigurations = lib.mapAttrs (_: host: host.nixosConfiguration) infra.hosts;
 
-  flake.alloyModules.simpleCluster' = {
-    options.hosts = lib.mkOption {
-      type = lib.types.attrsOf (
-        lib.types.submodule (
-          { name, config, ... }:
-          {
-            config.nixosModule = { pkgs, ... }: {
-              environment.systemPackages = [pkgs.tcpdump];
-              users = {
-                users.admin = {
-                  openssh.authorizedKeys.keys = [
-                    (builtins.readFile ./test_ed25519_key.pub)
-                  ];
-                };
-              };
-
-              services.openssh = {
-                enable = true;
-                ports = [
-                  22
-                ];
-                settings = {
-                  PermitRootLogin = "no";
-                  PasswordAuthentication = false;
-                };
-              };
-
-              networking.firewall.allowedTCPPorts = [ 22 ];
-
-              system.activationScripts.prepareSshKeys = {
-                text = ''
-                  SSH_DIR="/etc/ssh"
-
-                  KEY_FILE="$SSH_DIR/ssh_host_ed25519_key"
-                  PUB_KEY_FILE="$SSH_DIR/ssh_host_ed25519_key.pub"
-
-                  $DRY_RUN_CMD mkdir -p "$SSH_DIR"
-                  $DRY_RUN_CMD chmod 755 "$SSH_DIR"
-                  $DRY_RUN_CMD echo "${builtins.readFile ./test_ed25519_key}" > "$KEY_FILE"
-                  $DRY_RUN_CMD mkdir -p "$SSH_DIR"
-                  $DRY_RUN_CMD chmod 600 "$KEY_FILE"
-                  $DRY_RUN_CMD ${pkgs.openssh}/bin/ssh-keygen -y -f "$KEY_FILE" > "$PUB_KEY_FILE"
-                  echo "ssh key $KEY_FILE has been wrote"
-                '';
-                deps = [ "specialfs" ];
-              };
-
-              system.stateVersion = "26.05";
-
-              # security.sudo = {
-              #   wheelNeedsPassword = false;
-              #   extraConfig = ''
-              #     Defaults pwfeedback
-              #   '';
-              # };
-
-              # nixpkgs = {
-              #   config.allowUnfree = true;
-              # };
-
-              # nix.settings.experimental-features = [
-              #   "nix-command"
-              #   "flakes"
-              # ];
-            };
-          }
-        )
-      );
-    };
-
-    config = {
-      name = "infra";
-
-      qemu.nets.main = {
-      };
-      # qemu.nets.net2 = {
-      # };
-          workspace.root = toString self;
-
-      hosts.iridium = { config, ... }: {
-        system = "x86_64-linux";
-            users.admin = {
-              isAdmin = true;
-            };
-            nets."public" = {
-              primary = true;
-              static = true;
-              iface = config.qemu.nets."main".iface;
-              v4 = {
-                address = "192.168.100.${toString config.idx}";
-                prefixLength = 24;
-              };
-            };
-
-        qemu.variant = "qemu-vm";
-        qemu.nets.main = { };
-        qemu.forwardPorts = [
-          {
-            name = "ssh";
-            host = 2255;
-            guest = 22;
-          }
-        ];
-          workspace.secrets = {
-            age.keyPairs = [
-              {
-                identity = ./test_ed25519_key;
-                recipient = ./test_ed25519_key.pub;
-              }
-            ];
-          };
-
-      };
-
-      hosts.gallium = { config, ... }: {
-        system = "x86_64-linux";
-
-        qemu.variant = "qemu-vm";
-        qemu.nets.main = { };
-        # qemu.nets.net2 = { };
-            nets."public" = {
-              primary = true;
-              static = true;
-              iface = config.qemu.nets."main".iface;
-              v4 = {
-                address = "192.168.100.${toString config.idx}";
-                prefixLength = 24;
-              };
-            };
-            qemu.forwardPorts = [
-              {
-                name = "ssh";
-                host = 2256;
-                guest = 22;
-              }
-            ];
-
-          workspace.secrets = {
-            age.keyPairs = [
-              {
-                identity = ./test_ed25519_key;
-                recipient = ./test_ed25519_key.pub;
-              }
-            ];
-          };
-
-            users.admin = {
-              isAdmin = true;
-            };
+    perSystem = { pkgs, config, ... }: {
+      packages.cli = inputs.alloy.lib.mkCli {
+        module = self.alloyModules.simpleCluster;
+        inherit pkgs;
       };
     };
-  };
-    
 
     flake.alloyModules.simpleCluster =
       { alib, config, ... }:
@@ -206,49 +38,28 @@ in
                 # pkgs.dig
                 # pkgs.vim
                 # pkgs.nftables
-                # pkgs.tcpdump
+                pkgs.tcpdump
                 # pkgs.wireguard-tools
                 # pkgs.swaks
               ];
 
-              users = {
-                users.admin = {
-                  openssh.authorizedKeys.keys = [
-                    (builtins.readFile ./test_ed25519_key.pub)
-                  ];
-                };
-              };
+              # system.activationScripts.prepareSshKeys = {
+              #   text = ''
+              #     SSH_DIR="/etc/ssh"
 
-              services.openssh = {
-                enable = true;
-                ports = [
-                  22
-                ];
-                settings = {
-                  PermitRootLogin = "no";
-                  PasswordAuthentication = false;
-                };
-              };
+              #     KEY_FILE="$SSH_DIR/ssh_host_ed25519_key"
+              #     PUB_KEY_FILE="$SSH_DIR/ssh_host_ed25519_key.pub"
 
-              networking.firewall.allowedTCPPorts = [ 22 ];
-
-              system.activationScripts.prepareSshKeys = {
-                text = ''
-                  SSH_DIR="/etc/ssh"
-
-                  KEY_FILE="$SSH_DIR/ssh_host_ed25519_key"
-                  PUB_KEY_FILE="$SSH_DIR/ssh_host_ed25519_key.pub"
-
-                  $DRY_RUN_CMD mkdir -p "$SSH_DIR"
-                  $DRY_RUN_CMD chmod 755 "$SSH_DIR"
-                  $DRY_RUN_CMD echo "${builtins.readFile ./test_ed25519_key}" > "$KEY_FILE"
-                  $DRY_RUN_CMD mkdir -p "$SSH_DIR"
-                  $DRY_RUN_CMD chmod 600 "$KEY_FILE"
-                  $DRY_RUN_CMD ${pkgs.openssh}/bin/ssh-keygen -y -f "$KEY_FILE" > "$PUB_KEY_FILE"
-                  echo "ssh key $KEY_FILE has been wrote"
-                '';
-                deps = [ "specialfs" ];
-              };
+              #     $DRY_RUN_CMD mkdir -p "$SSH_DIR"
+              #     $DRY_RUN_CMD chmod 755 "$SSH_DIR"
+              #     $DRY_RUN_CMD echo "${builtins.readFile ./test_ed25519_key}" > "$KEY_FILE"
+              #     $DRY_RUN_CMD mkdir -p "$SSH_DIR"
+              #     $DRY_RUN_CMD chmod 600 "$KEY_FILE"
+              #     $DRY_RUN_CMD ${pkgs.openssh}/bin/ssh-keygen -y -f "$KEY_FILE" > "$PUB_KEY_FILE"
+              #     echo "ssh key $KEY_FILE has been wrote"
+              #   '';
+              #   deps = [ "specialfs" ];
+              # };
 
               system.stateVersion = "26.05";
 
@@ -301,6 +112,9 @@ in
           #   ];
           # };
 
+          facts."test_ssh_pub_key" = {};
+          facts."test_ssh_key" = {};
+
           hosts.iridium = { config, ... }: {
             system = "x86_64-linux";
 
@@ -311,6 +125,24 @@ in
                   recipient = ./test_ed25519_key.pub;
                 }
               ];
+            };
+
+            ssh = {
+              enable = true;
+              listen = [
+                {
+                  net = "slipr";
+                  port = 22;
+                }
+              ];
+              ed25519KeyFact = "test_ssh_key";
+            };
+
+            nets."slipr" = {
+              default = true;
+              v4.address = "10.0.2.15";
+              v4.prefixLength = 24;
+              iface = "eth0";
             };
 
             nets."public" = {
@@ -329,22 +161,13 @@ in
 
             users.admin = {
               isAdmin = true;
+              ssh.authKeyFacts = [
+                "test_ssh_pub_key"
+              ];
             };
 
             qemu.variant = "qemu-vm";
             qemu.nets."main" = { };
-            # qemu.graphics = true;
-            qemu.forwardPorts = [
-              {
-                name = "ssh";
-                host = 2255;
-                guest = 22;
-              }
-            ];
-
-            # nixosModule = {
-            #   networking.firewall.allowedTCPPorts = [ 80 ];
-            # };
           };
 
           hosts.gallium = { config, ... }: {
@@ -369,19 +192,33 @@ in
               };
             };
 
+            nets."slipr" = {
+              default = true;
+              v4.address = "10.0.2.15";
+              v4.prefixLength = 24;
+              iface = "eth0";
+            };
+
+            ssh = {
+              enable = true;
+              listen = [
+                {
+                  net = "slipr";
+                  port = 22;
+                }
+              ];
+              ed25519KeyFact = "test_ssh_key";
+            };
+
             users.admin = {
               isAdmin = true;
+              ssh.authKeyFacts = [
+                "test_ssh_pub_key"
+              ];
             };
 
             qemu.variant = "qemu-vm";
             qemu.nets."main" = { };
-            qemu.forwardPorts = [
-              {
-                name = "ssh";
-                host = 2256;
-                guest = 22;
-              }
-            ];
 
             # overlays."main" = {
             #   wg.endpoint = "192.168.100.${toString config.idx}";
@@ -667,12 +504,5 @@ in
 
         };
       };
-
-    perSystem = { pkgs, config, ... }: {
-      packages.cli = inputs.alloy.lib.mkCli {
-        module = self.alloyModules.simpleCluster;
-        inherit pkgs;
-      };
-    };
   };
 }

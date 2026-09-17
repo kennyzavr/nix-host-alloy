@@ -86,8 +86,12 @@
         in
         {
           nixosModule = {
-            systemd.network.networks."10-${net.iface}" = lib.mkIf net.static netConfig;
-            boot.initrd.systemd.network.networks."10-${net.iface}" = lib.mkIf net.static netConfig;
+            systemd.network.networks = lib.optionalAttrs net.static {
+              "10-${net.iface}" = netConfig;
+            };
+            boot.initrd.systemd.network.networks = lib.optionalAttrs net.static {
+              "10-${net.iface}" = netConfig;
+            };
           };
         };
       hostSubmodule = { config, name, ... }: {

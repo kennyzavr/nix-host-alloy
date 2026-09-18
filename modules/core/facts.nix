@@ -66,12 +66,66 @@
             ];
           };
         };
+
+      nodeFactSubmodule = node: { config, name, ... }: {
+        options = {
+          path = lib.mkOption {
+            type = lib.types.str;
+            default = node.factsBasePath + "/${name}";
+          };
+          permissions = lib.mkOption {
+            type = alib.types.permissions;
+            default = {
+              mode = "0640";
+              owner = "root";
+              group = "root";
+            };
+          };
+        };
+      };
+
+      mkNodeFact = factName: fact: {
+        nixosModule = {
+          environment.etc."alloy/facts/${factName}" = {
+            inherit (fact.permissions) mode group;
+            user = fact.permissions.owner;
+            text = alloy.facts.${factName}.value;
+          };
+
+          systemd.tmpfiles.settings."10-alloy-facts".${fact.path}."L+" = {
+            argument = "/etc/alloy/facts/${factName}";
+          };
+        };
+      };
+
+      nodeSubmodule = { config, name, ... }: {
+        options.facts = lib.mkOption {
+          default = { };
+          type = lib.types.attrsOf (lib.types.submodule (nodeFactSubmodule config));
+        };
+        options.factsBasePath = lib.mkOption {
+          type = lib.types.str;
+          default = "run/alloy/facts";
+        };
+
+        config.nixosModule = {
+          imports = lib.mapAttrsToList (factName: fact: (mkNodeFact factName fact).nixosModule) config.facts;
+        };
+      };
     in
     {
       options = {
         facts = lib.mkOption {
           default = { };
           type = lib.types.attrsOf (lib.types.submodule factSubmodule);
+        };
+
+        hosts = lib.mkOption {
+          type = lib.types.attrsOf (lib.types.submodule nodeSubmodule);
+        };
+
+        jails = lib.mkOption {
+          type = lib.types.attrsOf (lib.types.submodule nodeSubmodule);
         };
 
         workspace.facts = {

@@ -48,24 +48,13 @@
               message = "[Alloy] Host name '${name}' contains invalid characters or is too long. Use only lowercase letters, numbers, and hyphens (max 63 characters).";
             }
           ];
+          nixosModule = {
+            system.stateVersion = "26.05";
+          };
           nixosConfiguration = lib.nixosSystem {
             inherit (config) system;
             modules = [
               config.nixosModule
-              {
-                system.stateVersion = "26.05";
-                networking.useNetworkd = true;
-                systemd.network.enable = true;
-                networking.nftables.enable = true;
-                networking.hostName = name;
-
-                boot.kernel.sysctl = {
-                  "net.ipv4.ip_forward" = true;
-                  "net.ipv6.conf.all.forwarding" = true;
-                  "net.ipv4.conf.all.accept_redirects" = false;
-                  "net.ipv6.conf.all.accept_redirects" = false;
-                };
-              }
             ];
           };
         };

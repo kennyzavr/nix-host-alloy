@@ -72,10 +72,54 @@
       };
 
       hostQemuSubmodule =
-        hostName: hostIdx:
+        hostName: host:
         { config, ... }:
         let
-          qemuCfg = config;
+          commonModule = { modulesPath, ... }: {
+            imports = [
+              "${modulesPath}/virtualisation/qemu-vm.nix"
+            ];
+
+            virtualisation.forwardPorts = lib.map (fp: {
+              proto = fp.proto;
+              guest.port = fp.guest;
+              host.port = fp.hypervisor;
+            }) config.forwardPorts;
+
+            virtualisation.graphics = true;
+            virtualisation.memorySize = config.memory;
+            virtualisation.cores = config.cores;
+            virtualisation.qemu.options =
+              [ ]
+              ++ lib.optionals (!config.graphics) [
+                "-display"
+                "none"
+                # We use file:/dev/stdout instead of stdio so QEMU doesn't try to read from stdin,
+                # which causes it to freeze when run in detached mode (stdin closed).
+                "-serial"
+                "file:/dev/stdout"
+              ]
+              ++ lib.concatLists (
+                lib.mapAttrsToList (
+                  netName: netHost:
+                  let
+                    idx = toString alloy.qemu.nets.${netName}.idx;
+                  in
+                  [
+                    "-netdev vde,id=net${idx},sock=$ALLOY_VDE_SOCKET_${idx}"
+                    "-device virtio-net-pci,netdev=net${idx},mac=${netHost.mac}"
+                  ]
+                ) config.nets
+              );
+          };
+
+          commonVmHost = lib.nixosSystem {
+            inherit (host) system;
+            modules = [
+              host.nixosModule
+              commonModule
+            ];
+          };
         in
         {
           options = {
@@ -96,7 +140,7 @@
             };
             nets = lib.mkOption {
               default = { };
-              type = lib.types.attrsOf (lib.types.submodule (hostNetSubmodule hostIdx));
+              type = lib.types.attrsOf (lib.types.submodule (hostNetSubmodule host.idx));
             };
             forwardPorts = lib.mkOption {
               default = [ ];
@@ -114,6 +158,10 @@
               description = "Which entry of `variants` the CLI runs when `--variant` is not given.";
             };
           };
+
+          config.variants."direct-boot".package = { ... }: commonVmHost.config.system.build.vm;
+
+          config.variants."full-boot".package = { ... }: commonVmHost.config.system.build.vmWithBootLoader;
         };
 
       hostSubmodule =
@@ -125,55 +173,10 @@
         {
           options.qemu = lib.mkOption {
             default = { };
-            type = lib.types.submodule (hostQemuSubmodule name host.idx);
+            type = lib.types.submodule (hostQemuSubmodule name host);
           };
 
           config = {
-            qemu.variant = lib.mkDefault "direct-boot";
-            qemu.variants.direct-boot.package =
-              { pkgs, ... }:
-              (host.nixosConfiguration.extendModules {
-                modules = [
-                  {
-
-                    virtualisation.vmVariant = {
-                      virtualisation.forwardPorts = lib.map (fp: {
-                        proto = fp.proto;
-                        guest.port = fp.guest;
-                        host.port = fp.hypervisor;
-                      }) qemuCfg.forwardPorts;
-
-                      virtualisation.graphics = true;
-                      virtualisation.memorySize = qemuCfg.memory;
-                      virtualisation.cores = qemuCfg.cores;
-                      virtualisation.qemu.options =
-                        [ ]
-                        ++ lib.optionals (!qemuCfg.graphics) [
-                          "-display"
-                          "none"
-                          # We use file:/dev/stdout instead of stdio so QEMU doesn't try to read from stdin,
-                          # which causes it to freeze when run in detached mode (stdin closed).
-                          "-serial"
-                          "file:/dev/stdout"
-                        ]
-                        ++ lib.concatLists (
-                          lib.mapAttrsToList (
-                            netName: netHost:
-                            let
-                              idx = toString alloy.qemu.nets.${netName}.idx;
-                            in
-                            [
-                              "-netdev vde,id=net${idx},sock=$ALLOY_VDE_SOCKET_${idx}"
-                              "-device virtio-net-pci,netdev=net${idx},mac=${netHost.mac}"
-                            ]
-                          ) qemuCfg.nets
-                        );
-                    };
-
-                  }
-                ];
-              }).config.system.build.vm;
-
             assertions = [
               {
                 assertion = lib.allUnique (

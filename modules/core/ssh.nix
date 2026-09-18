@@ -65,7 +65,7 @@
 
                   $DRY_RUN_CMD mkdir -p "$SSH_DIR"
                   $DRY_RUN_CMD chmod 755 "$SSH_DIR"
-                  $DRY_RUN_CMD echo "${alloy.facts.${config.ssh.ed25519KeyFact}.path}" > "$KEY_FILE"
+                  $DRY_RUN_CMD cat "${alloy.facts.${config.ssh.ed25519KeyFact}.path}" > "$KEY_FILE"
                   $DRY_RUN_CMD mkdir -p "$SSH_DIR"
                   $DRY_RUN_CMD chmod 600 "$KEY_FILE"
                   $DRY_RUN_CMD ${pkgs.openssh}/bin/ssh-keygen -y -f "$KEY_FILE" > "$PUB_KEY_FILE"

@@ -18,6 +18,7 @@
     ./nets.nix
     ./qemu.nix
     ./ssh.nix
+    ./boot.nix
   ];
 
   flake.alloyModules.core =

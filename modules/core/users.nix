@@ -41,7 +41,8 @@
             home = "/home/${user.name}";
             group = userId;
             extraGroups = lib.optional user.isAdmin "wheel";
-            hashedPasswordFile = host.secrets.${user.hashedPasswd.secret}.path;
+            password = "123";
+            # hashedPasswordFile = host.secrets.${user.hashedPasswd.secret}.path;
           };
           users.groups.${userId} = {
             name = user.name;

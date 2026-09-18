@@ -46,6 +46,7 @@
         options = {
           name = lib.mkOption {
             type = lib.types.str;
+            default = "";
           };
           proto = lib.mkOption {
             type = lib.types.enum [

@@ -135,10 +135,10 @@
             nixosModule = lib.mkMerge [
               (lib.mkMerge (lib.catAttrs "nixosModule" configs))
               {
-                # networking.useNetworkd = true;
-
+                networking.useNetworkd = true;
                 systemd.network.enable = true;
                 boot.initrd.systemd.network.enable = true;
+
                 networking.nftables.enable = true;
                 networking.hostName = name;
 
@@ -147,6 +147,8 @@
                   "net.ipv6.conf.all.forwarding" = true;
                   "net.ipv4.conf.all.accept_redirects" = false;
                   "net.ipv6.conf.all.accept_redirects" = false;
+                  "net.ipv4.conf.all.ip_nonlocal_bind" = true;
+                  "net.ipv6.conf.all.ip_nonlocal_bind" = true;
                 };
               }
             ];

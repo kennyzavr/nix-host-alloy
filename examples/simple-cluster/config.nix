@@ -29,38 +29,8 @@ in
 
         hostSubmodule =
           { name, config, ... }:
-          let
-            host = config;
-          in
           {
             config.nixosModule = { pkgs, ... }: {
-              environment.systemPackages = [
-                # pkgs.dig
-                # pkgs.vim
-                # pkgs.nftables
-                pkgs.tcpdump
-                # pkgs.wireguard-tools
-                # pkgs.swaks
-              ];
-
-              # system.activationScripts.prepareSshKeys = {
-              #   text = ''
-              #     SSH_DIR="/etc/ssh"
-
-              #     KEY_FILE="$SSH_DIR/ssh_host_ed25519_key"
-              #     PUB_KEY_FILE="$SSH_DIR/ssh_host_ed25519_key.pub"
-
-              #     $DRY_RUN_CMD mkdir -p "$SSH_DIR"
-              #     $DRY_RUN_CMD chmod 755 "$SSH_DIR"
-              #     $DRY_RUN_CMD echo "${builtins.readFile ./test_ed25519_key}" > "$KEY_FILE"
-              #     $DRY_RUN_CMD mkdir -p "$SSH_DIR"
-              #     $DRY_RUN_CMD chmod 600 "$KEY_FILE"
-              #     $DRY_RUN_CMD ${pkgs.openssh}/bin/ssh-keygen -y -f "$KEY_FILE" > "$PUB_KEY_FILE"
-              #     echo "ssh key $KEY_FILE has been wrote"
-              #   '';
-              #   deps = [ "specialfs" ];
-              # };
-
               system.stateVersion = "26.05";
 
               security.sudo = {
@@ -118,6 +88,8 @@ in
           hosts.iridium = { config, ... }: {
             system = "x86_64-linux";
 
+            facts."test_ssh_key" = { };
+
             workspace.secrets = {
               age.keyPairs = [
                 {
@@ -135,8 +107,19 @@ in
                   port = 22;
                 }
               ];
-              ed25519KeyFact = "test_ssh_key";
+              keyPaths = [
+                config.facts."test_ssh_key".path
+              ];
             };
+
+            qemu.forwardPorts = [
+              {
+                name = "ssh";
+                hypervisor = 2250;
+                guest = 22;
+                proto = "tcp";
+              }
+            ];
 
             nets."slipr" = {
               default = true;
@@ -167,6 +150,8 @@ in
             };
 
             qemu.nets."main" = { };
+            qemu.variant = "full-boot";
+            qemu.graphics = true;
           };
 
           hosts.gallium = { config, ... }: {
@@ -180,6 +165,8 @@ in
                 }
               ];
             };
+
+            facts."test_ssh_key" = { };
 
             nets."public" = {
               primary = true;
@@ -206,8 +193,19 @@ in
                   port = 22;
                 }
               ];
-              ed25519KeyFact = "test_ssh_key";
+              keyPaths = [
+                config.facts."test_ssh_key".path
+              ];
             };
+
+            qemu.forwardPorts = [
+              {
+                name = "ssh";
+                hypervisor = 2251;
+                guest = 22;
+                proto = "tcp";
+              }
+            ];
 
             users.admin = {
               isAdmin = true;
@@ -217,6 +215,7 @@ in
             };
 
             qemu.nets."main" = { };
+            qemu.variant = "full-boot";
 
             # overlays."main" = {
             #   wg.endpoint = "192.168.100.${toString config.idx}";

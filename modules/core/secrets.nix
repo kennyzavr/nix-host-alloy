@@ -463,51 +463,24 @@
           ++ (lib.flatten (lib.map (s: s.assertions) jailSecretsList));
 
         _internal.state = { ... }: {
-          masterSecrets = lib.mapAttrsToList (secretName: secret: {
+          secrets = lib.mapAttrs (_: secret: {
             inherit (secret) file tags;
-            name = secretName;
           }) alloy.secrets;
 
-          masterSecretRecipients = lib.map (kp: toString kp.recipient) alloy.workspace.secrets.age.keyPairs;
+          secretsAgeKeyPairs = alloy.workspace.secrets.age.keyPairs;
 
-          masterSecretIdentities = lib.map (kp: toString kp.identity) alloy.workspace.secrets.age.keyPairs;
+          hosts = lib.mapAttrs (_: host: {
+            secretsAgeKeyPairs = host.workspace.secrets.age.keyPairs;
+            secrets = lib.mapAttrs (_: secret: {
+              inherit (secret) file path;
+            }) host.secrets;
+          }) alloy.hosts;
 
-          hostSecrets = lib.map (secret: {
-            host = secret.hostName;
-            name = secret.secretName;
-            file = secret.file;
-          }) hostSecretsList;
-
-          hostSecretRecipients = lib.pipe alloy.hosts [
-            (lib.mapAttrsToList (
-              hostName: host:
-              lib.map (ageKey: {
-                host = hostName;
-                value = toString ageKey.recipient;
-              }) host.workspace.secrets.age.keyPairs
-            ))
-            lib.flatten
-          ];
-
-          jailSecrets = lib.map (secret: {
-            jail = secret.jailName;
-            name = secret.secretName;
-            file = secret.file;
-          }) jailSecretsList;
-
-          jailSecretRecipients = lib.pipe alloy.jails [
-            (lib.mapAttrsToList (
-              jailName: jail:
-              let
-                host = alloy.hosts.${jail.host};
-              in
-              lib.map (ageKey: {
-                jail = jailName;
-                value = toString ageKey.recipient;
-              }) host.workspace.secrets.age.keyPairs
-            ))
-            lib.flatten
-          ];
+          jails = lib.mapAttrs (_: jail: {
+            secrets = lib.mapAttrs (_: secret: {
+              inherit (secret) file path;
+            }) jail.secrets;
+          }) alloy.jails;
         };
       };
     };

@@ -240,36 +240,36 @@
           keys = builtins.attrNames alloy.qemu.nets;
         };
 
-        _internal.state =
-          { pkgs, ... }:
-          {
-            qemuNets = lib.mapAttrsToList (name: net: {
-              inherit name;
-              idx = net.idx;
-            }) alloy.qemu.nets;
-            qemuGuests = lib.pipe alloy.hosts [
-              (lib.filterAttrs (_: host: host.qemu.variant != null))
-              (lib.mapAttrsToList (
-                hostName: host: {
-                  host = hostName;
-                  variant = host.qemu.variant;
-                  path = lib.getExe (host.qemu.variants.${host.qemu.variant}.package { inherit pkgs; });
-                  nets = lib.mapAttrsToList (netName: netHost: {
-                    name = netName;
-                    idx = alloy.qemu.nets.${netName}.idx;
-                    iface = netHost.iface;
-                    mac = netHost.mac;
-                  }) host.qemu.nets;
-                  forwardPorts = lib.map (fp: {
-                    proto = fp.proto;
-                    hypervisorPort = fp.hypervisor;
-                    guestPort = fp.guest;
-                    name = fp.name;
-                  }) host.qemu.forwardPorts;
-                }
-              ))
-            ];
-          };
+        # _internal.state =
+        #   { pkgs, ... }:
+        #   {
+        #     qemuNets = lib.mapAttrsToList (name: net: {
+        #       inherit name;
+        #       idx = net.idx;
+        #     }) alloy.qemu.nets;
+        #     qemuGuests = lib.pipe alloy.hosts [
+        #       (lib.filterAttrs (_: host: host.qemu.variant != null))
+        #       (lib.mapAttrsToList (
+        #         hostName: host: {
+        #           host = hostName;
+        #           variant = host.qemu.variant;
+        #           path = lib.getExe (host.qemu.variants.${host.qemu.variant}.package { inherit pkgs; });
+        #           nets = lib.mapAttrsToList (netName: netHost: {
+        #             name = netName;
+        #             idx = alloy.qemu.nets.${netName}.idx;
+        #             iface = netHost.iface;
+        #             mac = netHost.mac;
+        #           }) host.qemu.nets;
+        #           forwardPorts = lib.map (fp: {
+        #             proto = fp.proto;
+        #             hypervisorPort = fp.hypervisor;
+        #             guestPort = fp.guest;
+        #             name = fp.name;
+        #           }) host.qemu.forwardPorts;
+        #         }
+        #       ))
+        #     ];
+        #   };
       };
     };
 }

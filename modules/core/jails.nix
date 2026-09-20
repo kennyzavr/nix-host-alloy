@@ -396,8 +396,7 @@
         };
 
         _internal.state = { ... }: {
-          jails = lib.mapAttrsToList (jailName: jail: {
-            name = jailName;
+          jails = lib.mapAttrs (_: jail: {
             inherit (jail) host tags;
           }) alloy.jails;
         };

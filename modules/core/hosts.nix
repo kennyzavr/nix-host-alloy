@@ -76,9 +76,8 @@
         };
 
         _internal.state = { ... }: {
-          hosts = lib.mapAttrsToList (hostName: host: {
+          hosts = lib.mapAttrs (_: host: {
             inherit (host) tags;
-            name = hostName;
           }) alloy.hosts;
         };
       };

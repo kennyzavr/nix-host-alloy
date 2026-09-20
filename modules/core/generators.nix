@@ -101,8 +101,7 @@
         ];
 
         _internal.state = { pkgs, ... }: {
-          generators = lib.mapAttrsToList (generatorName: generator: {
-            name = generatorName;
+          generators = lib.mapAttrs (_: generator: {
             inherit (generator)
               wants
               wantedBy
@@ -110,9 +109,13 @@
               before
               tags
               ;
-            bin = toString (lib.getExe (generator.package { inherit pkgs; }));
             secrets = builtins.attrNames generator.secrets;
             facts = builtins.attrNames generator.facts;
+            bin =
+              let
+                b = builtins.tryEval (toString (lib.getExe (generator.package { inherit pkgs; })));
+              in
+              if b.success then b.value else null;
           }) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
         };
       };

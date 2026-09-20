@@ -712,38 +712,27 @@
           generators = lib.mkMerge (builtins.catAttrs "generators" overlayConfigs);
 
           _internal.state = { ... }: {
-            overlays = lib.mapAttrsToList (overlayName: overlay: {
-              name = overlayName;
+            overlays = lib.mapAttrs (_: overlay: {
               inherit (overlay) ipv6Prefix tags;
               links = lib.pipe overlay.links [
                 (lib.groupBy (l: l.id))
                 (lib.mapAttrsToList (_: builtins.head))
                 (lib.map (l: {
-                  a.host = l.a.host;
-                  b.host = l.b.host;
+                  aHost = l.a.host;
+                  bHost = l.b.host;
                 }))
               ];
             }) alloy.overlays;
-            hostOverlays = lib.pipe alloy.hosts [
-              (lib.mapAttrsToList (
-                hostName: host:
-                lib.mapAttrsToList (overlayName: overlay: {
-                  name = overlayName;
-                  host = hostName;
-                  ipv6 = overlay.ipv6;
-                }) host.overlays
-              ))
-            ];
-            jailOverlays = lib.pipe alloy.jails [
-              (lib.mapAttrsToList (
-                jailName: jail:
-                lib.mapAttrsToList (overlayName: overlay: {
-                  name = overlayName;
-                  jail = jailName;
-                  ipv6 = overlay.ipv6;
-                }) jail.overlays
-              ))
-            ];
+            hosts = lib.mapAttrs (_: host: {
+              overlays = lib.mapAttrs (_: overlay: {
+                ipv6 = overlay.ipv6;
+              }) host.overlays;
+            }) alloy.hosts;
+            jails = lib.mapAttrs (_: jail: {
+              overlays = lib.mapAttrs (_: overlay: {
+                ipv6 = overlay.ipv6;
+              }) jail.overlays;
+            }) alloy.jails;
           };
         };
     };

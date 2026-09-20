@@ -71,17 +71,26 @@
               if alloy.facts.${config.factName}.exists then
                 builtins.fromJSON alloy.facts.${config.factName}.value
               else
-                { };
-            get =
-              key: if config.values ? ${key} then config.values.${key} else 0
+                # { };
+                throw ''
+                  Alloy: Index '${name}' has no allocated values.
+                  The index file at '${alloy.workspace.facts.baseDir}/${config.factName}' is either
+                  missing or out of date.
+                  Run: alloy indexes generate --instace "${name}"
+                  to regenerate it.
+                '';
+            get = key: config.values.${key};
+            # if config.values ? ${key}
+            # then
+            #   config.values.${key}
+            # else
             # throw ''
             #   Alloy: Index '${name}' has no allocation for key '${key}'.
             #   The index file at '${alloy.workspace.facts.baseDir}/${config.factName}' is either
             #   missing or out of date.
             #   Run: alloy indexes generate --instace "${name}"
             #   to regenerate it.
-            # ''
-            ;
+            # '';
 
             assertions = lib.optionals alloy.facts.${config.factName}.exists (
               [
@@ -137,8 +146,7 @@
         facts = lib.mapAttrs' (_: index: lib.nameValuePair index.factName { }) alloy.indexes;
 
         _internal.state = { ... }: {
-          indexes = lib.mapAttrsToList (indexName: index: {
-            name = indexName;
+          indexes = lib.mapAttrs (_: index: {
             inherit (index)
               keys
               minValue

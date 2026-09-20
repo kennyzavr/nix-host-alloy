@@ -46,11 +46,14 @@
 
             exists = builtins.pathExists config.path;
 
-            value = if config.exists then builtins.readFile config.path else "";
-            # throw ''
-            #   Alloy: Fact file for '${name}' not found at ${config.path}.
-            #   To fix this, ensure the file is created (e.g. via 'alloy generators run' or 'alloy facts set "${name}"').
-            # '';
+            value =
+              if config.exists then
+                builtins.readFile config.path
+              else
+                throw ''
+                  Alloy: Fact file for '${name}' not found at ${config.path}.
+                  To fix this, ensure the file is created (e.g. via 'alloy generators run' or 'alloy facts set "${name}"').
+                '';
 
             assertions = [
               {
@@ -145,10 +148,12 @@
         assertions = lib.flatten (lib.mapAttrsToList (name: f: f.assertions) alloy.facts);
 
         _internal.state = { ... }: {
-          facts = lib.mapAttrsToList (factName: fact: {
-            name = factName;
+          facts = lib.mapAttrs (_: fact: {
             inherit (fact) file tags;
           }) alloy.facts;
+          hosts = lib.mapAttrs (_: host: {
+            facts = lib.mapAttrs (_: fact: { inherit (fact) path; }) host.facts;
+          }) alloy.hosts;
         };
       };
     };

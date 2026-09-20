@@ -75,25 +75,30 @@
           };
           permissions = lib.mkOption {
             type = alib.types.permissions;
-            default = {
-              mode = "0640";
-              owner = "root";
-              group = "root";
-            };
+          };
+        };
+        config = {
+          permissions = {
+            mode = lib.mkDefault "0640";
+            owner = lib.mkDefault "root";
+            group = lib.mkDefault "root";
           };
         };
       };
 
       mkNodeFact = factName: fact: {
         nixosModule = {
-          environment.etc."alloy/facts/${factName}" = {
+          environment.etc."alloy-internal/facts/${factName}" = {
             inherit (fact.permissions) mode group;
             user = fact.permissions.owner;
             text = alloy.facts.${factName}.value;
           };
 
           systemd.tmpfiles.settings."10-alloy-facts".${fact.path}."L+" = {
-            argument = "/etc/alloy/facts/${factName}";
+            user = fact.permissions.owner;
+            group = fact.permissions.group;
+            mode = fact.permissions.mode;
+            argument = "/etc/alloy-internal/facts/${factName}";
           };
         };
       };
@@ -105,7 +110,7 @@
         };
         options.factsBasePath = lib.mkOption {
           type = lib.types.str;
-          default = "run/alloy/facts";
+          default = "/etc/alloy/facts";
         };
 
         config.nixosModule = {

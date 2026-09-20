@@ -70,6 +70,7 @@
               ++ (lib.optional (net.v6 != null) {
                 Address = "${net.v6.address}/${toString net.v6.prefixLength}";
               });
+            # FIXME: add assertion that checks net.v4/v6.gateway != null
             routes =
               (lib.optional (net.v4 != null && net.v4.gateway != null) {
                 Gateway = net.v4.gateway;

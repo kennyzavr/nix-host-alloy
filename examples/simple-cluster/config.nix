@@ -88,7 +88,9 @@ in
           hosts.iridium = { config, ... }: {
             system = "x86_64-linux";
 
-            facts."test_ssh_key" = { };
+            facts."test_ssh_key" = {
+              permissions.mode = "0600";
+            };
 
             workspace.secrets = {
               age.keyPairs = [
@@ -111,20 +113,38 @@ in
                 config.facts."test_ssh_key".path
               ];
             };
+            boot = {
+              facts."test_ssh_key" = { };
+
+              ssh = {
+                enable = true;
+                authKeyFacts = [ "test_ssh_pub_key" ];
+                keyPaths = [ config.boot.facts."test_ssh_key".path ];
+                port = 2022;
+              };
+            };
 
             qemu.forwardPorts = [
               {
                 name = "ssh";
-                hypervisor = 2250;
+                hypervisor = 2251;
                 guest = 22;
+                proto = "tcp";
+              }
+              {
+                name = "initrd ssh";
+                hypervisor = 2250;
+                guest = 2022;
                 proto = "tcp";
               }
             ];
 
             nets."slipr" = {
               default = true;
+              static = true;
               v4.address = "10.0.2.15";
               v4.prefixLength = 24;
+              v4.gateway = "10.0.2.2";
               iface = "eth0";
             };
 
@@ -201,7 +221,7 @@ in
             qemu.forwardPorts = [
               {
                 name = "ssh";
-                hypervisor = 2251;
+                hypervisor = 2261;
                 guest = 22;
                 proto = "tcp";
               }
@@ -215,7 +235,8 @@ in
             };
 
             qemu.nets."main" = { };
-            qemu.variant = "full-boot";
+            # qemu.variant = "full-boot";
+            qemu.variant = null;
 
             # overlays."main" = {
             #   wg.endpoint = "192.168.100.${toString config.idx}";

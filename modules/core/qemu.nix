@@ -114,13 +114,6 @@
               );
           };
 
-          commonVmHost = lib.nixosSystem {
-            inherit (host) system;
-            modules = [
-              host.nixosModule
-              commonModule
-            ];
-          };
         in
         {
           options = {
@@ -160,9 +153,30 @@
             };
           };
 
-          config.variants."direct-boot".package = { ... }: commonVmHost.config.system.build.vm;
+          config.variants."direct-boot".package =
+            { ... }:
+            (lib.nixosSystem {
+              inherit (host) system;
+              modules = [
+                host.nixosModule
+                commonModule
+              ];
+            }).config.system.build.vm;
 
-          config.variants."full-boot".package = { ... }: commonVmHost.config.system.build.vmWithBootLoader;
+          config.variants."full-boot".package =
+            { ... }:
+            (lib.nixosSystem {
+              inherit (host) system;
+              modules = [
+                host.nixosModule
+                commonModule
+                ({config, ...}: {
+                  virtualisation.useBootLoader = true;
+                  virtualisation.useEFIBoot =
+                    config.boot.loader.systemd-boot.enable || config.boot.loader.efi.canTouchEfiVariables;
+                })
+              ];
+            }).config.system.build.vm;
         };
 
       hostSubmodule =

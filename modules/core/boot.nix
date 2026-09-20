@@ -32,14 +32,18 @@
           };
           factsBasePath = lib.mkOption {
             type = lib.types.str;
-            default = "run/alloy/facts";
+            default = "/etc/alloy/facts";
           };
         };
 
         config.nixosModule = { pkgs, ... }: {
           boot.loader.grub.enable = lib.mkIf config.boot.grub.enable true;
+
           boot.initrd.enable = true;
           boot.initrd.systemd.enable = true;
+
+          # boot.initrd.systemd.emergencyAccess = true;
+          # boot.kernelParams = [ "rd.systemd.break=pre-mount" ];
 
           boot.initrd.secrets = lib.mapAttrs' (
             factName: fact: lib.nameValuePair fact.path alloy.facts.${factName}.path

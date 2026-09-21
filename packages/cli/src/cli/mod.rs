@@ -2,7 +2,7 @@ use std::{io::Write, path::PathBuf};
 
 use console::style;
 use miette::{Context, IntoDiagnostic};
-use tempfile::{NamedTempFile, tempfile};
+use tempfile::NamedTempFile;
 
 use crate::lib::{state, workspace};
 

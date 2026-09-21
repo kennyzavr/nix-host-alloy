@@ -201,6 +201,11 @@ impl Cli {
         let collection =
             lib::secrets::collect(&state, &args.secrets, &args.hosts, &args.jails, &args.tags);
 
+        if collection.host_secrets.is_empty() && collection.jail_secrets.is_empty() {
+            self.print_info("No secrets found matching the criteria.");
+            return;
+        }
+
         for (host_name, secret_name) in collection.host_secrets {
             match lib::secrets::host::rekey(
                 &self.state_loader.workspace,
@@ -260,7 +265,147 @@ impl Cli {
         }
     }
 
-    fn handle_secrets_list(&self, args: ListArgs) {}
+    fn handle_secrets_list(&self, args: ListArgs) {
+        let run = || -> miette::Result<()> {
+            let state = self.state_loader.load().wrap_err("Failed to load state")?;
 
-    fn handle_secrets_show(&self, args: ShowArgs) {}
+            let collection =
+                lib::secrets::collect(&state, &[], &args.hosts, &args.jails, &args.tags);
+
+            let mut table = comfy_table::Table::new();
+            table.load_style(comfy_table::presets::UTF8_FULL);
+
+            let has_target_filters = !args.hosts.is_empty() || !args.jails.is_empty();
+
+            if has_target_filters {
+                table.set_header(vec![
+                    "Target",
+                    "Secret",
+                    "Master Secret Tags",
+                    "Target File",
+                ]);
+
+                let mut count = 0;
+                let mut rows = Vec::new();
+
+                for (host, secret) in &collection.host_secrets {
+                    let tags = state
+                        .secrets
+                        .get(*secret)
+                        .map(|s| s.tags.join(", "))
+                        .unwrap_or_default();
+                    let file = state
+                        .hosts
+                        .get(*host)
+                        .and_then(|h| h.secrets.get(*secret))
+                        .map(|s| s.file.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    rows.push((format!("Host: {}", host), secret.to_string(), tags, file));
+                }
+
+                for (jail, secret) in &collection.jail_secrets {
+                    let tags = state
+                        .secrets
+                        .get(*secret)
+                        .map(|s| s.tags.join(", "))
+                        .unwrap_or_default();
+                    let file = state
+                        .jails
+                        .get(*jail)
+                        .and_then(|j| j.secrets.get(*secret))
+                        .map(|s| s.file.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    rows.push((format!("Jail: {}", jail), secret.to_string(), tags, file));
+                }
+
+                rows.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+
+                for (target, secret, tags, file) in rows {
+                    table.add_row(vec![target, secret, tags, file]);
+                    count += 1;
+                }
+
+                if count > 0 {
+                    println!("{table}");
+                } else {
+                    self.print_info("No secrets found matching the criteria.");
+                }
+            } else {
+                table.set_header(vec!["Master Secret", "File", "Tags"]);
+
+                let mut secrets: Vec<_> = state.secrets.iter().collect();
+                secrets.sort_by_key(|(k, _)| *k);
+
+                let mut count = 0;
+                for (name, secret) in secrets {
+                    if !args.tags.is_empty() && !secret.tags.iter().any(|t| args.tags.contains(t)) {
+                        continue;
+                    }
+
+                    table.add_row(vec![
+                        name,
+                        secret.file.to_str().unwrap_or(""),
+                        &secret.tags.join(", "),
+                    ]);
+                    count += 1;
+                }
+
+                if count > 0 {
+                    println!("{table}");
+                } else {
+                    self.print_info("No secrets found matching the criteria.");
+                }
+            }
+
+            Ok(())
+        };
+
+        if let Err(report) = run() {
+            self.print_report(report);
+        }
+    }
+
+    fn handle_secrets_show(&self, args: ShowArgs) {
+        let run = || -> miette::Result<()> {
+            let state = self.state_loader.load().wrap_err("Failed to load state")?;
+
+            if let Some(secret) = state.secrets.get(&args.secret) {
+                let mut table = comfy_table::Table::new();
+                table.load_style(comfy_table::presets::UTF8_FULL);
+                table.set_header(vec!["Property", "Value"]);
+                table.add_row(vec!["Name", &args.secret]);
+                table.add_row(vec!["File", secret.file.to_str().unwrap_or("")]);
+                table.add_row(vec!["Tags", &secret.tags.join(", ")]);
+
+                let collection =
+                    lib::secrets::collect(&state, &[args.secret.clone()], &[], &[], &[]);
+
+                let mut targets = Vec::new();
+                for (host, _) in &collection.host_secrets {
+                    targets.push(format!("Host: {}", host));
+                }
+                for (jail, _) in &collection.jail_secrets {
+                    targets.push(format!("Jail: {}", jail));
+                }
+
+                targets.sort();
+
+                if !targets.is_empty() {
+                    table.add_row(vec!["Targets", &targets.join("\n")]);
+                } else {
+                    table.add_row(vec!["Targets", "None"]);
+                }
+
+                println!("{table}");
+            } else {
+                miette::bail!("Secret {} not found", StyledName(&args.secret));
+            }
+
+            Ok(())
+        };
+
+        if let Err(report) = run() {
+            self.print_report(report);
+        }
+    }
 }

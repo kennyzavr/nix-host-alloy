@@ -44,6 +44,8 @@ struct GetArgs {
 
 #[derive(Args, Debug, Clone)]
 struct ListArgs {
+    #[arg(short = 't', long = "tag")]
+    tags: Vec<String>,
     #[arg(short = 'v', long = "verbose")]
     verbose: bool,
     #[arg(long = "flat")]
@@ -52,7 +54,7 @@ struct ListArgs {
 
 #[derive(Args, Debug, Clone)]
 struct ShowArgs {
-    secret: String,
+    fact: String,
 }
 
 impl Cli {
@@ -155,7 +157,67 @@ impl Cli {
         }
     }
 
-    fn handle_facts_list(&self, args: ListArgs) {}
+    fn handle_facts_list(&self, args: ListArgs) {
+        let run = || -> miette::Result<()> {
+            let state = self.state_loader.load().wrap_err("Failed to load state")?;
 
-    fn handle_facts_show(&self, args: ShowArgs) {}
+            let mut table = comfy_table::Table::new();
+            table.load_style(comfy_table::presets::UTF8_FULL);
+            table.set_header(vec!["Fact", "File", "Tags"]);
+
+            let mut facts: Vec<_> = state.facts.iter().collect();
+            facts.sort_by_key(|(k, _)| *k);
+
+            let mut count = 0;
+            for (name, fact) in facts {
+                if !args.tags.is_empty() && !fact.tags.iter().any(|t| args.tags.contains(t)) {
+                    continue;
+                }
+
+                let tags = fact.tags.join(", ");
+                table.add_row(vec![
+                    name,
+                    fact.file.to_str().unwrap_or(""),
+                    &tags,
+                ]);
+                count += 1;
+            }
+
+            if count > 0 {
+                println!("{table}");
+            } else {
+                self.print_info("No facts found.");
+            }
+
+            Ok(())
+        };
+
+        if let Err(report) = run() {
+            self.print_report(report);
+        }
+    }
+
+    fn handle_facts_show(&self, args: ShowArgs) {
+        let run = || -> miette::Result<()> {
+            let state = self.state_loader.load().wrap_err("Failed to load state")?;
+
+            if let Some(fact) = state.facts.get(&args.fact) {
+                let mut table = comfy_table::Table::new();
+                table.load_style(comfy_table::presets::UTF8_FULL);
+                table.set_header(vec!["Property", "Value"]);
+                table.add_row(vec!["Name", &args.fact]);
+                table.add_row(vec!["File", fact.file.to_str().unwrap_or("")]);
+                table.add_row(vec!["Tags", &fact.tags.join(", ")]);
+                println!("{table}");
+            } else {
+                miette::bail!("Fact {} not found", StyledName(&args.fact));
+            }
+
+            Ok(())
+        };
+
+        if let Err(report) = run() {
+            self.print_report(report);
+        }
+    }
 }

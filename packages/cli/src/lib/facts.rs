@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::lib::workspace;
 
 use super::{
-    file, git,
+    file,
     state::{FactState, State},
 };
 

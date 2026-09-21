@@ -1,15 +1,13 @@
-use std::io::Read;
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
-use eyre::{OptionExt, Result};
 use serde::Deserialize;
-use tempfile::NamedTempFile;
 
-use crate::sh::exec_sh_script;
-use crate::workspace::Workspace;
+use crate::lib::StyledPath;
+
+use super::workspace::Workspace;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct State {
@@ -91,7 +89,7 @@ pub struct NodeOverlayState {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct OverlayLinkState {
+pub struct OverlayLinkState {
     #[serde(rename = "aHost")]
     pub a_host: String,
     #[serde(rename = "bHost")]
@@ -122,33 +120,73 @@ pub enum ModuleSource {
     FlakeAttr(String),
 }
 
-pub struct StateLoader {
+pub struct Loader {
     pub module_source: ModuleSource,
     pub workspace: Workspace,
     pub alloy_url: String,
     pub nixpkgs_url: String,
 }
 
-impl StateLoader {
-    pub fn load(&self) -> Result<State> {
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+pub enum EvalError {
+    #[error("workspace root {} must be a flake root", StyledPath(&path))]
+    #[diagnostic(
+        code(state::eval::not_flake_root),
+        help("Ensure you are in a valid flake workspace")
+    )]
+    NotFlakeRoot { path: PathBuf },
+    #[error("failed to evaluate flake attribute with {0}")]
+    #[diagnostic(code(state::eval::flake_attr))]
+    EvalFlakeAttr(std::process::ExitStatus),
+    #[error("nix evaluation failed with {0}")]
+    #[diagnostic(code(state::eval::execution))]
+    Execution(std::process::ExitStatus),
+    #[error("I/O error occurred while executing nix")]
+    #[diagnostic(code(state::eval::io))]
+    Io(#[from] std::io::Error),
+}
+
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+pub enum LoadError {
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Eval(#[from] EvalError),
+    #[error("failed to deserialize state json")]
+    #[diagnostic(code(state::deserialize))]
+    Deserialize(#[source] serde_json::Error),
+}
+
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+pub enum LoadGenScriptError {
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Eval(#[from] EvalError),
+}
+
+impl Loader {
+    fn eval_nix(&self, inner_expr: &str, is_raw: bool) -> Result<String, EvalError> {
         let module_source_expr = match &self.module_source {
-            ModuleSource::ModuleFile(module_path) => format!(
-                "import {}",
-                module_path
-                    .to_str()
-                    .ok_or_eyre("module path is not valid utf8 string")?
-            ),
+            ModuleSource::ModuleFile(module_path) => {
+                format!("import {}", module_path.to_str().unwrap())
+            }
             ModuleSource::FlakeAttr(flake_attr)
                 if let Some(flake_url) = self.workspace.flake_url() =>
             {
-                exec_sh_script(&format!("nix eval {}#{}", flake_url, flake_attr))?;
+                let status = std::process::Command::new("nix")
+                    .args(["eval", &format!("{}#{}", flake_url, flake_attr)])
+                    .stderr(std::process::Stdio::inherit())
+                    .stdout(std::process::Stdio::null())
+                    .status()?;
+
+                if !status.success() {
+                    return Err(EvalError::EvalFlakeAttr(status));
+                }
                 format!(r#"(builtins.getFlake "{}").{}"#, flake_url, flake_attr)
             }
             ModuleSource::FlakeAttr(_) => {
-                eyre::bail!(
-                    "workspace root '{}' must be a flake root",
-                    self.workspace.root()
-                )
+                return Err(EvalError::NotFlakeRoot {
+                    path: self.workspace.root(),
+                });
             }
         };
 
@@ -163,75 +201,40 @@ impl StateLoader {
                     checkAssertions = false;
                 }};
             in
-                res.config._internal.state {{ inherit pkgs; }}
+                {}
             "#,
-            &self.nixpkgs_url, &self.alloy_url, module_source_expr
+            &self.nixpkgs_url, &self.alloy_url, module_source_expr, inner_expr
         );
 
-        let mut tempfile = NamedTempFile::new()?;
-        exec_sh_script(&format!(
-            "nix eval --impure --json --expr '{}' > {}",
-            nix_expr,
-            tempfile.path().to_str().unwrap(),
-        ))?;
+        let format_flag = if is_raw { "--raw" } else { "--json" };
 
-        let mut raw_state = String::new();
-        tempfile.read_to_string(&mut raw_state)?;
+        let output = std::process::Command::new("nix")
+            .args(["eval", "--impure", format_flag, "--expr", &nix_expr])
+            .stderr(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::piped())
+            .output()?;
 
-        let state = serde_json::from_str(&raw_state)?;
+        if !output.status.success() {
+            return Err(EvalError::Execution(output.status));
+        }
+
+        let result_str = String::from_utf8(output.stdout).unwrap();
+        Ok(result_str)
+    }
+
+    pub fn load(&self) -> Result<State, LoadError> {
+        let inner_expr = "res.config._internal.state { inherit pkgs; }";
+        let raw_state = self.eval_nix(inner_expr, false)?;
+        let state = serde_json::from_str(&raw_state).map_err(LoadError::Deserialize)?;
         Ok(state)
     }
 
-    pub fn load_generator_script(&self, generator_name: &str) -> Result<PathBuf> {
-        let module_source_expr = match &self.module_source {
-            ModuleSource::ModuleFile(module_path) => format!(
-                "import {}",
-                module_path
-                    .to_str()
-                    .ok_or_eyre("module path is not valid utf8 string")?
-            ),
-            ModuleSource::FlakeAttr(flake_attr)
-                if let Some(flake_url) = self.workspace.flake_url() =>
-            {
-                exec_sh_script(&format!("nix eval {}#{}", flake_url, flake_attr))?;
-                format!(r#"(builtins.getFlake "{}").{}"#, flake_url, flake_attr)
-            }
-            ModuleSource::FlakeAttr(_) => {
-                eyre::bail!(
-                    "workspace root '{}' must be a flake root",
-                    self.workspace.root()
-                )
-            }
-        };
-
-        let nix_expr = format!(
-            r#"
-            let
-                pkgs = (builtins.getFlake "{}").legacyPackages.${{builtins.currentSystem}};
-                alloyLib = (builtins.getFlake "{}").lib;
-                alloyModule = {};
-                res = alloyLib.evalModules {{
-                    modules = [alloyModule];
-                    checkAssertions = false;
-                }};
-                package = res.config.generators.{generator_name}.package {{ inherit pkgs; }};
-            in
-                lib.getExe package
-            "#,
-            &self.nixpkgs_url, &self.alloy_url, module_source_expr
+    pub fn load_gen_script(&self, generator_name: &str) -> Result<PathBuf, LoadGenScriptError> {
+        let inner_expr = format!(
+            "let package = res.config.generators.{}.package {{ inherit pkgs; }}; in pkgs.lib.getExe package",
+            generator_name
         );
-
-        let mut tempfile = NamedTempFile::new()?;
-        exec_sh_script(&format!(
-            "nix eval --impure --json --expr '{}' > {}",
-            nix_expr,
-            tempfile.path().to_str().unwrap(),
-        ))?;
-
-        let mut raw_path = String::new();
-        tempfile.read_to_string(&mut raw_path)?;
-
-        let path = PathBuf::try_from(raw_path)?;
-        Ok(path)
+        let raw_path = self.eval_nix(&inner_expr, true)?;
+        Ok(PathBuf::from(raw_path))
     }
 }

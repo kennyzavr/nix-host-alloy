@@ -22,6 +22,8 @@ in
       };
     };
 
+    flake.alloyModules.foo = {};
+
     flake.alloyModules.simpleCluster =
       { alib, config, ... }:
       let
@@ -60,13 +62,15 @@ in
         config = {
           name = "simple-cluster";
 
+          secrets."foobar" = {};
+
           workspace.root = toString self;
 
           workspace.secrets = {
             age.keyPairs = [
               {
-                identity = ./test_ed25519_key;
-                recipient = ./test_ed25519_key.pub;
+                identity = ./facts/test_ssh_key;
+                recipient = ./facts/test_ssh_pub_key;
               }
             ];
           };
@@ -88,6 +92,8 @@ in
           hosts.iridium = { config, ... }: {
             system = "x86_64-linux";
 
+            secrets."foobar" = {};
+
             facts."test_ssh_key" = {
               permissions.mode = "0600";
             };
@@ -95,8 +101,8 @@ in
             workspace.secrets = {
               age.keyPairs = [
                 {
-                  identity = ./test_ed25519_key;
-                  recipient = ./test_ed25519_key.pub;
+                  identity = ./facts/test_ssh_key;
+                  recipient = ./facts/test_ssh_pub_key;
                 }
               ];
             };
@@ -180,8 +186,8 @@ in
             workspace.secrets = {
               age.keyPairs = [
                 {
-                  identity = ./test_ed25519_key;
-                  recipient = ./test_ed25519_key.pub;
+                  identity = ./facts/test_ssh_key;
+                  recipient = ./facts/test_ssh_pub_key;
                 }
               ];
             };

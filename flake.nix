@@ -13,6 +13,13 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    crane = {
+      url = "github:ipetkov/crane";
+    };
   };
 
   outputs =
@@ -26,6 +33,7 @@
           ./parts.nix
           ./lib
           ./modules
+          ./packages/cli
         ];
 
         flake.flakeModules = {
@@ -36,17 +44,17 @@
           {
             pkgs,
             config,
-	    self',
+            self',
             ...
           }:
           {
 
             packages.clear-store-paths = pkgs.writeShellScriptBin "clear-store-paths" ''
-	      shopt -s nullglob
-	      disk_paths=(/nix/store/*nixos-disk-image*)
-              nix-store --query --referrers-closure "''${disk_paths[@]}" | xargs nix-store --delete
-            ''; 
-            
+              	      shopt -s nullglob
+              	      disk_paths=(/nix/store/*nixos-disk-image*)
+                            nix-store --query --referrers-closure "''${disk_paths[@]}" | xargs nix-store --delete
+            '';
+
             packages.alloy-cli = pkgs.python3Packages.buildPythonApplication {
               pname = "alloy-cli";
               version = "0.1.0";
@@ -73,7 +81,7 @@
                 pkgs.nil
                 pkgs.pyright
                 pkgs.ruff
-		self'.packages.clear-store-paths
+                self'.packages.clear-store-paths
               ];
             };
             formatter = pkgs.nixfmt-tree;

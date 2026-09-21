@@ -1,26 +1,31 @@
 use std::path::PathBuf;
 
-use eyre::Context;
+#[derive(Debug, thiserror::Error, miette::Diagnostic)]
+pub enum Error {
+    #[error("Failed to get current working directory")]
+    #[diagnostic(code(alloy::workspace::current_dir))]
+    CurrentDir(#[source] std::io::Error),
+}
 
 pub struct Workspace {
-    pub curr_dir: PathBuf,
-    pub git: Option<WorkspaceGit>,
+    curr_dir: PathBuf,
+    git: Option<Git>,
 }
 
-pub struct WorkspaceGit {
-    pub dir: PathBuf,
-    pub flake: Option<WorkspaceFlake>,
+pub struct Git {
+    dir: PathBuf,
+    flake: Option<Flake>,
 }
 
-pub struct WorkspaceFlake {
-    pub rel_dir: PathBuf,
+pub struct Flake {
+    rel_dir: PathBuf,
 }
 
 impl Workspace {
-    pub fn new(default_dir: Option<PathBuf>) -> eyre::Result<Self> {
+    pub fn new(default_dir: Option<PathBuf>) -> Result<Self, Error> {
         let curr_dir = match default_dir {
             Some(v) => v,
-            None => std::env::current_dir().wrap_err("Failed to get current working directory")?,
+            None => std::env::current_dir().map_err(Error::CurrentDir)?,
         };
 
         let mut git_dir = None;
@@ -53,9 +58,9 @@ impl Workspace {
 
         Ok(Self {
             curr_dir,
-            git: git_dir.map(|dir| WorkspaceGit {
+            git: git_dir.map(|dir| Git {
                 dir,
-                flake: flake_rel_dir.map(|rel_dir| WorkspaceFlake { rel_dir }),
+                flake: flake_rel_dir.map(|rel_dir| Flake { rel_dir }),
             }),
         })
     }
@@ -76,12 +81,10 @@ impl Workspace {
         ));
     }
 
-    pub fn root(&self) -> String {
+    pub fn root(&self) -> PathBuf {
         match self.git {
-            Some(ref git) if let Some(ref flake) = git.flake => {
-                git.dir.join(&flake.rel_dir).into_string().unwrap()
-            }
-            _ => self.curr_dir.clone().into_string().unwrap(),
+            Some(ref git) if let Some(ref flake) = git.flake => git.dir.join(&flake.rel_dir),
+            _ => self.curr_dir.clone(),
         }
     }
 }

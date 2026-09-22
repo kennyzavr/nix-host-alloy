@@ -1,7 +1,6 @@
 use std::{io::Write, path::PathBuf};
 
-use console::style;
-use miette::IntoDiagnostic;
+use owo_colors::OwoColorize;
 use tempfile::NamedTempFile;
 
 use crate::lib::{state, workspace};
@@ -13,8 +12,26 @@ mod secrets;
 const NIXPKGS_DEFAULT_SOURCE_URL: &str = "nixpkgs";
 const ALLOY_DEFAULT_SOURCE_URL: &str = "github:kennyzavr/nix-host-alloy";
 
+const CLAP_STYLES: clap::builder::styling::Styles = clap::builder::styling::Styles::styled()
+    .header(
+        clap::builder::styling::AnsiColor::Cyan
+            .on_default()
+            .effects(clap::builder::styling::Effects::BOLD),
+    )
+    .usage(
+        clap::builder::styling::AnsiColor::Cyan
+            .on_default()
+            .effects(clap::builder::styling::Effects::BOLD),
+    )
+    .literal(
+        clap::builder::styling::AnsiColor::Blue
+            .on_default()
+            .effects(clap::builder::styling::Effects::BOLD),
+    )
+    .placeholder(clap::builder::styling::AnsiColor::Cyan.on_default());
+
 #[derive(clap::Parser, Debug)]
-#[command(name = "alloy-cli")]
+#[command(name = "alloy-cli", styles = CLAP_STYLES)]
 pub struct Args {
     #[command(flatten)]
     workspace: WorkspaceArgs,
@@ -53,6 +70,7 @@ struct ModuleSourceArgs {
 struct Cli {
     state_loader: state::Loader,
     stderr: console::Term,
+    depth: usize,
 }
 
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
@@ -79,37 +97,86 @@ enum EditError {
 }
 
 impl Cli {
+    fn indent(&self) -> String {
+        "  ".repeat(self.depth)
+    }
+
     fn print_info(&self, msg: &str) {
-        // TODO: just log the error
+        let tag = format!("{:>12}", "Info:").bright_blue().bold().to_string();
         self.stderr
-            .write_line(&format!("{} {}", style("·").cyan().dim(), msg))
+            .write_line(&format!("{}{tag} {msg}", self.indent()))
             .unwrap();
     }
 
     fn print_skip(&self, msg: &str) {
+        let tag = format!("{:>12}", "Skip:").dimmed().bold().to_string();
         self.stderr
-            .write_line(&format!("{} {}", style("○").dim(), msg))
+            .write_line(&format!("{}{tag} {msg}", self.indent()))
             .unwrap();
     }
 
     fn print_ok(&self, msg: &str) {
+        let tag = format!("{:>12}", "Ok:").bright_green().bold().to_string();
         self.stderr
-            .write_line(&format!("{} {}", style("✓").bold().green(), msg))
+            .write_line(&format!("{}{tag} {msg}", self.indent()))
             .unwrap();
     }
 
     fn print_step(&self, msg: &str) {
+        let tag = format!("{:>12}", "Step:").bright_cyan().bold().to_string();
         self.stderr
-            .write_line(&format!("{} {}", style("◆").bold().blue(), msg))
+            .write_line(&format!("{}{tag} {msg}", self.indent()))
             .unwrap();
     }
 
     fn print_error(&self, error: impl miette::Diagnostic + Send + Sync + 'static) {
-        print_error(&self.stderr, error);
+        print_error(&self.stderr, error, self.depth);
     }
 
     fn print_report(&self, report: miette::Report) {
-        self.stderr.write_line(&format!("{:?}", report)).unwrap();
+        let tag = format!("{:>12}", "Error:").bright_red().bold().to_string();
+        let indent_str = "  ".repeat(self.depth);
+
+        let report_code = AsRef::<dyn miette::Diagnostic>::as_ref(&report)
+            .code()
+            .map(|c| c.to_string());
+
+        let error_str = format!("{:?}", report);
+        let mut lines = error_str.lines().skip_while(|l| l.trim().is_empty());
+
+        if let Some(first_line) = lines.next() {
+            let original_len = first_line.len();
+            let trimmed = first_line.trim_start();
+            let spaces_removed = original_len - trimmed.len();
+
+            let display_text = if let Some(code) = report_code {
+                code.yellow().bold().to_string()
+            } else {
+                trimmed.to_string()
+            };
+
+            self.stderr
+                .write_line(&format!("{}{tag} {}", indent_str, display_text))
+                .unwrap();
+
+            let padding = 13_usize.saturating_sub(spaces_removed);
+            let block_indent = format!("{}{}", indent_str, " ".repeat(padding));
+
+            let indented_error = lines
+                .map(|line| {
+                    if line.trim().is_empty() {
+                        String::new()
+                    } else {
+                        format!("{block_indent}{line}")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            if !indented_error.is_empty() {
+                self.stderr.write_line(&indented_error).unwrap();
+            }
+        }
     }
 
     fn create_table(&self) -> comfy_table::Table {
@@ -185,16 +252,88 @@ impl Cli {
     }
 }
 
-fn print_error(stderr: &console::Term, error: impl miette::Diagnostic + Send + Sync + 'static) {
+fn print_error(
+    stderr: &console::Term,
+    error: impl miette::Diagnostic + Send + Sync + 'static,
+    depth: usize,
+) {
+    let tag = format!("{:>12}", "Error:").bright_red().bold().to_string();
+    let indent_str = "  ".repeat(depth);
+
+    let report_code = error.code().map(|c| c.to_string());
+
     let report = miette::Report::new(error);
-    stderr.write_line(&format!("{:?}", report)).unwrap();
+    let error_str = format!("{:?}", report);
+    let mut lines = error_str.lines().skip_while(|l| l.trim().is_empty());
+
+    if let Some(first_line) = lines.next() {
+        let original_len = first_line.len();
+        let trimmed = first_line.trim_start();
+        let spaces_removed = original_len - trimmed.len();
+
+        let display_text = if let Some(code) = report_code {
+            code.yellow().bold().to_string()
+        } else {
+            trimmed.to_string()
+        };
+
+        stderr
+            .write_line(&format!("{}{tag} {}", indent_str, display_text))
+            .unwrap();
+
+        let padding = 13_usize.saturating_sub(spaces_removed);
+        let block_indent = format!("{}{}", indent_str, " ".repeat(padding));
+
+        let indented_error = lines
+            .map(|line| {
+                if line.trim().is_empty() {
+                    String::new()
+                } else {
+                    format!("{block_indent}{line}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if !indented_error.is_empty() {
+            stderr.write_line(&indented_error).unwrap();
+        }
+    }
 }
 
 pub fn handle_args(args: Args) {
+    let _ = miette::set_hook(Box::new(|_| {
+        let mut theme = miette::GraphicalTheme::unicode();
+        theme.styles = miette::ThemeStyles {
+            error: owo_colors::Style::new().bright_red().bold(),
+            warning: owo_colors::Style::new().bright_yellow().bold(),
+            advice: owo_colors::Style::new().bright_blue().bold(),
+            help: owo_colors::Style::new().cyan().dimmed(),
+            link: owo_colors::Style::new().bright_blue().underline(),
+            linum: owo_colors::Style::new().dimmed(),
+            highlights: vec![
+                owo_colors::Style::new().bright_red().bold(),
+                owo_colors::Style::new().bright_yellow().bold(),
+                owo_colors::Style::new().bright_cyan().bold(),
+            ],
+        };
+
+        Box::new(
+            miette::MietteHandlerOpts::new()
+                .graphical_theme(theme)
+                .build(),
+        )
+    }));
+
     let stderr = console::Term::stderr();
 
+    let depth = std::env::var("ALLOY_DEPTH")
+        .unwrap_or_else(|_| "0".to_string())
+        .parse()
+        .unwrap_or(0);
+
     let Ok(workspace) = workspace::Workspace::new(args.workspace.root_dir)
-        .map_err(|error| print_error(&stderr, error))
+        .map_err(|error| print_error(&stderr, error, depth))
     else {
         return;
     };
@@ -221,6 +360,7 @@ pub fn handle_args(args: Args) {
     Cli {
         state_loader,
         stderr,
+        depth,
     }
     .handle_cmd(args.cmd);
 }

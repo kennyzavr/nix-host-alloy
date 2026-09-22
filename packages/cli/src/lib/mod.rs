@@ -18,7 +18,7 @@ pub struct StyledPath<'a>(pub &'a Path);
 
 impl<'a> fmt::Display for StyledName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.yellow().bright_magenta())
+        write!(f, "{}", self.0.cyan().bold())
     }
 }
 

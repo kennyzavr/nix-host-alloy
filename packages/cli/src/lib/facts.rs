@@ -41,18 +41,24 @@ pub enum WriteError {
 )]
 pub struct NotFoundError;
 
+pub fn exists(
+    workspace: &workspace::Workspace,
+    state: &State,
+    name: &str,
+) -> bool {
+    state
+        .facts
+        .get(name)
+        .map(|fact| workspace.root().join(&fact.file).exists())
+        .unwrap_or(false)
+}
+
 pub fn read(
     workspace: &workspace::Workspace,
     state: &State,
     name: &str,
 ) -> Result<String, ReadError> {
-    let Some((_, fact)) = state
-        .facts
-        .iter()
-        .find(|(fact_name, _)| name == **fact_name)
-    else {
-        return Err(NotFoundError.into());
-    };
+    let fact = state.facts.get(name).ok_or(NotFoundError)?;
 
     let data = file::read(&workspace.root().join(&fact.file))?;
     let data = String::from_utf8(data)?;
@@ -68,13 +74,7 @@ pub fn write<'s>(
     force: bool,
     add_to_git: bool,
 ) -> Result<&'s FactState, WriteError> {
-    let Some((_, fact)) = state
-        .facts
-        .iter()
-        .find(|(fact_name, _)| name == **fact_name)
-    else {
-        return Err(NotFoundError.into());
-    };
+    let fact = state.facts.get(name).ok_or(NotFoundError)?;
 
     file::write(
         &workspace.root().join(&fact.file),

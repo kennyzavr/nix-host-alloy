@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.98"
 
-# [lints.rust]
-# warnings = "allow"
+[lints.rust]
+warnings = "allow"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
@@ -21,3 +21,4 @@ miette = { version = "7.6.0", features = ["fancy"] }
 console = "0.16.6"
 tempfile = "3.27.0"
 age = "0.12.1"
+petgraph = "0.8.3"

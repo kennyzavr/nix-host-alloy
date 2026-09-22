@@ -104,6 +104,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 
@@ -140,6 +141,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 
@@ -185,6 +187,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 
@@ -193,7 +196,10 @@ impl Cli {
             .state_loader
             .load()
             .wrap_err("Failed to load state")
-            .map_err(|report| self.print_report(report))
+            .map_err(|report| {
+                self.print_report(report);
+                std::process::exit(1);
+            })
         else {
             return;
         };
@@ -361,6 +367,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 
@@ -404,6 +411,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 }

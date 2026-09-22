@@ -81,6 +81,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 
@@ -117,6 +118,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 
@@ -154,6 +156,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 
@@ -193,6 +196,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 
@@ -216,6 +220,7 @@ impl Cli {
 
         if let Err(report) = run() {
             self.print_report(report);
+            std::process::exit(1);
         }
     }
 }

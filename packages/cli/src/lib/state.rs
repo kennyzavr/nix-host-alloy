@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     path::PathBuf,
 };
 
@@ -157,15 +157,8 @@ pub enum LoadError {
     Deserialize(#[source] serde_json::Error),
 }
 
-#[derive(thiserror::Error, miette::Diagnostic, Debug)]
-pub enum LoadGenScriptError {
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    Eval(#[from] EvalError),
-}
-
 impl Loader {
-    fn eval_nix(&self, inner_expr: &str, is_raw: bool) -> Result<String, EvalError> {
+    fn build_nix_expr(&self, inner_expr: &str) -> Result<String, EvalError> {
         let module_source_expr = match &self.module_source {
             ModuleSource::ModuleFile(module_path) => {
                 format!("import {}", module_path.to_str().unwrap())
@@ -191,7 +184,7 @@ impl Loader {
             }
         };
 
-        let nix_expr = format!(
+        Ok(format!(
             r#"
             let
                 pkgs = (builtins.getFlake "{}").legacyPackages.${{builtins.currentSystem}};
@@ -205,7 +198,11 @@ impl Loader {
                 {}
             "#,
             &self.nixpkgs_url, &self.alloy_url, module_source_expr, inner_expr
-        );
+        ))
+    }
+
+    fn eval_nix(&self, inner_expr: &str, is_raw: bool) -> Result<String, EvalError> {
+        let nix_expr = self.build_nix_expr(inner_expr)?;
 
         let format_flag = if is_raw { "--raw" } else { "--json" };
 
@@ -223,6 +220,22 @@ impl Loader {
         Ok(result_str)
     }
 
+    fn build_nix(&self, inner_expr: &str) -> Result<(), EvalError> {
+        let nix_expr = self.build_nix_expr(inner_expr)?;
+
+        let output = std::process::Command::new("nix")
+            .args(["build", "--impure", "--no-link", "--expr", &nix_expr])
+            .stderr(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::piped())
+            .output()?;
+
+        if !output.status.success() {
+            return Err(EvalError::Execution(output.status));
+        }
+
+        Ok(())
+    }
+
     pub fn load(&self) -> Result<State, LoadError> {
         let inner_expr = "res.config._internal.state { inherit pkgs; }";
         let raw_state = self.eval_nix(inner_expr, false)?;
@@ -230,12 +243,21 @@ impl Loader {
         Ok(state)
     }
 
-    pub fn load_gen_script(&self, generator_name: &str) -> Result<PathBuf, LoadGenScriptError> {
+    pub fn trigger_generator_evaluation(&self, generator_name: &str) -> Result<(), EvalError> {
         let inner_expr = format!(
-            "let package = res.config.generators.{}.package {{ inherit pkgs; }}; in pkgs.lib.getExe package",
+            "let package = res.config.generators.instances.\"{}\".package {{ inherit pkgs; }}; in pkgs.lib.getExe package",
             generator_name
         );
-        let raw_path = self.eval_nix(&inner_expr, true)?;
-        Ok(PathBuf::from(raw_path))
+        let _ = self.eval_nix(&inner_expr, true)?;
+        Ok(())
+    }
+
+    pub fn build_generator(&self, generator_name: &str) -> Result<(), EvalError> {
+        let inner_expr = format!(
+            "res.config.generators.instances.\"{}\".package {{ inherit pkgs; }}",
+            generator_name
+        );
+        self.build_nix(&inner_expr)?;
+        Ok(())
     }
 }

@@ -49,6 +49,18 @@ pub enum WriteError {
     Encrypt(#[from] age::Error),
 }
 
+pub fn exists(
+    workspace: &workspace::Workspace,
+    state: &State,
+    name: &str,
+) -> bool {
+    state
+        .secrets
+        .get(name)
+        .map(|secret| workspace.root().join(&secret.file).exists())
+        .unwrap_or(false)
+}
+
 pub fn read(
     workspace: &workspace::Workspace,
     state: &State,

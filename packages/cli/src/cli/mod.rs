@@ -6,6 +6,7 @@ use tempfile::NamedTempFile;
 use crate::lib::{state, workspace};
 
 mod facts;
+mod generators;
 mod indexes;
 mod secrets;
 
@@ -48,22 +49,23 @@ pub struct Args {
 #[derive(clap::Subcommand, Debug)]
 enum Cmd {
     Facts(facts::Args),
+    Generators(generators::Args),
     Indexes(indexes::Args),
     Secrets(secrets::Args),
 }
 
 #[derive(clap::Args, Debug)]
 struct WorkspaceArgs {
-    #[arg(long = "root")]
+    #[arg(long = "root", env = "ALLOY_ROOT")]
     root_dir: Option<PathBuf>,
 }
 
 #[derive(clap::Args, Debug)]
 #[group(required = false, multiple = false)]
 struct ModuleSourceArgs {
-    #[arg(long = "module")]
+    #[arg(long = "module", env = "ALLOY_MODULE")]
     module_path: Option<PathBuf>,
-    #[arg(long = "attr")]
+    #[arg(long = "attr", env = "ALLOY_ATTR")]
     flake_attr: Option<String>,
 }
 
@@ -192,6 +194,7 @@ impl Cli {
     fn handle_cmd(&self, cmd: Cmd) {
         match cmd {
             Cmd::Facts(facts) => self.handle_facts(facts),
+            Cmd::Generators(generators) => self.handle_generators(generators),
             Cmd::Indexes(indexes) => self.handle_indexes(indexes),
             Cmd::Secrets(secrets) => self.handle_secrets(secrets),
         }
@@ -332,8 +335,11 @@ pub fn handle_args(args: Args) {
         .parse()
         .unwrap_or(0);
 
-    let Ok(workspace) = workspace::Workspace::new(args.workspace.root_dir)
-        .map_err(|error| print_error(&stderr, error, depth))
+    let Ok(workspace) = workspace::Workspace::new(args.workspace.root_dir.clone())
+        .map_err(|error| {
+            print_error(&stderr, error, depth);
+            std::process::exit(1);
+        })
     else {
         return;
     };

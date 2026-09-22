@@ -161,8 +161,7 @@ impl Cli {
         let run = || -> miette::Result<()> {
             let state = self.state_loader.load().wrap_err("Failed to load state")?;
 
-            let mut table = comfy_table::Table::new();
-            table.load_style(comfy_table::presets::UTF8_FULL);
+            let mut table = self.create_table();
             table.set_header(vec!["Fact", "File", "Tags"]);
 
             let mut facts: Vec<_> = state.facts.iter().collect();
@@ -184,7 +183,7 @@ impl Cli {
             }
 
             if count > 0 {
-                println!("{table}");
+                self.print_table(table);
             } else {
                 self.print_info("No facts found.");
             }
@@ -202,13 +201,12 @@ impl Cli {
             let state = self.state_loader.load().wrap_err("Failed to load state")?;
 
             if let Some(fact) = state.facts.get(&args.fact) {
-                let mut table = comfy_table::Table::new();
-                table.load_style(comfy_table::presets::UTF8_FULL);
+                let mut table = self.create_table();
                 table.set_header(vec!["Property", "Value"]);
                 table.add_row(vec!["Name", &args.fact]);
                 table.add_row(vec!["File", fact.file.to_str().unwrap_or("")]);
                 table.add_row(vec!["Tags", &fact.tags.join(", ")]);
-                println!("{table}");
+                self.print_table(table);
             } else {
                 miette::bail!("Fact {} not found", StyledName(&args.fact));
             }

@@ -272,8 +272,7 @@ impl Cli {
             let collection =
                 lib::secrets::collect(&state, &[], &args.hosts, &args.jails, &args.tags);
 
-            let mut table = comfy_table::Table::new();
-            table.load_style(comfy_table::presets::UTF8_FULL);
+            let mut table = self.create_table();
 
             let has_target_filters = !args.hosts.is_empty() || !args.jails.is_empty();
 
@@ -326,7 +325,7 @@ impl Cli {
                 }
 
                 if count > 0 {
-                    println!("{table}");
+                    self.print_table(table);
                 } else {
                     self.print_info("No secrets found matching the criteria.");
                 }
@@ -351,7 +350,7 @@ impl Cli {
                 }
 
                 if count > 0 {
-                    println!("{table}");
+                    self.print_table(table);
                 } else {
                     self.print_info("No secrets found matching the criteria.");
                 }
@@ -370,8 +369,7 @@ impl Cli {
             let state = self.state_loader.load().wrap_err("Failed to load state")?;
 
             if let Some(secret) = state.secrets.get(&args.secret) {
-                let mut table = comfy_table::Table::new();
-                table.load_style(comfy_table::presets::UTF8_FULL);
+                let mut table = self.create_table();
                 table.set_header(vec!["Property", "Value"]);
                 table.add_row(vec!["Name", &args.secret]);
                 table.add_row(vec!["File", secret.file.to_str().unwrap_or("")]);
@@ -396,7 +394,7 @@ impl Cli {
                     table.add_row(vec!["Targets", "None"]);
                 }
 
-                println!("{table}");
+                self.print_table(table);
             } else {
                 miette::bail!("Secret {} not found", StyledName(&args.secret));
             }

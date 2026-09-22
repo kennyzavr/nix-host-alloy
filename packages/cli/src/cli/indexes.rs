@@ -127,8 +127,7 @@ impl Cli {
 
             indexes.sort_by_key(|(k, _)| *k);
 
-            let mut table = comfy_table::Table::new();
-            table.load_style(comfy_table::presets::UTF8_FULL);
+            let mut table = self.create_table();
             table.set_header(vec!["Name", "Fact Name", "Min", "Max", "Keys"]);
 
             for (name, index) in indexes {
@@ -141,7 +140,7 @@ impl Cli {
                 ]);
             }
 
-            println!("{table}");
+            self.print_table(table);
 
             Ok(())
         };
@@ -156,8 +155,7 @@ impl Cli {
             let state = self.state_loader.load().wrap_err("Failed to load state")?;
 
             if let Some(index) = state.indexes.get(&args.name) {
-                let mut table = comfy_table::Table::new();
-                table.load_style(comfy_table::presets::UTF8_FULL);
+                let mut table = self.create_table();
                 table.set_header(vec!["Property", "Value"]);
                 table.add_row(vec!["Name", &args.name]);
                 table.add_row(vec!["Fact Name", &index.fact_name]);
@@ -174,7 +172,7 @@ impl Cli {
 
                 table.add_row(vec!["Keys", &keys_str]);
 
-                println!("{table}");
+                self.print_table(table);
             } else {
                 miette::bail!("Index '{}' not found", StyledName(&args.name));
             }

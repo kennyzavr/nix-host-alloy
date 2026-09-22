@@ -112,6 +112,16 @@ impl Cli {
         self.stderr.write_line(&format!("{:?}", report)).unwrap();
     }
 
+    fn create_table(&self) -> comfy_table::Table {
+        let mut table = comfy_table::Table::new();
+        table.load_style(comfy_table::presets::UTF8_FULL);
+        table
+    }
+
+    fn print_table(&self, table: comfy_table::Table) {
+        println!("{table}");
+    }
+
     fn handle_cmd(&self, cmd: Cmd) {
         match cmd {
             Cmd::Facts(facts) => self.handle_facts(facts),

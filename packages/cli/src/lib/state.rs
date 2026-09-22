@@ -20,6 +20,7 @@ pub struct State {
     pub secrets: HashMap<String, SecretState>,
     pub facts: HashMap<String, FactState>,
     pub generators: HashMap<String, GeneratorState>,
+    pub indexes: HashMap<String, IndexState>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

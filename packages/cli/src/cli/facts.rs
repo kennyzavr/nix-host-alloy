@@ -23,16 +23,16 @@ enum Cmd {
 
 #[derive(Args, Debug, Clone)]
 struct SetArgs {
-    #[arg(short = 'f', long = "force")]
+    #[arg(short = 'f', long = "force", env = "ALLOY_FORCE")]
     force: bool,
-    #[arg(short = 'a', long = "add-to-git")]
+    #[arg(short = 'a', long = "add-to-git", env = "ALLOY_ADD_TO_GIT")]
     add_to_git: bool,
     fact: String,
 }
 
 #[derive(Args, Debug, Clone)]
 struct EditArgs {
-    #[arg(short = 'a', long = "add-to-git")]
+    #[arg(short = 'a', long = "add-to-git", env = "ALLOY_ADD_TO_GIT")]
     add_to_git: bool,
     fact: String,
 }

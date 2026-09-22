@@ -64,6 +64,10 @@ in
 
           secrets."foobar" = {};
 
+          jails."abc" = {
+            host = "gallium";
+          };
+
           workspace.root = toString self;
 
           workspace.secrets = {

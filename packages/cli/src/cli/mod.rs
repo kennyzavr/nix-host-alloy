@@ -1,12 +1,13 @@
 use std::{io::Write, path::PathBuf};
 
 use console::style;
-use miette::{Context, IntoDiagnostic};
+use miette::IntoDiagnostic;
 use tempfile::NamedTempFile;
 
 use crate::lib::{state, workspace};
 
 mod facts;
+mod indexes;
 mod secrets;
 
 const NIXPKGS_DEFAULT_SOURCE_URL: &str = "nixpkgs";
@@ -19,6 +20,10 @@ pub struct Args {
     workspace: WorkspaceArgs,
     #[command(flatten)]
     module_source: ModuleSourceArgs,
+    #[arg(long = "alloy-url", env = "ALLOY_URL", default_value = ALLOY_DEFAULT_SOURCE_URL)]
+    alloy_url: String,
+    #[arg(long = "nixpkgs-url", env = "ALLOY_NIXPKGS_URL", default_value = NIXPKGS_DEFAULT_SOURCE_URL)]
+    nixpkgs_url: String,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -26,6 +31,7 @@ pub struct Args {
 #[derive(clap::Subcommand, Debug)]
 enum Cmd {
     Facts(facts::Args),
+    Indexes(indexes::Args),
     Secrets(secrets::Args),
 }
 
@@ -109,6 +115,7 @@ impl Cli {
     fn handle_cmd(&self, cmd: Cmd) {
         match cmd {
             Cmd::Facts(facts) => self.handle_facts(facts),
+            Cmd::Indexes(indexes) => self.handle_indexes(indexes),
             Cmd::Secrets(secrets) => self.handle_secrets(secrets),
         }
     }
@@ -190,10 +197,9 @@ pub fn handle_args(args: Args) {
         state::ModuleSource::FlakeAttr("alloyModules.default".to_string())
     };
 
-    let alloy_url = std::env::var("ALLOY_URL").unwrap_or(ALLOY_DEFAULT_SOURCE_URL.to_string());
+    let alloy_url = args.alloy_url;
 
-    let nixpkgs_url =
-        std::env::var("ALLOY_NIXPKGS_URL").unwrap_or(NIXPKGS_DEFAULT_SOURCE_URL.to_string());
+    let nixpkgs_url = args.nixpkgs_url;
 
     let state_loader = state::Loader {
         module_source,

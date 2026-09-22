@@ -24,16 +24,16 @@ enum Cmd {
 
 #[derive(Args, Debug, Clone)]
 struct SetArgs {
-    #[arg(short = 'f', long = "force")]
+    #[arg(short = 'f', long = "force", env = "ALLOY_FORCE")]
     force: bool,
-    #[arg(short = 'a', long = "add-to-git")]
+    #[arg(short = 'a', long = "add-to-git", env = "ALLOY_ADD_TO_GIT")]
     add_to_git: bool,
     secret: String,
 }
 
 #[derive(Args, Debug, Clone)]
 struct EditArgs {
-    #[arg(short = 'a', long = "add-to-git")]
+    #[arg(short = 'a', long = "add-to-git", env = "ALLOY_ADD_TO_GIT")]
     add_to_git: bool,
     secret: String,
 }
@@ -52,9 +52,9 @@ struct RekeyArgs {
     jails: Vec<String>,
     #[arg(long = "tag")]
     tags: Vec<String>,
-    #[arg(short = 'f', long = "force")]
+    #[arg(short = 'f', long = "force", env = "ALLOY_FORCE")]
     force: bool,
-    #[arg(short = 'a', long = "add-to-git")]
+    #[arg(short = 'a', long = "add-to-git", env = "ALLOY_ADD_TO_GIT")]
     add_to_git: bool,
 }
 

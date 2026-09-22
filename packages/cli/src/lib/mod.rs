@@ -7,6 +7,7 @@ mod git;
 
 pub mod facts;
 pub mod hosts;
+pub mod indexes;
 pub mod jails;
 pub mod secrets;
 pub mod state;

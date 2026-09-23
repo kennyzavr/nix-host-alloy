@@ -10,7 +10,6 @@ pub struct State {
     pub secrets_age_key_pairs: Vec<AgeKeyPair>,
     pub hosts: HashMap<String, HostState>,
     pub jails: HashMap<String, JailState>,
-    pub overlays: HashMap<String, OverlayState>,
     pub secrets: HashMap<String, SecretState>,
     pub facts: HashMap<String, FactState>,
     pub generators: HashMap<String, GeneratorState>,
@@ -20,7 +19,6 @@ pub struct State {
 #[derive(Deserialize, Debug, Clone)]
 pub struct HostState {
     pub tags: Vec<String>,
-    pub overlays: HashMap<String, NodeOverlayState>,
     pub secrets: HashMap<String, NodeSecretState>,
     pub facts: HashMap<String, NodeFactState>,
     #[serde(rename = "secretsAgeKeyPairs")]
@@ -32,7 +30,6 @@ pub struct JailState {
     pub host: String,
     pub tags: Vec<String>,
     pub secrets: HashMap<String, NodeSecretState>,
-    pub overlays: HashMap<String, NodeOverlayState>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -68,27 +65,7 @@ pub struct IndexState {
     pub max_value: u64,
     #[serde(rename = "factName")]
     pub fact_name: String,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct OverlayState {
-    #[serde(rename = "ipv6Prefix")]
-    pub ipv6_prefix: String,
-    pub tags: Vec<String>,
-    pub links: Vec<OverlayLinkState>,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct NodeOverlayState {
-    pub ipv6: String,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct OverlayLinkState {
-    #[serde(rename = "aHost")]
-    pub a_host: String,
-    #[serde(rename = "bHost")]
-    pub b_host: String,
+    pub evaluated: bool,
 }
 
 #[derive(Deserialize, Debug, Clone)]

@@ -81,7 +81,7 @@ impl Service {
         force: bool,
         add_to_git: bool,
     ) -> Result<(), ExecError> {
-        let bin_path = self.nix.build_generator(&record.name)?;
+        let bin_path = self.nix.get_generator_bin_path(&record.name)?;
         self.runner.spawn_generator(&bin_path, force, add_to_git)?;
 
         Ok(())

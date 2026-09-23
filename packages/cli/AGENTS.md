@@ -46,8 +46,10 @@ packages/cli/src/
 
 ### 2.3 UI and Terminal Output
 - `TerminalUi` (`infra/ui.rs`) handles all console output (`print_error`, `print_info`, `print_step`, `print_skip`, `print_ok`, `print_table`).
-- **Formatting Constraints**: The UI module automatically colorizes specific patterns in text. Backticks (`` `name` ``) are colored **Yellow**, and single quotes (`'path'`) are colored **Magenta**. Always use these markers when printing entity names and file paths.
-- **Do NOT** use `println!`, `eprintln!`, or `miette` in the command layer. Always use `ctx.ui.print_*`.
+- **Formatting Constraints**: The UI module automatically colorizes specific patterns in text. 
+  - For **Names** (entities, secrets, facts, etc.): ALWAYS wrap them in backticks in the source string (e.g., `format!("Secret `{}`", name)`). `TerminalUi` will color the text **Yellow Bold** and WILL RETAIN the backticks in the final output.
+  - For **Paths** (files, directories): ALWAYS wrap them in single quotes in the source string (e.g., `format!("written to '{}'", path)`). `TerminalUi` will color the text **Magenta** and WILL STRIP the single quotes in the final output.
+  - Never mix these up. Names get ` `` ` and paths get ` '' `.
 - **Do NOT** pass `depth` parameters manually across modules. `TerminalUi` encapsulates the nesting depth logic internally.
 
 ### 2.4 Error Handling (thiserror + Aggregation)

@@ -96,7 +96,7 @@ impl TerminalUi {
                     }
                     inner.push(chars.next().unwrap());
                 }
-                result.push_str(&inner.yellow().bold().to_string());
+                result.push_str(&format!("`{}`", inner.yellow().bold()));
             } else if c == '\'' {
                 let mut inner = String::new();
                 while let Some(&next_c) = chars.peek() {
@@ -106,7 +106,7 @@ impl TerminalUi {
                     }
                     inner.push(chars.next().unwrap());
                 }
-                result.push_str(&format!("'{}'", inner.magenta().to_string()));
+                result.push_str(&inner.magenta().underline().to_string());
             } else {
                 result.push(c);
             }

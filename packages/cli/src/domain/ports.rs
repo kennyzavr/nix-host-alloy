@@ -17,7 +17,9 @@ pub enum NixError {
 
 pub trait NixEvaluator {
     fn load_state(&self) -> Result<State, NixError>;
-    fn build_generator(&self, name: &str) -> Result<PathBuf, NixError>;
+    fn get_generator_bin_path(&self, name: &str) -> Result<PathBuf, NixError>;
+    fn eval_generator_raw(&self, name: &str) -> Result<(), NixError>;
+    fn eval_index_raw(&self, name: &str) -> Result<(), NixError>;
 }
 
 #[derive(Debug, thiserror::Error)]

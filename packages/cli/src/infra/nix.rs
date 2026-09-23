@@ -108,43 +108,78 @@ impl NixAdapter {
 
         Ok(())
     }
+    fn build_and_get_path_nix(&self, inner_expr: &str) -> Result<String, NixError> {
+        let nix_expr = self.build_nix_expr(inner_expr)?;
+
+        let output = std::process::Command::new("nix")
+            .args(["build", "--impure", "--no-link", "--print-out-paths", "--expr", &nix_expr])
+            .stderr(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::piped())
+            .output()
+            .map_err(|e| NixError::Execution(Box::new(e)))?;
+
+        if !output.status.success() {
+            return Err(NixError::Execution(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Exit status: {}", output.status),
+            ))));
+        }
+
+        let result_str =
+            String::from_utf8(output.stdout).map_err(|e| NixError::Execution(Box::new(e)))?;
+        Ok(result_str.trim().to_string())
+    }
 }
 
 impl NixEvaluator for NixAdapter {
     fn load_state(&self) -> Result<State, NixError> {
         let mut slot = self.state_file_slot.lock().unwrap();
 
-        let raw_state = if let Some(path) = &*slot {
-            std::fs::read_to_string(path).map_err(|e| NixError::Execution(Box::new(e)))?
+        let state_path = if let Some(path) = &*slot {
+            path.clone()
         } else {
-            let inner_expr = "res.config._internal.state { inherit pkgs; }";
-            let state_json = self.eval_nix(inner_expr, false)?;
+            let inner_expr = "res.config._internal.statePackage { inherit pkgs; }";
+            let state_pkg_path = self.build_and_get_path_nix(inner_expr)?;
+            let state_json_path = std::path::PathBuf::from(state_pkg_path).join("state.json");
             
-            let pid_file = std::env::temp_dir().join(format!("alloy-state-{}.json", std::process::id()));
-            std::fs::write(&pid_file, &state_json).map_err(|e| NixError::Execution(Box::new(e)))?;
-            *slot = Some(pid_file);
+            *slot = Some(state_json_path.clone());
             
-            state_json
+            state_json_path
         };
 
+        let raw_state = std::fs::read_to_string(&state_path).map_err(|e| NixError::Execution(Box::new(e)))?;
         let state =
             serde_json::from_str(&raw_state).map_err(|e| NixError::ParseState(Box::new(e)))?;
         Ok(state)
     }
 
-    fn build_generator(&self, name: &str) -> Result<std::path::PathBuf, NixError> {
-        let build_expr = format!(
+    fn get_generator_bin_path(&self, name: &str) -> Result<std::path::PathBuf, NixError> {
+        let slot = self.state_file_slot.lock().unwrap();
+        if let Some(state_json_path) = &*slot {
+            Ok(state_json_path.parent().unwrap().join("bin").join(name))
+        } else {
+            Err(NixError::Execution(Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "State file slot is empty, cannot resolve generator binary path",
+            ))))
+        }
+    }
+
+    fn eval_generator_raw(&self, name: &str) -> Result<(), NixError> {
+        let eval_expr = format!(
             "res.config.generators.instances.\"{}\".package {{ inherit pkgs; }}",
             name
         );
-        self.build_nix(&build_expr)?;
+        self.eval_nix(&eval_expr, true)?;
+        Ok(())
+    }
 
+    fn eval_index_raw(&self, name: &str) -> Result<(), NixError> {
         let eval_expr = format!(
-            "let package = res.config.generators.instances.\"{}\".package {{ inherit pkgs; }}; in pkgs.lib.getExe package",
+            "res.config.indexes.\"{}\".values",
             name
         );
-        let path_str = self.eval_nix(&eval_expr, true)?;
-
-        Ok(std::path::PathBuf::from(path_str.trim()))
+        self.eval_nix(&eval_expr, true)?;
+        Ok(())
     }
 }

@@ -142,7 +142,7 @@ fn handle_write(args: WriteArgs, ctx: &AppContext) {
         .wrap_err_with(|| format!("Failed to write master secret `{}`", args.secret))
     {
         Ok(_) => ctx.ui.print_info(&format!(
-            "Secret `{}` encrypted to `{}`",
+            "Secret `{}` encrypted to '{}'",
             args.secret,
             record.state.file.display()
         )),

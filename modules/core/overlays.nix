@@ -239,7 +239,7 @@
                   runtimeInputs = [ pkgs.wireguard-tools ];
                   text = ''
                     preshared_key=$(wg genpsk)
-                    "$ALLOY_BIN" secrets set "${pskSecret}" <<< "$preshared_key"
+                    "$ALLOY_BIN" secrets write "${pskSecret}" <<< "$preshared_key"
                   '';
                 };
             };
@@ -274,8 +274,8 @@
                       priv_key=$(wg genkey) 
                       pub_key=$(wg pubkey <<< "$priv_key")
 
-                      "$ALLOY_BIN" secrets set "${privKeySecret}" <<< "$priv_key"
-                      "$ALLOY_BIN" facts set "${pubKeyFact}" <<< "$pub_key"
+                      "$ALLOY_BIN" secrets write "${privKeySecret}" <<< "$priv_key"
+                      "$ALLOY_BIN" facts write "${pubKeyFact}" <<< "$pub_key"
                     '';
                   };
               };
@@ -710,30 +710,6 @@
           facts = lib.mkMerge (builtins.catAttrs "facts" overlayConfigs);
 
           generators = lib.mkMerge (builtins.catAttrs "generators" overlayConfigs);
-
-          _internal.state = { ... }: {
-            overlays = lib.mapAttrs (_: overlay: {
-              inherit (overlay) ipv6Prefix tags;
-              links = lib.pipe overlay.links [
-                (lib.groupBy (l: l.id))
-                (lib.mapAttrsToList (_: builtins.head))
-                (lib.map (l: {
-                  aHost = l.a.host;
-                  bHost = l.b.host;
-                }))
-              ];
-            }) alloy.overlays;
-            hosts = lib.mapAttrs (_: host: {
-              overlays = lib.mapAttrs (_: overlay: {
-                ipv6 = overlay.ipv6;
-              }) host.overlays;
-            }) alloy.hosts;
-            jails = lib.mapAttrs (_: jail: {
-              overlays = lib.mapAttrs (_: overlay: {
-                ipv6 = overlay.ipv6;
-              }) jail.overlays;
-            }) alloy.jails;
-          };
         };
     };
 }

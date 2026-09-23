@@ -1,4 +1,7 @@
-use crate::{ctx::AppContext, error::WrapErrExt};
+use crate::{
+    ctx::AppContext,
+    error::{WrapErrExt, err_msg},
+};
 
 #[derive(clap::Parser, Debug, Clone)]
 pub struct Args {
@@ -67,6 +70,23 @@ fn handle_alloc(args: AllocArgs, ctx: &AppContext) {
     }
 
     for record in records {
+        if !record.state.evaluated {
+            if let Err(e) = ctx.nix.eval_index_raw(&record.name) {
+                let wrapped = crate::error::WrappedError {
+                    context: format!("Index `{}` has Nix evaluation errors", record.name),
+                    source: e,
+                };
+                ctx.ui.print_error(&wrapped);
+                continue;
+            } else {
+                ctx.ui.print_error(&crate::error::err_msg(format!(
+                    "Index `{}` failed to evaluate",
+                    record.name
+                )));
+                continue;
+            }
+        }
+
         match service
             .alloc(&record, args.force, args.add_to_git)
             .wrap_err_with(|| format!("Failed to allocate index `{}`", record.name))
@@ -110,6 +130,17 @@ fn handle_list(_args: ListArgs, ctx: &AppContext) {
     let mut rows = Vec::new();
 
     for (name, index) in indexes {
+        if !index.evaluated {
+            rows.push(vec![
+                name.clone(),
+                index.fact_name.clone(),
+                "<error>".to_string(),
+                "<error>".to_string(),
+                "<error>".to_string(),
+            ]);
+            continue;
+        }
+
         rows.push(vec![
             name.clone(),
             index.fact_name.clone(),
@@ -135,6 +166,26 @@ fn handle_show(args: ShowArgs, ctx: &AppContext) {
             return;
         }
     };
+
+    if !record.state.evaluated {
+        if let Err(e) = ctx.nix.eval_index_raw(&record.name) {
+            let wrapped = crate::error::WrappedError {
+                context: format!("Index `{}` has Nix evaluation errors", record.name),
+                source: e,
+            };
+            ctx.ui.print_error(&wrapped);
+            return;
+        } else {
+            ctx.ui.print_error(&crate::error::WrappedError {
+                context: format!(
+                    "Index `{}` failed to evaluate, but explicit evaluation succeeded",
+                    record.name
+                ),
+                source: std::io::Error::new(std::io::ErrorKind::Other, "Not evaluated"),
+            });
+            return;
+        }
+    }
 
     let headers = vec!["Property", "Value"];
     let mut rows = Vec::new();

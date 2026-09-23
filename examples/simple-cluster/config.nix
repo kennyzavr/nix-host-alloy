@@ -81,14 +81,14 @@ in
 
           qemu.nets."main" = { };
 
-          # overlays."main" = {
-          #   links = [
-          #     {
-          #       a.host = "iridium";
-          #       b.host = "gallium";
-          #     }
-          #   ];
-          # };
+          overlays."main" = {
+            links = [
+              {
+                a.host = "iridium";
+                b.host = "gallium";
+              }
+            ];
+          };
 
           facts."test_ssh_pub_key" = { };
           facts."test_ssh_key" = { };
@@ -168,9 +168,9 @@ in
               };
             };
 
-            # overlays."main" = {
-            #   wg.endpoint = "192.168.100.${toString config.idx}";
-            # };
+            overlays."main" = {
+              wg.endpoint = "192.168.100.${toString config.idx}";
+            };
 
             users.admin = {
               isAdmin = true;
@@ -248,9 +248,9 @@ in
             # qemu.variant = "full-boot";
             qemu.variant = null;
 
-            # overlays."main" = {
-            #   wg.endpoint = "192.168.100.${toString config.idx}";
-            # };
+            overlays."main" = {
+              wg.endpoint = "192.168.100.${toString config.idx}";
+            };
           };
 
           # dns.zones."public" = {

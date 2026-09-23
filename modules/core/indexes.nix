@@ -81,7 +81,6 @@
                 '';
             get = key: config.values.${key};
             # if config.values ? ${key}
-            # then
             #   config.values.${key}
             # else
             # throw ''
@@ -145,15 +144,42 @@
 
         facts = lib.mapAttrs' (_: index: lib.nameValuePair index.factName { }) alloy.indexes;
 
+        # _internal.state = { ... }: {
+        #   indexes = lib.mapAttrs (_: index: {
+        #     inherit (index)
+        #       keys
+        #       minValue
+        #       maxValue
+        #       factName
+        #       ;
+        #   }) alloy.indexes;
+        # };
+
         _internal.state = { ... }: {
-          indexes = lib.mapAttrs (_: index: {
-            inherit (index)
-              keys
-              minValue
-              maxValue
-              factName
-              ;
-          }) alloy.indexes;
+          indexes = lib.mapAttrs (
+            _: index:
+            let
+              value = {
+                inherit (index)
+                  keys
+                  minValue
+                  maxValue
+                  factName
+                  ;
+              };
+              evalResult = builtins.tryEval (builtins.deepSeq value value);
+            in
+            if evalResult.success then
+              evalResult.value // { evaluated = true; }
+            else
+              {
+                evaluated = false;
+                keys = [];
+                minValue = 0;
+                maxValue = 0;
+                factName = "";
+              }
+          ) alloy.indexes;
         };
       };
     };

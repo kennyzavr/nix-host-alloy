@@ -5,15 +5,6 @@ use crate::{
     error::{ErrorCollection, WrapErrExt, WrappedError},
 };
 
-#[derive(Debug, thiserror::Error)]
-enum InvalidGeneratorError {
-    #[error("Generator `{0}` failed to build")]
-    BuildFailed(String, #[source] crate::domain::ports::NixError),
-
-    #[error("Generator `{0}` failed to build")]
-    NotEvaluated(String),
-}
-
 #[derive(clap::Parser, Debug, Clone)]
 pub struct Args {
     #[command(subcommand)]
@@ -127,7 +118,7 @@ fn handle_run(args: RunArgs, ctx: &AppContext) {
 
     let mut cache = HashSet::<String>::new();
 
-    let invalid_gens = loop {
+    loop {
         let state = match ctx.nix.load_state().wrap_err("Failed to load state") {
             Ok(s) => s,
             Err(e) => {
@@ -144,15 +135,10 @@ fn handle_run(args: RunArgs, ctx: &AppContext) {
             }
         };
 
-        let mut invalid = vec![];
         let mut executed = false;
+        let mut hit_unevaluated = None;
 
         for gen_record in exec_plan {
-            if !gen_record.state.evaluated {
-                invalid.push(gen_record.name.to_string());
-                continue;
-            }
-
             if cache.contains(&gen_record.name) {
                 continue;
             }
@@ -162,6 +148,7 @@ fn handle_run(args: RunArgs, ctx: &AppContext) {
             } else {
                 false
             };
+
             let add_to_git = if target_gens.contains(&gen_record.name) {
                 args.add_to_git
             } else {
@@ -170,51 +157,64 @@ fn handle_run(args: RunArgs, ctx: &AppContext) {
 
             let needs_exec = force || needs_execution(ctx, &state, &gen_record);
 
-            if needs_exec {
-                ctx.ui
-                    .print_step(&format!("Generator `{}`", gen_record.name));
-
-                match service
-                    .exec(&gen_record, force, add_to_git)
-                    .wrap_err_with(|| format!("Failed to execute generator `{}`", gen_record.name))
-                {
-                    Ok(_) => (),
-                    Err(e) => {
-                        ctx.ui.print_error(&e);
-                    }
-                }
-            } else {
+            if !needs_exec {
                 ctx.ui
                     .print_skip(&format!("Generator `{}` (up to date)", gen_record.name));
+                cache.insert(gen_record.name.to_string());
+                continue;
+            }
+
+            if !gen_record.state.evaluated {
+                hit_unevaluated = Some(gen_record.name.to_string());
+                break;
+            }
+
+            ctx.ui
+                .print_step(&format!("Generator `{}`", gen_record.name));
+
+            match service
+                .exec(&gen_record, force, add_to_git)
+                .wrap_err_with(|| format!("Failed to execute generator `{}`", gen_record.name))
+            {
+                Ok(_) => (),
+                Err(e) => {
+                    ctx.ui.print_error(&e);
+                    return;
+                }
             }
 
             cache.insert(gen_record.name.to_string());
             executed = true;
-            break;
+        }
+
+        if let Some(broken_gen) = hit_unevaluated {
+            if executed {
+                *ctx.state_file_slot.lock().unwrap() = None;
+                continue;
+            } else {
+                if let Err(err) = ctx.nix.eval_generator_raw(&broken_gen) {
+                    let wrapped = WrappedError {
+                        context: format!("Generator `{}` has Nix evaluation errors", broken_gen),
+                        source: err,
+                    };
+                    ctx.ui.print_error(&wrapped);
+                } else {
+                    let wrapped = WrappedError {
+                        context: format!(
+                            "Generator `{}` failed to evaluate, but explicit evaluation succeeded (unexpected)",
+                            broken_gen
+                        ),
+                        source: crate::error::err_msg("Not evaluated"),
+                    };
+                    ctx.ui.print_error(&wrapped);
+                }
+                return;
+            }
         }
 
         if !executed {
-            break invalid;
+            break;
         }
-
-        *ctx.state_file_slot.lock().unwrap() = None;
-    };
-
-    let mut script_errors = ErrorCollection::new(Vec::with_capacity(invalid_gens.len()));
-    for invalid_gen in invalid_gens {
-        if let Err(err) = ctx.nix.build_generator(&invalid_gen) {
-            script_errors.push(InvalidGeneratorError::BuildFailed(invalid_gen, err));
-        } else {
-            script_errors.push(InvalidGeneratorError::NotEvaluated(invalid_gen));
-        }
-    }
-
-    if !script_errors.is_empty() {
-        let count = script_errors.len();
-        ctx.ui.print_error(&WrappedError {
-            context: format!("Found {} invalid generator(s)", count),
-            source: script_errors,
-        });
     }
 }
 

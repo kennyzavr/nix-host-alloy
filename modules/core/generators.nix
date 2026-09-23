@@ -111,7 +111,11 @@
               ;
             secrets = builtins.attrNames generator.secrets;
             facts = builtins.attrNames generator.facts;
-            evaluated = (builtins.tryEval (generator.package { inherit pkgs; })).success;
+            evaluated =
+              let
+                drv = generator.package { inherit pkgs; };
+              in
+              (builtins.tryEval (builtins.seq drv.outPath drv)).success;
           }) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
         };
       };

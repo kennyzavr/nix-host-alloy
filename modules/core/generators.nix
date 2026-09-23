@@ -111,11 +111,7 @@
               ;
             secrets = builtins.attrNames generator.secrets;
             facts = builtins.attrNames generator.facts;
-            bin =
-              let
-                b = builtins.tryEval (toString (lib.getExe (generator.package { inherit pkgs; })));
-              in
-              if b.success then b.value else null;
+            evaluated = (builtins.tryEval (generator.package { inherit pkgs; })).success;
           }) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
         };
       };

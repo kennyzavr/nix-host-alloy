@@ -35,6 +35,7 @@
         }
         // commonArgs
       );
+      # TODO: add rage, git as runtime inputs
       package = craneLib.buildPackage (
         {
           pname = "alloy-cli";
@@ -45,7 +46,8 @@
       );
     in
     {
-      devShells.cliDevShell = pkgs.mkShell {
+      # TODO: add rage, git as runtime inputs
+      devShells.cli = pkgs.mkShell {
         packages = [
           rustToolchain
         ];

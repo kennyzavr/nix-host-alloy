@@ -70,7 +70,7 @@
             from cryptography.hazmat.primitives import serialization
 
 
-            ALLOY_BIN = os.environ.get("ALLOY_BIN", "alloy")
+            ALLOY_BIN = os.environ.get("ALLOY_BIN")
 
 
             def run_alloy(cmd_args, input_data=None, capture=True):
@@ -250,12 +250,12 @@
             cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
 
             run_alloy(
-                ["secrets", "set", config_data["keySecret"]],
+                ["secrets", "write", config_data["keySecret"]],
                 input_data=key_pem,
                 capture=False
             )
             run_alloy(
-                ["facts", "set", config_data["certFact"]],
+                ["facts", "write", config_data["certFact"]],
                 input_data=cert_pem,
                 capture=False
             )
@@ -324,7 +324,7 @@
             from cryptography.hazmat.primitives import serialization
 
 
-            ALLOY_BIN = os.environ.get("ALLOY_BIN", "alloy")
+            ALLOY_BIN = os.environ.get("ALLOY_BIN")
 
 
             def run_alloy(cmd_args, input_data=None, capture=True):
@@ -386,8 +386,8 @@
                 print("Error: Leaf certificate requires a parent CA.", file=sys.stderr)
                 sys.exit(1)
 
-            parent_key_pem = run_alloy(["secrets", "get", parent_cfg["keySecret"]])
-            parent_cert_pem = run_alloy(["facts", "get", parent_cfg["certFact"]])
+            parent_key_pem = run_alloy(["secrets", "read", parent_cfg["keySecret"]])
+            parent_cert_pem = run_alloy(["facts", "read", parent_cfg["certFact"]])
 
             issuer_key = serialization.load_pem_private_key(
                 parent_key_pem.encode(), password=None
@@ -482,12 +482,12 @@
             cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
 
             run_alloy(
-                ["secrets", "set", config_data["keySecret"]],
+                ["secrets", "write", config_data["keySecret"]],
                 input_data=key_pem,
                 capture=False
             )
             run_alloy(
-                ["facts", "set", config_data["certFact"]],
+                ["facts", "write", config_data["certFact"]],
                 input_data=cert_pem,
                 capture=False
             )

@@ -1,190 +1,161 @@
-use clap::clap_derive::{Args, Parser, Subcommand};
-use miette::Context;
+use crate::{ctx::AppContext, error::WrapErrExt};
 
-use super::Cli;
-use crate::lib::{self, StyledName};
-
-#[derive(Parser, Debug, Clone)]
+#[derive(clap::Parser, Debug, Clone)]
 pub struct Args {
     #[command(subcommand)]
     cmd: Cmd,
 }
 
-#[derive(Subcommand, Debug, Clone)]
-enum Cmd {
-    Allocate(AllocateArgs),
+#[derive(clap::Subcommand, Debug, Clone)]
+pub enum Cmd {
+    Alloc(AllocArgs),
     List(ListArgs),
     Show(ShowArgs),
 }
 
-#[derive(Args, Debug, Clone)]
-struct AllocateArgs {
+#[derive(clap::Args, Debug, Clone)]
+pub struct AllocArgs {
     #[arg(
         short = 'f',
         long = "force",
         env = "ALLOY_FORCE",
         help = "Force allocation even if the state is corrupted."
     )]
-    force: bool,
+    pub force: bool,
     #[arg(
         short = 'a',
         long = "add-to-git",
         env = "ALLOY_ADD_TO_GIT",
         help = "Add the modified fact file to git."
     )]
-    add_to_git: bool,
+    pub add_to_git: bool,
     #[arg(help = "Specific indexes to allocate (default: all)")]
-    indexes: Vec<String>,
+    pub indexes: Vec<String>,
 }
 
-#[derive(Args, Debug, Clone)]
-struct ListArgs {}
+#[derive(clap::Args, Debug, Clone)]
+pub struct ListArgs {}
 
-#[derive(Args, Debug, Clone)]
-struct ShowArgs {
+#[derive(clap::Args, Debug, Clone)]
+pub struct ShowArgs {
     #[arg(help = "Name of the index")]
-    name: String,
+    pub name: String,
 }
 
-impl Cli {
-    pub(super) fn handle_indexes(&self, args: Args) {
-        match args.cmd {
-            Cmd::Allocate(args) => self.handle_indexes_allocate(args),
-            Cmd::List(args) => self.handle_indexes_list(args),
-            Cmd::Show(args) => self.handle_indexes_show(args),
+pub fn handle(args: Args, ctx: &AppContext) {
+    match args.cmd {
+        Cmd::Alloc(args) => handle_alloc(args, ctx),
+        Cmd::List(args) => handle_list(args, ctx),
+        Cmd::Show(args) => handle_show(args, ctx),
+    }
+}
+
+fn handle_alloc(args: AllocArgs, ctx: &AppContext) {
+    let service = &ctx.indexes_service;
+
+    let records = match service.collect(&args.indexes) {
+        Ok(r) => r,
+        Err(e) => {
+            ctx.ui.print_error(&e);
+            return;
         }
+    };
+
+    if records.is_empty() {
+        ctx.ui.print_skip("No indexes to allocate.");
+        return;
     }
 
-    fn handle_indexes_allocate(&self, args: AllocateArgs) {
-        let run = || -> miette::Result<()> {
-            let state = self.state_loader.load().wrap_err("Failed to load state")?;
-
-            let target_indexes: Vec<String> = if args.indexes.is_empty() {
-                state.indexes.keys().cloned().collect()
-            } else {
-                args.indexes.clone()
-            };
-
-            if target_indexes.is_empty() {
-                self.print_skip("No indexes to allocate.");
-                return Ok(());
-            }
-
-            for name in &target_indexes {
-                if !state.indexes.contains_key(name) {
-                    miette::bail!(
-                        "Index '{}' is not defined in the cluster state.",
-                        StyledName(name)
-                    );
+    for record in records {
+        match service
+            .alloc(&record, args.force, args.add_to_git)
+            .wrap_err_with(|| format!("Failed to allocate index `{}`", record.name))
+        {
+            Ok(result) => {
+                if result.changed {
+                    ctx.ui.print_ok(&format!(
+                        "Index `{}` saved ({} entries).",
+                        record.name, result.size
+                    ));
+                } else {
+                    ctx.ui
+                        .print_skip(&format!("No changes in index `{}`.", record.name));
                 }
             }
-
-            for name in target_indexes {
-                match lib::indexes::allocate(
-                    &self.state_loader.workspace,
-                    &state,
-                    &name,
-                    args.force,
-                    args.add_to_git,
-                ) {
-                    Ok(result) => {
-                        if result.changed {
-                            self.print_ok(&format!(
-                                "Index '{}' saved ({} entries).",
-                                StyledName(&name),
-                                result.size
-                            ));
-                        } else {
-                            self.print_skip(&format!(
-                                "No changes in index '{}'.",
-                                StyledName(&name)
-                            ));
-                        }
-                    }
-                    Err(err) => {
-                        self.print_error(err);
-                    }
-                }
+            Err(err) => {
+                ctx.ui.print_error(&err);
             }
-
-            Ok(())
-        };
-
-        if let Err(report) = run() {
-            self.print_report(report);
-            std::process::exit(1);
         }
     }
+}
 
-    fn handle_indexes_list(&self, _args: ListArgs) {
-        let run = || -> miette::Result<()> {
-            let state = self.state_loader.load().wrap_err("Failed to load state")?;
-
-            let mut indexes: Vec<_> = state.indexes.iter().collect();
-            if indexes.is_empty() {
-                self.print_info("No indexes defined.");
-                return Ok(());
-            }
-
-            indexes.sort_by_key(|(k, _)| *k);
-
-            let mut table = self.create_table();
-            table.set_header(vec!["Name", "Fact Name", "Min", "Max", "Keys"]);
-
-            for (name, index) in indexes {
-                table.add_row(vec![
-                    name,
-                    &index.fact_name,
-                    &index.min_value.to_string(),
-                    &index.max_value.to_string(),
-                    &index.keys.len().to_string(),
-                ]);
-            }
-
-            self.print_table(table);
-
-            Ok(())
-        };
-
-        if let Err(report) = run() {
-            self.print_report(report);
-            std::process::exit(1);
+fn handle_list(_args: ListArgs, ctx: &AppContext) {
+    let state = match ctx.nix.load_state().wrap_err("Failed to load state") {
+        Ok(s) => s,
+        Err(e) => {
+            ctx.ui.print_error(&e);
+            return;
         }
+    };
+
+    let mut indexes: Vec<_> = state.indexes.iter().collect();
+    if indexes.is_empty() {
+        ctx.ui.print_info("No indexes defined.");
+        return;
     }
 
-    fn handle_indexes_show(&self, args: ShowArgs) {
-        let run = || -> miette::Result<()> {
-            let state = self.state_loader.load().wrap_err("Failed to load state")?;
+    indexes.sort_by_key(|(k, _)| *k);
 
-            if let Some(index) = state.indexes.get(&args.name) {
-                let mut table = self.create_table();
-                table.set_header(vec!["Property", "Value"]);
-                table.add_row(vec!["Name", &args.name]);
-                table.add_row(vec!["Fact Name", &index.fact_name]);
-                table.add_row(vec!["Min", &index.min_value.to_string()]);
-                table.add_row(vec!["Max", &index.max_value.to_string()]);
+    let headers = vec!["Name", "Fact Name", "Min", "Max", "Keys"];
+    let mut rows = Vec::new();
 
-                let mut sorted_keys: Vec<_> = index.keys.iter().collect();
-                sorted_keys.sort();
-                let keys_str = sorted_keys
-                    .into_iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n");
-
-                table.add_row(vec!["Keys", &keys_str]);
-
-                self.print_table(table);
-            } else {
-                miette::bail!("Index '{}' not found", StyledName(&args.name));
-            }
-
-            Ok(())
-        };
-
-        if let Err(report) = run() {
-            self.print_report(report);
-            std::process::exit(1);
-        }
+    for (name, index) in indexes {
+        rows.push(vec![
+            name.clone(),
+            index.fact_name.clone(),
+            index.min_value.to_string(),
+            index.max_value.to_string(),
+            index.keys.len().to_string(),
+        ]);
     }
+
+    ctx.ui.print_table(headers, rows);
+}
+
+fn handle_show(args: ShowArgs, ctx: &AppContext) {
+    let service = &ctx.indexes_service;
+
+    let record = match service
+        .get(args.name.clone())
+        .wrap_err_with(|| format!("Failed to get index `{}`", args.name))
+    {
+        Ok(r) => r,
+        Err(e) => {
+            ctx.ui.print_error(&e);
+            return;
+        }
+    };
+
+    let headers = vec!["Property", "Value"];
+    let mut rows = Vec::new();
+
+    rows.push(vec!["Name".to_string(), args.name.clone()]);
+    rows.push(vec![
+        "Fact Name".to_string(),
+        record.state.fact_name.clone(),
+    ]);
+    rows.push(vec!["Min".to_string(), record.state.min_value.to_string()]);
+    rows.push(vec!["Max".to_string(), record.state.max_value.to_string()]);
+
+    let mut sorted_keys: Vec<_> = record.state.keys.iter().collect();
+    sorted_keys.sort();
+    let keys_str = sorted_keys
+        .into_iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    rows.push(vec!["Keys".to_string(), keys_str]);
+
+    ctx.ui.print_table(headers, rows);
 }

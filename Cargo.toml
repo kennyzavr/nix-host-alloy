@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "packages/alloy-cli",
+    "packages/alloy-core"
+, "packages/alloy-infra"]
+resolver = "2"

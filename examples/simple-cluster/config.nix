@@ -22,7 +22,7 @@ in
       };
     };
 
-    flake.alloyModules.foo = {};
+    flake.alloyModules.foo = { };
 
     flake.alloyModules.simpleCluster =
       { alib, config, ... }:
@@ -62,7 +62,7 @@ in
         config = {
           name = "simple-cluster";
 
-          secrets."foobar" = {};
+          secrets."foobar" = { };
 
           jails."abc" = {
             host = "gallium";
@@ -96,7 +96,7 @@ in
           hosts.iridium = { config, ... }: {
             system = "x86_64-linux";
 
-            secrets."foobar" = {};
+            secrets."foobar" = { };
 
             facts."test_ssh_key" = {
               permissions.mode = "0600";

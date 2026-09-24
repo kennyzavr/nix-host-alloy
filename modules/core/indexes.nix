@@ -159,26 +159,32 @@
           indexes = lib.mapAttrs (
             _: index:
             let
-              value = {
-                inherit (index)
-                  keys
-                  minValue
-                  maxValue
-                  factName
-                  ;
-              };
-              evalResult = builtins.tryEval (builtins.deepSeq value value);
+              # value = {
+              #   inherit (index)
+              #     keys
+              #     minValue
+              #     maxValue
+              #     factName
+              #     ;
+              # };
+              # evalResult = builtins.tryEval (builtins.deepSeq value value);
+              evalResult = builtins.tryEval (builtins.deepSeq index.keys index.keys);
             in
-            if evalResult.success then
-              evalResult.value // { evaluated = true; }
-            else
-              {
-                evaluated = false;
-                keys = [];
-                minValue = 0;
-                maxValue = 0;
-                factName = "";
-              }
+            {
+              inherit (index) minValue maxValue factName;
+              evaluated = evalResult.success;
+              keys = if evalResult.success then evalResult.value else null;
+            }
+            # if evalResult.success then
+            #   evalResult.value // { evaluated = true; }
+            # else
+            #   {
+            #     evaluated = false;
+            #     keys = [];
+            #     minValue = 0;
+            #     maxValue = 0;
+            #     factName = "";
+            #   }
           ) alloy.indexes;
         };
       };

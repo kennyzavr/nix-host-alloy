@@ -462,15 +462,38 @@
           ++ (lib.flatten (lib.map (s: s.assertions) hostSecretsList))
           ++ (lib.flatten (lib.map (s: s.assertions) jailSecretsList));
 
-        _internal.state = { ... }: {
+        _internal.state = { pkgs, ... }: {
           secrets = lib.mapAttrs (_: secret: {
             inherit (secret) file tags;
           }) alloy.secrets;
 
-          secretsAgeKeyPairs = alloy.workspace.secrets.age.keyPairs;
+          secretsAgeKeyPairs = lib.imap0 (kpIdx: kp: {
+            identity =
+              if builtins.isPath kp.identity then
+                toString kp.identity
+              else
+                pkgs.writeText "alloy-${alloy.name}-master-identity-${kpIdx}" kp.identity;
+            recipient =
+              if builtins.isPath kp.recipient then
+                toString kp.recipient
+              else
+                pkgs.writeText "alloy-${alloy.name}-master-recipient-${kpIdx}" kp.recipient;
+          }) alloy.workspace.secrets.age.keyPairs;
 
-          hosts = lib.mapAttrs (_: host: {
-            secretsAgeKeyPairs = host.workspace.secrets.age.keyPairs;
+          hosts = lib.mapAttrs (hostName: host: {
+            secretsAgeKeyPairs = lib.imap0 (kpIdx: kp: {
+              identity =
+                if builtins.isPath kp.identity then
+                  toString kp.identity
+                else
+                  pkgs.writeText "alloy-host-${hostName}-${alloy.name}-master-identity-${kpIdx}" kp.identity;
+              recipient =
+                if builtins.isPath kp.recipient then
+                  toString kp.recipient
+                else
+                  pkgs.writeText "alloy-host-${hostName}-${alloy.name}-master-recipient-${kpIdx}" kp.recipient;
+            }) host.workspace.secrets.age.keyPairs;
+
             secrets = lib.mapAttrs (_: secret: {
               inherit (secret) file path;
             }) host.secrets;

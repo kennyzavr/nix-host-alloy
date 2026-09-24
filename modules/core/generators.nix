@@ -23,14 +23,14 @@
             default = [ ];
             type = lib.types.listOf lib.types.str;
           };
-          wantedBy = lib.mkOption {
-            default = [ ];
-            type = lib.types.listOf lib.types.str;
-          };
-          before = lib.mkOption {
-            default = [ ];
-            type = lib.types.listOf lib.types.str;
-          };
+          # wantedBy = lib.mkOption {
+          #   default = [ ];
+          #   type = lib.types.listOf lib.types.str;
+          # };
+          # before = lib.mkOption {
+          #   default = [ ];
+          #   type = lib.types.listOf lib.types.str;
+          # };
           after = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
@@ -100,24 +100,55 @@
           lib.mkMerge
         ];
 
-        _internal.state = { pkgs, ... }: {
-          generators = lib.mapAttrs (_: generator: {
-            inherit (generator)
-              wants
-              wantedBy
-              after
-              before
-              tags
-              ;
-            secrets = builtins.attrNames generator.secrets;
-            facts = builtins.attrNames generator.facts;
-            evaluated =
+        _internal.state =
+          { pkgs, ... }@args:
+          {
+            generators = lib.mapAttrs (
+              generatorName: generator:
               let
-                drv = generator.package { inherit pkgs; };
+                scriptPath =
+                  let
+                    drv = generator.package { inherit pkgs; };
+                  in
+                  (builtins.tryEval (builtins.seq drv.outPath "bin/generators/${generatorName}"));
               in
-              (builtins.tryEval (builtins.seq drv.outPath drv)).success;
-          }) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
-        };
+              {
+                inherit (generator)
+                  wants
+                  # wantedBy
+                  after
+                  # before
+                  tags
+                  ;
+                secrets = builtins.attrNames generator.secrets;
+                facts = builtins.attrNames generator.facts;
+                scriptPath = if scriptPath.success then scriptPath.value else null;
+              }
+            ) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
+          };
+
+        _internal.stateScript =
+          { pkgs, ... }:
+          let
+            activeGenerators = lib.filterAttrs (_: g: g.enable) alloy.generators.instances;
+          in
+          lib.concatMapAttrsStringSep "\n" (
+            genName: gen:
+            let
+              scriptPath =
+                let
+                  drv = gen.package { inherit pkgs; };
+                in
+                (builtins.tryEval (builtins.seq drv.outPath "bin/generators/${genName}"));
+            in
+            if scriptPath.success then
+              ''
+                mkdir -p $(dirname "$out/bin/generators/${genName}")
+                ln -s ${pkgs.lib.getExe (gen.package pkgs)} "$out/bin/generators/${genName}"
+              ''
+            else
+              ""
+          ) activeGenerators;
       };
     };
 }

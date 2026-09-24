@@ -170,7 +170,7 @@
               modules = [
                 host.nixosModule
                 commonModule
-                ({config, ...}: {
+                ({ config, ... }: {
                   virtualisation.useBootLoader = true;
                   virtualisation.useEFIBoot =
                     config.boot.loader.systemd-boot.enable || config.boot.loader.efi.canTouchEfiVariables;
@@ -239,6 +239,48 @@
           maxValue = 99;
           keys = builtins.attrNames alloy.qemu.nets;
         };
+
+        _internal.state = { pkgs, mode, ... }: {
+          qemu = if mode == "full" then { nets = lib.mapAttrs (_: net: { }) alloy.qemu.nets; } else null;
+
+          hosts = lib.mapAttrs (hostName: host: {
+            qemu =
+              if mode == "full" then
+                {
+                  nets = lib.mapAttrs (_: net: {
+                    inherit (net) iface mac;
+                  }) host.qemu.nets;
+
+                  portForwards = lib.map (fp: {
+                    inherit (fp)
+                      proto
+                      hypervisor
+                      guest
+                      name
+                      ;
+                  }) host.qemu.forwardPorts;
+
+                  variants = lib.mapAttrs (variantName: _: {
+                    scriptPath = "bin/hosts/${hostName}/qemu/${variantName}";
+                  }) host.qemu.variants;
+                  variant = host.qemu.variant;
+                }
+              else
+                null;
+          }) alloy.hosts;
+        };
+
+        _internal.stateScript =
+          { pkgs, mode, ... }@args:
+          lib.concatMapAttrsStringSep "\n" (
+            hostName: host:
+            lib.optionalString (mode == "full" && host.qemu.variant != null) ''
+              mkdir -p $(dirname "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}")
+              ln -s ${
+                pkgs.lib.getExe (host.qemu.variants.${host.qemu.variant}.package args)
+              } "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}"
+            ''
+          ) alloy.hosts;
 
         # _internal.state =
         #   { pkgs, ... }:

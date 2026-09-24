@@ -20,6 +20,10 @@
     crane = {
       url = "github:ipetkov/crane";
     };
+    devshell = {
+      url = "github:numtide/devshell";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -30,10 +34,11 @@
       }
       {
         imports = [
+          inputs.devshell.flakeModule
           ./parts.nix
           ./lib
           ./modules
-          ./packages/cli
+          ./packages/rust.nix
         ];
 
         flake.flakeModules = {
@@ -45,43 +50,32 @@
             pkgs,
             config,
             self',
+            inputs',
+            system,
             ...
           }:
           {
 
-            packages.clear-store-paths = pkgs.writeShellScriptBin "clear-store-paths" ''
-              	      shopt -s nullglob
-              	      disk_paths=(/nix/store/*nixos-disk-image*)
-                            nix-store --query --referrers-closure "''${disk_paths[@]}" | xargs nix-store --delete
-            '';
-
-            packages.alloy-cli = pkgs.python3Packages.buildPythonApplication {
-              pname = "alloy-cli";
-              version = "0.1.0";
-              src = ./packages/alloy-cli;
-              pyproject = true;
-              build-system = [ pkgs.python3Packages.setuptools ];
-              dependencies = [ pkgs.python3Packages.rich ];
-
-              makeWrapperArgs = [
-                "--prefix"
-                "PATH"
-                ":"
-                (pkgs.lib.makeBinPath [
-                  pkgs.rage
-                  pkgs.git
-                  pkgs.nano
-                  pkgs.vde2
-                ])
-              ];
-            };
-
-            devShells.default = pkgs.mkShell {
+            devshells.default = {
               packages = [
                 pkgs.nil
-                pkgs.pyright
-                pkgs.ruff
-                self'.packages.clear-store-paths
+                # pkgs.pyright
+                # pkgs.ruff
+              ];
+              commands = [
+                {
+                  name = "clear-store-paths";
+                  help = "Clears stale nixos-disk-image store paths";
+                  command = ''
+                    shopt -s nullglob
+                    disk_paths=(/nix/store/*nixos-disk-image*)
+                    if [ ''${#disk_paths[@]} -gt 0 ]; then
+                      nix-store --query --referrers-closure "''${disk_paths[@]}" | xargs nix-store --delete
+                    else
+                      echo "No disk images found."
+                    fi
+                  '';
+                }
               ];
             };
             formatter = pkgs.nixfmt-tree;

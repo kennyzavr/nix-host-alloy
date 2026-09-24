@@ -121,7 +121,7 @@
                   PermitRootLogin = "no";
                   PasswordAuthentication = false;
                 };
-                hostKeys = [];
+                hostKeys = [ ];
                 # TODO: disable default keys
                 extraConfig = ''
                   ${lib.concatMapStringsSep "\n" (keyPath: ''

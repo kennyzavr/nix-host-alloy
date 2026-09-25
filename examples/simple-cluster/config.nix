@@ -62,19 +62,13 @@ in
         config = {
           name = "simple-cluster";
 
-          secrets."foobar" = { };
-
-          jails."abc" = {
-            host = "gallium";
-          };
-
           workspace.root = toString self;
 
           workspace.secrets = {
             age.keyPairs = [
               {
-                identity = ./facts/test_ssh_key;
-                recipient = ./facts/test_ssh_pub_key;
+                identity = alloy.facts."test_ssh_key".path;
+                recipient = alloy.facts."test_ssh_pub_key".path;
               }
             ];
           };
@@ -90,8 +84,19 @@ in
             ];
           };
 
-          facts."test_ssh_pub_key" = { };
-          facts."test_ssh_key" = { };
+          facts."test_ssh_pub_key" = {
+            file = "test_ssh_pub_key";
+          };
+          facts."test_ssh_key" = {
+            file = "test_ssh_key";
+          };
+
+          facts."foobar" = { };
+          secrets."foobar" = { };
+
+          jails."abc" = {
+            host = "gallium";
+          };
 
           hosts.iridium = { config, ... }: {
             system = "x86_64-linux";
@@ -105,8 +110,8 @@ in
             workspace.secrets = {
               age.keyPairs = [
                 {
-                  identity = ./facts/test_ssh_key;
-                  recipient = ./facts/test_ssh_pub_key;
+                  identity = alloy.facts."test_ssh_key".path;
+                  recipient = alloy.facts."test_ssh_pub_key".path;
                 }
               ];
             };
@@ -180,8 +185,9 @@ in
             };
 
             qemu.nets."main" = { };
-            qemu.variant = "full-boot";
-            qemu.graphics = true;
+            # qemu.variant = "full-boot";
+            qemu.variant = "direct-boot";
+            # qemu.graphics = true;
           };
 
           hosts.gallium = { config, ... }: {
@@ -190,13 +196,15 @@ in
             workspace.secrets = {
               age.keyPairs = [
                 {
-                  identity = ./facts/test_ssh_key;
-                  recipient = ./facts/test_ssh_pub_key;
+                  identity = alloy.facts."test_ssh_key".path;
+                  recipient = alloy.facts."test_ssh_pub_key".path;
                 }
               ];
             };
 
-            facts."test_ssh_key" = { };
+            facts."test_ssh_key" = {
+              permissions.mode = "0600";
+            };
 
             nets."public" = {
               primary = true;
@@ -246,7 +254,9 @@ in
 
             qemu.nets."main" = { };
             # qemu.variant = "full-boot";
-            qemu.variant = null;
+            qemu.variant = "direct-boot";
+            # qemu.graphics = true;
+            # qemu.variant = null;
 
             overlays."main" = {
               wg.endpoint = "192.168.100.${toString config.idx}";

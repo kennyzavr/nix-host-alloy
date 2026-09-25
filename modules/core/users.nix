@@ -115,7 +115,7 @@
               read -r -s -p "Enter password: " pass
               echo
               hash=$(printf "%s\n" "$pass" | ${pkgs.mkpasswd}/bin/mkpasswd -m sha-512 -s)
-              "$ALLOY_BIN" secrets write "${config.secret}" <<< "$hash"
+              "$ALLOY_BIN" secrets set "${config.secret}" <<< "$hash"
             '';
         };
       };

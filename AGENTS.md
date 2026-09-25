@@ -179,48 +179,15 @@ Modules contribute to `_internal.state` which becomes the JSON the CLI reads:
 
 ---
 
-## CLI Architecture (Python)
+## CLI Architecture (Rust)
 
-3-layer architecture with dependency injection:
+The Alloy CLI has been rewritten in Rust for speed, strict typing, and separation of concerns. It is divided into three crates:
 
-```
-commands/    (presentation: argparse handlers, rich output)
-    |
-domain/      (business logic: services, typed exceptions)
-    |
-data/        (read-only repositories reading from alloy-state.json dict)
-infrastructure/  (adapters: filesystem, git, rage crypto, QEMU processes)
-```
+1. **`alloy-cli`**: Presentation layer (Clap arguments, rich terminal output, error rendering).
+2. **`alloy-core`**: Pure business logic (domain models, interfaces/ports, flat data search).
+3. **`alloy-infra`**: Adapters for external systems (Nix eval, Git, Rage, QEMU, VDE, FileSystem).
 
-**Adding a new CLI command** requires touching:
-1. `data/models.py` -- add dataclasses
-2. `data/state.py` -- add Repository class
-3. `domain/exceptions.py` -- add typed errors (if needed)
-4. `domain/<name>.py` -- add Service class (if business logic needed)
-5. `infrastructure/<name>.py` -- add Adapter class (if external system interaction needed)
-6. `commands/<name>.py` -- add handlers + `register_parser()`
-7. `di.py` -- wire repository/service/adapter as `@property @lru_cache`
-8. `main.py` -- import and call `register_parser()`
-
-**Patterns:**
-- Handler signature: `def handle_xxx(args, cli: CLI, container: Container)`
-- Parser registration: `def register_parser(subparsers)` with `set_defaults(func=handle_xxx)`
-- Repository: `__init__(self, db: dict)`, `find_all() -> List[Record]`, `find_by_name(name) -> Optional[Record]`
-- DI: `Container.__init__(cli, db)`, properties with `@lru_cache(maxsize=1)`
-- Errors: all inherit from `AlloyError`, caught in command layer, displayed via `cli.error()`/`cli.abort()`
-
-**Current CLI commands:**
-```
-alloy facts      {set, get, edit, list, show}
-alloy secrets    {set, get, edit, rekey, list, show}
-alloy indexes    {allocate, list, show}
-alloy generators {run, list, show}
-alloy hosts      {list, show}
-alloy jails      {list, show}
-alloy overlays   {list, show}
-alloy vms        {list, run, ssh, show}
-alloy state      {show}
-```
+**For full details on the Rust CLI architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).**
 
 ---
 
@@ -288,24 +255,24 @@ Fix: keep the submodule's own option declarations free of self-references to the
 
 ## VM Subsystem
 
-QEMU-based testing without root privileges. Inter-VM networking via a `vde_switch` L2 bridge (started by the CLI at `alloy vms run` time), host access via port forwarding.
+QEMU-based testing without root privileges. Inter-VM networking via a `vde_switch` L2 bridge (started by the CLI at `alloy qemu run` time), host access via port forwarding.
 
 **Nix side** (`modules/core/vm.nix`):
 - `hosts.<name>.vm.enable` -- opt-in per host
 - `hosts.<name>.vm.{memory, cores, graphics, forwardPorts[], extraQemuOptions, nixosModule}`
 - `hosts.<name>.vm.mac`, `hosts.<name>.vm.networkQemuOptions` -- `readOnly` options; values are assigned unconditionally in `hostSubmodule.config` (see the Nix Patterns pitfall above for why they can't use a self-referential `default` inside the `vm` submodule itself). Any variant module reads these instead of recomputing them.
 - `networkQemuOptions` includes `-netdev vde,id=net1,sock=$ALLOY_VDE_SOCKET` -- the env var is set by the CLI before launching the VM script
-- `hosts.<name>.vm.variants.<name>` (`attrsOf path`) -- each launch-script implementation registers its own key (e.g. `qemu-vm` from core, `disko` from an optional `disko` module), value = absolute path to the launch script; `hosts.<name>.vm.defaultVariant` (`nullOr str`) picks which key the CLI runs by default
+- `hosts.<name>.vm.variants.<name>` (`attrsOf path`) -- each launch-script implementation registers its own key (e.g. `qemu-vm` from core, `disko` from an optional `disko` module), value = relative path to the launch script inside `state_path`; `hosts.<name>.vm.defaultVariant` (`nullOr str`) picks which key the CLI runs by default
 - `nixosModule` -- extension point for injecting NixOS config into the default (`qemu-vm`) variant specifically
 - Guest interface `eth1` always carries `192.168.100.<idx>/24` -- predictable, host-idx-derived, static
 
-**CLI side** (`alloy vms`):
-- `infrastructure/qemu.py` -- `QemuAdapter` (foreground process launch, disk images) + `VdeAdapter`/`VdeSwitch` (vde_switch lifecycle)
-- `domain/vms.py` -- `VmsService` (resolve by name/tag with OR semantics, port forward lookup, variant resolution via `get_run_script(record, variant=None)` -- falls back to `default_variant`, raises `VmVariantNotFoundError` if neither exists; `start_vde_switch`/`stop_vde_switch` for L2 bridge lifecycle)
-- `commands/vms.py` -- thin presentation layer; `run` starts the VDE switch, then launches VMs with `ALLOY_VDE_SOCKET` set, stops the switch in a `finally` block; `--variant NAME` picks a non-default launch-script variant
-- VMs always run attached to the terminal (foreground only, single or multiple at once); there is no background/detach mode, no `alloy vms stop`, and no CLI-managed PID file -- process lifetime is tied 1:1 to the `alloy vms run` invocation, cleanup happens via normal child-process signal propagation (Ctrl+C / terminal close), not via CLI-tracked state
-- VDE switch socket lives in a `tempfile.mkdtemp`-created directory under `/tmp`; no persistent socket across sessions
-- VM runtime state (disk images, per-VM logs) lives under `<workspace_root>/.alloy/<name>/vms/`, namespaced by the top-level `name` option so multiple Alloy configurations sharing one workspace don't collide; override with the `ALLOY_VMS_DIR` environment variable (see `di.py`'s `qemu` property)
+**CLI side** (`alloy qemu`):
+- `alloy-infra::qemu` -- `LocalQemuHost` (foreground process launch, disk images) + `LocalVdeHost` (vde_switch lifecycle, waits for socket up to 5s)
+- `alloy-core::qemu` -- `launch` function resolves dependencies (networks) and uses RAII to automatically clean up VDE sockets when done.
+- `alloy-cli::commands::qemu` -- thin presentation layer; `run` finds hosts and calls core logic.
+- VMs always run attached to the terminal (foreground only, single or multiple at once); there is no detached mode, no CLI-managed PID file -- process lifetime is tied 1:1 to the `alloy qemu run` invocation, cleanup happens via normal child-process signal propagation (Ctrl+C / terminal close) or `Drop` trait execution.
+- VDE switch socket lives in a `std::fs::create_dir_all`-created directory under `/tmp/alloy/<name>`; no persistent socket across sessions.
+- VM runtime state (disk images, per-VM logs) lives in `cache_dir` (default: `<workspace_root>/.alloy/vms/<name>/`).
 
 ---
 

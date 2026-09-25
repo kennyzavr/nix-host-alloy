@@ -1,75 +1,87 @@
 use std::path::PathBuf;
 
+use alloy_core::domain::env::{Env, EnvModuleSource, EnvStateSource};
+
 use crate::{ctx::Ctx, term_ui::TermUi};
 
 mod facts;
-mod generators;
+mod gens;
 mod indexes;
+mod qemu;
 mod secrets;
-
-const NIXPKGS_DEFAULT_SOURCE_URL: &str = "nixpkgs";
-const ALLOY_DEFAULT_SOURCE_URL: &str = "github:kennyzavr/nix-host-alloy";
 
 #[derive(clap::Parser, Debug)]
 #[command(name = "alloy-cli", styles = TermUi::CLAP_STYLES)]
 pub struct Args {
-    #[arg(long = "root", env = "ALLOY_ROOT", default_value = ".")]
-    root_dir: PathBuf,
+    #[arg(long = "workspace-root", env = Env::WORKSPACE_ROOT, default_value = ".")]
+    workspace_root: PathBuf,
 
-    #[arg(long = "state-path", env = "ALLOY_STATE_PATH")]
-    state_path: Option<PathBuf>,
+    #[arg(long = "state-source", env = Env::STATE_SOURCE)]
+    state_source: Option<EnvStateSource>,
 
-    #[arg(long = "alloy-url", env = "ALLOY_URL", default_value = ALLOY_DEFAULT_SOURCE_URL)]
+    #[arg(long = "module-source", env = Env::MODULE_SOURCE, default_value = Env::DEFAULT_MODULE_SOURCE)]
+    module_source: EnvModuleSource,
+
+    #[arg(long = "alloy-url", env = Env::ALLOY_URL, default_value = Env::DEFAULT_ALLOY_URL)]
     alloy_url: String,
 
-    #[arg(long = "nixpkgs-url", env = "ALLOY_NIXPKGS_URL", default_value = NIXPKGS_DEFAULT_SOURCE_URL)]
+    #[arg(long = "nixpkgs-url", env = Env::NIXPKGS_URL, default_value = Env::DEFAULT_NIXPKGS_URL)]
     nixpkgs_url: String,
 
-    #[arg(long = "depth", env = "ALLOY_DEPTH", default_value = "0")]
-    depth: u32,
+    #[arg(long = "flake-url", env = Env::FLAKE_URL)]
+    flake_url: Option<String>,
+
+    #[arg(long = "depth", env = Env::DEPTH, default_value = Env::DEFAULT_DEPTH)]
+    depth: u64,
+
+    #[arg(long = "force", env = Env::FORCE)]
+    force: Option<bool>,
+
+    #[arg(long = "add-to-git", env = Env::ADD_TO_GIT)]
+    add_to_git: Option<bool>,
 
     #[arg(
         long = "cache-dir",
-        env = "ALLOY_CACHE_DIR",
+        env = Env::CACHE_DIR,
         default_value = "./.alloy"
     )]
     cache_dir: PathBuf,
 
-    #[command(flatten)]
-    module_source: ModuleSourceArgs,
+    #[arg(
+        long = "show-nix-trace",
+        env = Env::SHOW_NIX_TRACE,
+    )]
+    show_nix_trace: Option<bool>,
 
     #[command(subcommand)]
     cmd: Cmd,
 }
 
-#[derive(clap::Args, Debug)]
-#[group(required = false, multiple = false)]
-struct ModuleSourceArgs {
-    #[arg(long = "module", env = "ALLOY_MODULE")]
-    module_path: Option<PathBuf>,
-    #[arg(long = "attr", env = "ALLOY_ATTR")]
-    flake_attr: Option<String>,
-}
-
 #[derive(clap::Subcommand, Debug)]
 pub enum Cmd {
     Facts(facts::Args),
-    Generators(generators::Args),
+    Gens(gens::Args),
     Indexes(indexes::Args),
     Secrets(secrets::Args),
+    Qemu(qemu::Args),
 }
 
 pub fn handle_args(args: Args) {
     if let Err(e) = std::fs::create_dir_all(&args.cache_dir) {
         eprintln!("Failed to create cache dir: {}", e);
+        return;
     } else {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
         let log_file = args.cache_dir.join(format!("alloy-{}.log", ts));
-        
-        if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_file) {
+
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file)
+        {
             let _ = simplelog::WriteLogger::init(
                 simplelog::LevelFilter::Debug,
                 simplelog::Config::default(),
@@ -80,24 +92,37 @@ pub fn handle_args(args: Args) {
 
     log::info!("Starting alloy-cli");
     log::debug!("Parsed Arguments: {:#?}", args);
-    let alloy_envs: Vec<_> = std::env::vars().filter(|(k, _)| k.starts_with("ALLOY_")).collect();
+    let alloy_envs: Vec<_> = std::env::vars()
+        .filter(|(k, _)| k.starts_with("ALLOY_"))
+        .collect();
     log::debug!("ALLOY_* Environment variables: {:#?}", alloy_envs);
 
-    let ctx = Ctx::new(
-        args.root_dir,
-        args.module_source.module_path,
-        args.module_source.flake_attr,
-        args.depth,
-        args.alloy_url,
-        args.nixpkgs_url,
-        args.state_path,
-        args.cache_dir,
-    );
+    let env = Env {
+        state_source: args.state_source,
+        workspace_root: args.workspace_root,
+        flake_url: args.flake_url,
+        module_source: args.module_source,
+        depth: args.depth,
+        alloy_url: args.alloy_url,
+        nixpkgs_url: args.nixpkgs_url,
+        cache_dir: args.cache_dir,
+        force: args.force,
+        add_to_git: args.add_to_git,
+        show_nix_trace: args.show_nix_trace,
+    };
+
+    let mut ctx = Ctx {
+        env,
+        system: alloy_core::infra::System {},
+    };
+
+    let mut ui = TermUi { depth: args.depth };
 
     match args.cmd {
-        Cmd::Facts(cmd_args) => facts::handle(cmd_args, &ctx),
-        Cmd::Generators(cmd_args) => generators::handle(cmd_args, &ctx),
-        Cmd::Indexes(cmd_args) => indexes::handle(cmd_args, &ctx),
-        Cmd::Secrets(cmd_args) => secrets::handle(cmd_args, &ctx),
+        Cmd::Facts(cmd_args) => facts::handle(cmd_args, &mut ctx, &mut ui),
+        Cmd::Secrets(cmd_args) => secrets::handle(cmd_args, &mut ctx, &mut ui),
+        Cmd::Indexes(cmd_args) => indexes::handle(cmd_args, &mut ctx, &mut ui),
+        Cmd::Gens(cmd_args) => gens::handle(cmd_args, &mut ctx, &mut ui),
+        Cmd::Qemu(cmd_args) => qemu::handle(cmd_args, &mut ctx, &mut ui),
     }
 }

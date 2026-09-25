@@ -239,7 +239,7 @@
                   runtimeInputs = [ pkgs.wireguard-tools ];
                   text = ''
                     preshared_key=$(wg genpsk)
-                    "$ALLOY_BIN" secrets write "${pskSecret}" <<< "$preshared_key"
+                    "$ALLOY_BIN" secrets set "${pskSecret}" <<< "$preshared_key"
                   '';
                 };
             };
@@ -274,8 +274,8 @@
                       priv_key=$(wg genkey) 
                       pub_key=$(wg pubkey <<< "$priv_key")
 
-                      "$ALLOY_BIN" secrets write "${privKeySecret}" <<< "$priv_key"
-                      "$ALLOY_BIN" facts write "${pubKeyFact}" <<< "$pub_key"
+                      "$ALLOY_BIN" secrets set "${privKeySecret}" <<< "$priv_key"
+                      "$ALLOY_BIN" facts set "${pubKeyFact}" <<< "$pub_key"
                     '';
                   };
               };

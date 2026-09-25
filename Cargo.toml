@@ -1,6 +1,11 @@
 [workspace]
 members = [
     "packages/alloy-cli",
-    "packages/alloy-core"
-, "packages/alloy-infra"]
+    "packages/alloy-core",
+]
 resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98"
+version = "0.1.0"

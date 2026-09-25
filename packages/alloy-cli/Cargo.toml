@@ -1,11 +1,8 @@
 [package]
 name = "alloy-cli"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.98"
-
-[lints.rust]
-warnings = "allow"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
@@ -22,6 +19,5 @@ tempfile = "3.27.0"
 age = "0.12.1"
 petgraph = "0.8.3"
 alloy-core = { path = "../alloy-core" }
-alloy-infra = { path = "../alloy-infra" }
 log = "0.4"
 simplelog = "0.12"

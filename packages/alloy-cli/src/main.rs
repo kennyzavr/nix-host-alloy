@@ -1,3 +1,4 @@
+use alloy_core::domain::env::Env;
 use clap::Parser;
 
 mod commands;
@@ -8,7 +9,7 @@ mod term_ui;
 
 // TODO check age key pair files to existance
 fn main() {
-    let depth: u32 = std::env::var("ALLOY_DEPTH")
+    let depth: u64 = std::env::var(Env::DEPTH)
         .unwrap_or_default()
         .parse()
         .unwrap_or(0);

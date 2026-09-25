@@ -44,7 +44,13 @@
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
             wrapProgram $out/bin/alloy-cli \
-              --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.git pkgs.rage ]}
+              --prefix PATH : ${
+                pkgs.lib.makeBinPath [
+                  pkgs.git
+                  pkgs.rage
+                  pkgs.vde2
+                ]
+              }
           '';
         }
         // commonArgs
@@ -55,6 +61,7 @@
         packages = [
           pkgs.rage
           pkgs.git
+          pkgs.vde2
           rustToolchain
           pkgs.cargo-edit
           pkgs.stdenv.cc

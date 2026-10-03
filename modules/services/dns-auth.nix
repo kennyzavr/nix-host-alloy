@@ -102,6 +102,11 @@
             {
               host = hostName;
 
+              tags = [
+                "dns-auth"
+                "dns-auth/${srvName}"
+              ];
+
               endpoints.${srv.endpoint} = { };
 
               overlays = lib.mapAttrs (_: _: { }) srv.overlays;

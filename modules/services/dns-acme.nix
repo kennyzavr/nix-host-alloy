@@ -161,6 +161,11 @@
             {
               host = srv.host;
 
+              tags = [
+                "dns-acme"
+                "dns-acme/${srvName}"
+              ];
+
               overlays = lib.mapAttrs (_: _: { }) srv.overlays;
 
               endpoints.${srv.endpoint} = { };

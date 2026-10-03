@@ -419,6 +419,11 @@
           {
             host = srv.host;
 
+            tags = [
+              "xhttp-proxy"
+              "xhttp-proxy/${srvName}"
+            ];
+
             uplink.allowEgress = true;
 
             overlays = lib.mapAttrs (_: _: { }) srv.overlays;

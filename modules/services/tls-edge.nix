@@ -169,6 +169,11 @@
               {
                 host = hostName;
 
+                tags = [
+                  "tls-edge"
+                  "tls-edge/${srvName}"
+                ];
+
                 uplink.forwards = lib.pipe srv.routes [
                   (lib.mapAttrsToList (
                     _: route:

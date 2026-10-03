@@ -81,13 +81,14 @@
       };
 
       config.generators.instances = lib.pipe alloy.hosts [
-        (lib.mapAttrsToList (_: host: lib.mapAttrsToList (_: user: user) host.users))
+        (lib.mapAttrsToList (hostName: host: lib.mapAttrsToList (userName: user: { inherit hostName host userName user; }) host.users))
         lib.flatten
         (lib.map (
-          user:
+          { hostName, host, userName, user }:
           lib.nameValuePair user.hashedPasswd.generator {
             imports = [ alloy.generators.templates."users/hashed-passwd" ];
             secret = user.hashedPasswd.secret;
+            tags = [ "users" "users/${userName}" ] ++ host.tags;
           }
         ))
         builtins.listToAttrs

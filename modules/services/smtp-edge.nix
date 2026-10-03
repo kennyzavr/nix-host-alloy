@@ -303,6 +303,11 @@
                   {
                     host = hostName;
 
+                    tags = [
+                      "smtp-edge"
+                      "smtp-edge/${srvName}"
+                    ];
+
                     uplink = {
                       allowEgress = true;
                     };

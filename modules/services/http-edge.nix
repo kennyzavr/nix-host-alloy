@@ -153,6 +153,11 @@
               {
                 host = hostName;
 
+                tags = [
+                  "http-edge"
+                  "http-edge/${srvName}"
+                ];
+
                 uplink.forwards =
                   (lib.optionals (hostNet.v4 != null) [
                     {

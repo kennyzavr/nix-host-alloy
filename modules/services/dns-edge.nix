@@ -195,6 +195,11 @@
               {
                 host = hostName;
 
+                tags = [
+                  "dns-edge"
+                  "dns-edge/${srvName}"
+                ];
+
                 uplink.forwards =
                   (lib.optionals (hostNet.v4 != null) [
                     {

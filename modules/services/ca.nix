@@ -183,6 +183,11 @@
           {
             host = srv.host;
 
+            tags = [
+              "ca"
+              "ca/${srvName}"
+            ];
+
             overlays = lib.mapAttrs (_: _: { }) srv.overlays;
 
             endpoints.${srv.endpoint} = { };

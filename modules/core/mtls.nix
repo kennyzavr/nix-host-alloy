@@ -110,7 +110,7 @@
 
               generators.instances.${generatorName} = {
                 imports = [ alloy.generators.templates."tls/x509-cert/leaf" ];
-                tags = [ "mtls" ];
+                tags = [ "mtls" ] ++ host.tags;
 
                 wants = [ mtlsGlobalGenerator ];
 
@@ -150,7 +150,7 @@
 
               generators.instances.${generatorName} = {
                 imports = [ alloy.generators.templates."tls/x509-cert/leaf" ];
-                tags = [ "mtls" ];
+                tags = [ "mtls" ] ++ jail.tags;
 
                 wants = [ mtlsGlobalGenerator ];
 

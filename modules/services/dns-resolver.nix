@@ -67,6 +67,11 @@
             ${jailName} = { config, pkgs, ... }: {
               host = srv.host;
 
+              tags = [
+                "dns-resolver"
+                "dns-resolver/${srvName}"
+              ];
+
               uplink.allowEgress = true;
 
               endpoints.${srv.endpoint} = { };

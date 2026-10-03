@@ -170,6 +170,11 @@
             {
               host = srv.host;
 
+              tags = [
+                "postbox"
+                "postbox/${srvName}"
+              ];
+
               overlays = lib.mapAttrs (_: _: { }) srv.overlays;
 
               endpoints.${srv.smtp.endpoint} = { };

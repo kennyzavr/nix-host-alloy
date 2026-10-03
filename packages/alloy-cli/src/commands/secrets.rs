@@ -243,8 +243,8 @@ fn handle_rekey(args: RekeyArgs, ctx: &mut Ctx, ui: &mut TermUi) {
                 ));
             }
             RekeySecretsEvent::JailRefRekeyed { jail, secret_ref } => {
-                ui.print_skip(&format!(
-                    "Jail {} secret {} already exists",
+                ui.print_info(&format!(
+                    "Rekeyed jail {} secret {}",
                     NameMarker(jail.name),
                     NameMarker(secret_ref.master.name)
                 ));

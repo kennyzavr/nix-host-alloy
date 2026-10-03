@@ -68,7 +68,7 @@ fn handle_exec(args: ExecArgs, ctx: &mut Ctx, ui: &mut TermUi) {
                 ));
             }
             ExecGensEvent::GenSkip { .. } => {
-                ui.print_skip(&format!("The generator was skipped (up to date)\n"));
+                ui.print_skip(&format!("The generator is up to date\n"));
             }
             ExecGensEvent::Error(err) => {
                 ui.print_error(err);

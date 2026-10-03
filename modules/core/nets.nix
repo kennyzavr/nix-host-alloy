@@ -98,7 +98,7 @@
       hostSubmodule = { config, name, ... }: {
         options.primaryNet = lib.mkOption {
           readOnly = true;
-          type = lib.types.submodule netSubmodule;
+          type = lib.types.str;
         };
         options.nets = lib.mkOption {
           default = { };
@@ -131,7 +131,7 @@
               ]) config.nets
             );
 
-            primaryNet = config.nets.${builtins.head primaryNets};
+            primaryNet = builtins.head primaryNets;
 
             nixosModule = lib.mkMerge [
               (lib.mkMerge (lib.catAttrs "nixosModule" configs))

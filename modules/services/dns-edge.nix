@@ -9,8 +9,11 @@
     let
       alloy = config;
 
-      hostSubmodule = {
-        options = alib.types.netMatchOpts;
+      hostSubmodule = { config, name, ... }: {
+        options.net = lib.mkOption {
+          default = alloy.hosts.${name}.primaryNet;
+          type = lib.types.str;
+        };
       };
 
       routeSubmodule = { name, ... }: {
@@ -96,10 +99,6 @@
                 assertion = builtins.hasAttr hostName alloy.hosts;
                 message = "[Alloy] dns-edge '${srvName}': host '${hostName}' is unknown";
               }
-              {
-                assertion = builtins.hasAttr hostName alloy.hosts -> (hostCfg.ipv4 != null || hostCfg.ipv6 != null);
-                message = "[Alloy] dns-edge '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
-              }
             ]) srv.hosts
           ));
 
@@ -109,8 +108,12 @@
               nname = "ns1";
               nameservers = lib.flatten (
                 lib.mapAttrsToList (
-                  _: host:
-                  [ ] ++ (lib.optional (host.ipv4 != null) host.ipv4) ++ (lib.optional (host.ipv6 != null) host.ipv6)
+                  hostName: hostCfg:
+                  let
+                    host = alloy.hosts.${hostName};
+                    hostNet = host.nets.${hostCfg.net};
+                  in 
+                  [ ] ++ (lib.optional (hostNet.v4 != null) hostNet.v4.address) ++ (lib.optional (hostNet.v6 != null) hostNet.v6.address)
                 ) srv.hosts
               );
             }
@@ -119,9 +122,11 @@
           dns.records = lib.flatten (
             lib.map (
               route:
-              (lib.imap1 (
-                hostIdx: host:
+              (lib.imap0 (
+                hostIdx: { hostName, hostCfg }:
                 let
+                  host = alloy.hosts.${hostName};
+                  hostNet = host.nets.${hostCfg.net};
                   nsPrefix = "ns${toString hostIdx}";
                   parentZone = alloy.dns.zones.${route.zone}.parentZone;
                   zoneApex = lib.removeSuffix "." alloy.dns.zones.${route.zone}.apex;
@@ -144,40 +149,44 @@
                   };
                   data.ns = "${nsPrefix}.${subzone}";
                 })
-                ++ (lib.optional (host.ipv4 != null) {
+                ++ (lib.optional (hostNet.v4 != null) {
                   domain = {
                     zone = route.zone;
                     name = nsPrefix;
                   };
-                  data.a = host.ipv4;
+                  data.a = hostNet.v4.address;
                 })
-                ++ (lib.optional (parentZone != null && host.ipv4 != null) {
+                ++ (lib.optional (parentZone != null && hostNet.v4 != null) {
                   domain = {
                     zone = parentZone;
                     name = "${nsPrefix}.${subzone}";
                   };
-                  data.a = host.ipv4;
+                  data.a = hostNet.v4.address;
                 })
-                ++ (lib.optional (host.ipv6 != null) {
+                ++ (lib.optional (hostNet.v6 != null) {
                   domain = {
                     zone = route.zone;
                     name = nsPrefix;
                   };
-                  data.aaaa = host.ipv6;
+                  data.aaaa = hostNet.v6.address;
                 })
-                ++ (lib.optional (parentZone != null && host.ipv6 != null) {
+                ++ (lib.optional (parentZone != null && hostNet.v6 != null) {
                   domain = {
                     zone = parentZone;
                     name = "${nsPrefix}.${subzone}";
                   };
-                  data.aaaa = host.ipv6;
+                  data.aaaa = hostNet.v6.adress;
                 })
-              ) (builtins.attrValues srv.hosts))
+              ) (lib.mapAttrsToList (hostName: hostCfg: { inherit hostName hostCfg; }) srv.hosts))
             ) sortedRoutes
           );
 
           jails = lib.mapAttrs' (
             hostName: hostCfg:
+            let
+              host = alloy.hosts.${hostName};
+              hostNet = host.nets.${hostCfg.net};
+            in
             lib.nameValuePair "dns-edge-${hostName}" (
               { config, ... }:
               let
@@ -186,16 +195,20 @@
               {
                 host = hostName;
 
-                uplink.forwards = lib.optionals (hostCfg.ipv4 != null || hostCfg.ipv6 != null) [
+                uplink.forwards = lib.optionals (hostNet.v4 != null || hostNet.v6 != null) [
                   {
                     proto = "tcp";
                     port = 53;
-                    inherit (hostCfg) iface ipv4 ipv6;
+                    inherit (hostNet) iface;
+                    ipv4 = hostNet.v4.address or null;
+                    ipv6 = hostNet.v6.address or null;
                   }
                   {
                     proto = "udp";
                     port = 53;
-                    inherit (hostCfg) iface ipv4 ipv6;
+                    inherit (hostNet) iface;
+                    ipv4 = hostNet.v4.address or null;
+                    ipv6 = hostNet.v6.address or null;
                   }
                 ];
 

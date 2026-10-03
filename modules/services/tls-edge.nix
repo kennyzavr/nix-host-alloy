@@ -9,8 +9,11 @@
     let
       alloy = config;
 
-      hostType = lib.types.submodule {
-        options = alib.types.netMatchOpts;
+      hostSubmodule = { config, name, ... }: {
+        options.net = lib.mkOption {
+          default = alloy.hosts.${name}.primaryNet;
+          type = lib.types.str;
+        };
       };
 
       routeSubmodule = { config, name, ... }: {
@@ -77,7 +80,7 @@
           };
           hosts = lib.mkOption {
             default = { };
-            type = lib.types.attrsOf hostType;
+            type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
           };
           routes = lib.mkOption {
             default = { };
@@ -109,10 +112,6 @@
                 assertion = builtins.hasAttr hostName alloy.hosts;
                 message = "[Alloy] tls-edge '${srvName}': host '${hostName}' is unknown";
               }
-              {
-                assertion = builtins.hasAttr hostName alloy.hosts -> (hostCfg.ipv4 != null || hostCfg.ipv6 != null);
-                message = "[Alloy] tls-edge '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
-              }
             ]) srv.hosts
           ))
           ++ (lib.flatten (
@@ -138,15 +137,19 @@
             lib.mapAttrsToList (
               _: route:
               (lib.mapAttrsToList (
-                _: hostCfg:
+                hostName: hostCfg:
+                let
+                  host = alloy.hosts.${hostName};
+                  hostNet = host.nets.${hostCfg.net};
+                in
                 [ ]
-                ++ (lib.optional (route.addDnsRecords && hostCfg.ipv4 != null) {
+                ++ (lib.optional (route.addDnsRecords && hostNet.v4 != null) {
                   inherit (route) domain;
-                  data.a = hostCfg.ipv4;
+                  data.a = hostNet.v4.address;
                 })
-                ++ (lib.optional (route.addDnsRecords && hostCfg.ipv6 != null) {
+                ++ (lib.optional (route.addDnsRecords && hostNet.v6 != null) {
                   inherit (route) domain;
-                  data.aaaa = hostCfg.ipv6;
+                  data.aaaa = hostNet.v6.address;
                 })
               ) srv.hosts)
             ) srv.routes
@@ -154,6 +157,10 @@
 
           jails = lib.mapAttrs' (
             hostName: hostCfg:
+            let
+              host = alloy.hosts.${hostName};
+              hostNet = host.nets.${hostCfg.net};
+            in
             lib.nameValuePair "tls-edge-${srvName}-${hostName}" (
               { config, ... }:
               let
@@ -165,7 +172,9 @@
                 uplink.forwards = lib.mapAttrsToList (_: stream: {
                   proto = "tcp";
                   port = stream.downstream.port;
-                  inherit (hostCfg) iface ipv4 ipv6;
+                  inherit (hostNet) iface;
+                  ipv4 = hostNet.v4.address or null;
+                  ipv6 = hostNet.v6.address or null;
                 }) srv.routes;
 
                 overlays = lib.genAttrs srv.allowedOverlays (_: _: { });

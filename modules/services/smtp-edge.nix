@@ -24,8 +24,11 @@
         };
       };
 
-      hostType = lib.types.submodule {
-        options = alib.types.netMatchOpts;
+      hostSubmodule = { config, name, ... }: {
+        options.net = lib.mkOption {
+          default = alloy.hosts.${name}.primaryNet;
+          type = lib.types.str;
+        };
       };
 
       serviceSubmodule = { config, name, ... }: {
@@ -70,7 +73,7 @@
           };
           hosts = lib.mkOption {
             default = { };
-            type = lib.types.attrsOf hostType;
+            type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
           };
           allowedOverlays = lib.mkOption {
             default = null;
@@ -183,10 +186,6 @@
                     assertion = builtins.hasAttr hostName alloy.hosts;
                     message = "[Alloy] smtp-edge '${srvName}': host '${hostName}' is unknown";
                   }
-                  {
-                    assertion = builtins.hasAttr hostName alloy.hosts -> (hostCfg.ipv4 != null || hostCfg.ipv6 != null);
-                    message = "[Alloy] smtp-edge '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
-                  }
                 ]) srv.hosts
               ))
               ++ (lib.flatten (
@@ -206,15 +205,19 @@
                 lib.flatten (
                   [ ]
                   ++ (lib.mapAttrsToList (
-                    _: hostCfg:
+                    hostName: hostCfg:
+                    let
+                      host = alloy.hosts.${hostName};
+                      hostNet = host.nets.${hostCfg.net};
+                    in
                     [ ]
-                    ++ (lib.optional (hostCfg.ipv4 != null) {
+                    ++ (lib.optional (hostNet.v4 != null) {
                       domain = srv.hostname;
-                      data.a = hostCfg.ipv4;
+                      data.a = hostNet.v4.address;
                     })
-                    ++ (lib.optional (hostCfg.ipv6 != null) {
+                    ++ (lib.optional (hostNet.v6 != null) {
                       domain = srv.hostname;
-                      data.aaaa = hostCfg.ipv6;
+                      data.aaaa = hostNet.v6.address;
                     })
                   ) srv.hosts)
                   ++ (lib.mapAttrsToList (
@@ -288,6 +291,10 @@
 
               jails = lib.mapAttrs' (
                 hostName: hostCfg:
+                let
+                  host = alloy.hosts.${hostName};
+                  hostNet = host.nets.${hostCfg.net};
+                in
                 lib.nameValuePair "smtp-edge-${srvName}-${hostName}" (
                   { config, ... }:
                   let
@@ -298,11 +305,13 @@
 
                     uplink = {
                       allowEgress = true;
-                      forwards = lib.optionals (hostCfg.ipv4 != null || hostCfg.ipv6 != null) [
+                      forwards = lib.optionals (hostNet.v4 != null || hostNet.v6 != null) [
                         {
                           proto = "tcp";
                           port = 25;
-                          inherit (hostCfg) iface ipv4 ipv6;
+                          inherit (hostNet) iface;
+                          ipv4 = hostNet.v4.address or null;
+                          ipv6 = hostNet.v6.address or null;
                         }
                       ];
                     };

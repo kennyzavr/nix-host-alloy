@@ -9,8 +9,11 @@
     let
       alloy = config;
 
-      hostType = lib.types.submodule {
-        options = alib.types.netMatchOpts;
+      hostSubmodule = { config, name, ... }: {
+        options.net = lib.mkOption {
+          default = alloy.hosts.${name}.primaryNet;
+          type = lib.types.str;
+        };
       };
 
       routeSubmodule = { config, ... }: {
@@ -87,7 +90,7 @@
           };
           hosts = lib.mkOption {
             default = { };
-            type = lib.types.attrsOf hostType;
+            type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
           };
           routes = lib.mkOption {
             default = { };
@@ -111,10 +114,6 @@
                 assertion = builtins.hasAttr hostName alloy.hosts;
                 message = "[Alloy] http-edge '${srvName}': host '${hostName}' is unknown";
               }
-              {
-                assertion = builtins.hasAttr hostName alloy.hosts -> (hostCfg.ipv4 != null || hostCfg.ipv6 != null);
-                message = "[Alloy] http-edge '${srvName}': host '${hostName}' must have specified at least one ip address (ipv4 or ipv6)";
-              }
             ]) srv.hosts
           ));
 
@@ -123,15 +122,19 @@
             (lib.mapAttrsToList (
               _: route:
               lib.mapAttrsToList (
-                _: host:
+                hostName: hostCfg:
+                let
+                  host = alloy.hosts.${hostName};
+                  hostNet = host.nets.${hostCfg.net};
+                in
                 [ ]
-                ++ (lib.optional (host.ipv4 != null) {
+                ++ (lib.optional (hostNet.v4 != null) {
                   inherit (route) domain;
-                  data.a = host.ipv4;
+                  data.a = hostNet.v4.address;
                 })
-                ++ (lib.optional (host.ipv6 != null) {
+                ++ (lib.optional (hostNet.v6 != null) {
                   inherit (route) domain;
-                  data.aaaa = host.ipv6;
+                  data.aaaa = hostNet.v6.address;
                 })
               ) srv.hosts
             ))
@@ -144,25 +147,33 @@
               { config, ... }:
               let
                 jail = config;
+                host = alloy.hosts.${hostName};
+                hostNet = host.nets.${hostCfg.net};
               in
               {
                 host = hostName;
 
-                uplink.forwards = lib.optionals (hostCfg.ipv4 != null || hostCfg.ipv6 != null) [
+                uplink.forwards = lib.optionals (hostNet.v4 != null || hostNet.v6 != null) [
                   {
                     proto = "tcp";
                     port = 80;
-                    inherit (hostCfg) iface ipv4 ipv6;
+                    inherit (hostNet) iface;
+                    ipv4 = hostNet.v4.address or null;
+                    ipv6 = hostNet.v6.address or null;
                   }
                   {
                     proto = "tcp";
                     port = 443;
-                    inherit (hostCfg) iface ipv4 ipv6;
+                    inherit (hostNet) iface;
+                    ipv4 = hostNet.v4.address or null;
+                    ipv6 = hostNet.v6.address or null;
                   }
                   {
                     proto = "udp";
                     port = 443;
-                    inherit (hostCfg) iface ipv4 ipv6;
+                    inherit (hostNet) iface;
+                    ipv4 = hostNet.v4.address or null;
+                    ipv6 = hostNet.v6.address or null;
                   }
                 ];
 

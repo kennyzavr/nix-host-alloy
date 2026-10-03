@@ -1,3 +1,8 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+
 use alloy_core::domain::qemu::{
     LaunchQemuGuestsEvent, ListQemuGuestsEvent, ShowQemuGuestEvent, launch_qemu_guests,
     list_qemu_guests, show_qemu_guest,
@@ -45,6 +50,19 @@ pub fn handle(args: Args, ctx: &mut Ctx, ui: TermUi) {
 }
 
 fn handle_launch(args: LaunchArgs, ctx: &mut Ctx, ui: TermUi) {
+    let ctrlc_counter = Arc::new(AtomicUsize::new(0));
+
+    {
+        let ui = ui.clone();
+        let _ = ctrlc::set_handler(move || {
+            let count = ctrlc_counter.fetch_add(1, Ordering::SeqCst);
+            if count == 0 {
+                ui.print_newline();
+                ui.print_info("Stopping qemu instances...");
+            }
+        });
+    }
+
     let _ = launch_qemu_guests(
         &args.hosts,
         &args.tags,

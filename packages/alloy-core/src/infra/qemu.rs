@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
@@ -205,7 +206,23 @@ impl VdeSwitchProc {
         self.child.kill().map_err(StopError::Kill)?;
 
         let status = self.child.wait().map_err(StopError::Wait)?;
-        if !status.success() {
+
+        #[cfg(unix)]
+        let is_expected_signal = {
+            use std::os::unix::process::ExitStatusExt;
+            if let Some(sig) = status.signal()
+                && (sig == 2 || sig == 15)
+            {
+                true
+            } else {
+                false
+            }
+        };
+
+        #[cfg(not(unix))]
+        let is_expected_signal = false;
+
+        if !(status.success() || is_expected_signal) {
             return Err(StopError::Status(status));
         }
 

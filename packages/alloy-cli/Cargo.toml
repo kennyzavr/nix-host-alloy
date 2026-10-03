@@ -21,3 +21,4 @@ petgraph = "0.8.3"
 alloy-core = { path = "../alloy-core" }
 log = "0.4"
 simplelog = "0.12"
+ctrlc = "3.5.2"

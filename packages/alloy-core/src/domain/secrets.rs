@@ -622,7 +622,6 @@ pub fn list_secret_refs<C: Ctx>(
             })
             .ok()
     })
-    .filter(|secret| tags.is_empty() || has_intersection(tags, &secret.data.tags))
     .collect();
 
     let jails: Vec<_> = if jail_names.is_empty() {
@@ -642,7 +641,6 @@ pub fn list_secret_refs<C: Ctx>(
             })
             .ok()
     })
-    .filter(|secret| tags.is_empty() || has_intersection(tags, &secret.data.tags))
     .collect();
 
     if !errors.is_empty() {

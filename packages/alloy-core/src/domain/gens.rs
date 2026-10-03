@@ -282,17 +282,20 @@ fn build_exec_plan<'s>(
     } else {
         Either::Right(gen_names.into_iter().map(AsRef::as_ref))
     }
-    .collect();
-
-    for &target_gen in &gen_names {
-        if let None = state.gens.get(target_gen) {
-            let err = ExecGensError::FindGen {
-                gen_name: target_gen.to_string(),
+    .filter_map(|gen_name| match state.gens.get(gen_name) {
+        Some(r#gen) => Some((gen_name, r#gen)),
+        None => {
+            let error = ExecGensError::FindGen {
+                gen_name: gen_name.to_string(),
                 source: FindGenError::NotFound,
             };
-            errors.push(err);
+            errors.push(error);
+            None
         }
-    }
+    })
+    .filter(|(_, r#gen)| tags.is_empty() || has_intersection(tags, &r#gen.tags))
+    .map(|(gen_name, _)| gen_name)
+    .collect();
 
     let mut gens: HashMap<_, _> = state
         .gens
@@ -309,7 +312,6 @@ fn build_exec_plan<'s>(
                 })
                 .ok()
         })
-        .filter(|secret| tags.is_empty() || has_intersection(tags, &secret.data.tags))
         .map(|g| (g.name, g))
         .collect();
 

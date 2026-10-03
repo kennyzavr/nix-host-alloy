@@ -784,14 +784,14 @@ pub fn rekey_secrets<C: Ctx>(
     let list_reporter = |ctx: &mut C, event: ListSecretRefsEvent<'_>| match event {
         ListSecretRefsEvent::HostRef { host, secret_ref } => {
             match secret_ref.rekey(force, add_to_git, ctx) {
-                Ok(rekeyed) if rekeyed => reporter.report(
+                Ok(true) => reporter.report(
                     ctx,
                     RekeySecretsEvent::HostRefRekeyed {
                         host: &host,
                         secret_ref: &secret_ref,
                     },
                 ),
-                Ok(_) => reporter.report(
+                Ok(false) => reporter.report(
                     ctx,
                     RekeySecretsEvent::HostRefSkipped {
                         host: &host,
@@ -810,14 +810,14 @@ pub fn rekey_secrets<C: Ctx>(
         }
         ListSecretRefsEvent::JailRef { jail, secret_ref } => {
             match secret_ref.rekey(force, add_to_git, ctx) {
-                Ok(rekeyed) if rekeyed => reporter.report(
+                Ok(true) => reporter.report(
                     ctx,
                     RekeySecretsEvent::JailRefRekeyed {
                         jail: &jail,
                         secret_ref: &secret_ref,
                     },
                 ),
-                Ok(_) => reporter.report(
+                Ok(false) => reporter.report(
                     ctx,
                     RekeySecretsEvent::JailRefSkipped {
                         jail: &jail,

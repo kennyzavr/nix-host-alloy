@@ -169,13 +169,24 @@
               {
                 host = hostName;
 
-                uplink.forwards = lib.mapAttrsToList (_: stream: {
-                  proto = "tcp";
-                  port = stream.downstream.port;
-                  inherit (hostNet) iface;
-                  ipv4 = hostNet.v4.address or null;
-                  ipv6 = hostNet.v6.address or null;
-                }) srv.routes;
+                uplink.forwards = lib.pipe srv.routes [
+                  (lib.mapAttrsToList (
+                    _: route:
+                    (lib.optional (hostNet.v4 != null) {
+                      proto = "tcp";
+                      port = route.downstream.port;
+                      inherit (hostNet) iface;
+                      ip.v4 = hostNet.v4.address;
+                    })
+                    ++ (lib.optional (hostNet.v6 != null) {
+                      proto = "tcp";
+                      port = route.downstream.port;
+                      inherit (hostNet) iface;
+                      ip.v6 = hostNet.v6.address;
+                    })
+                  ))
+                  lib.flatten
+                ];
 
                 overlays = lib.genAttrs srv.allowedOverlays (_: _: { });
 

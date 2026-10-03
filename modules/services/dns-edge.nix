@@ -195,22 +195,35 @@
               {
                 host = hostName;
 
-                uplink.forwards = lib.optionals (hostNet.v4 != null || hostNet.v6 != null) [
-                  {
-                    proto = "tcp";
-                    port = 53;
-                    inherit (hostNet) iface;
-                    ipv4 = hostNet.v4.address or null;
-                    ipv6 = hostNet.v6.address or null;
-                  }
-                  {
-                    proto = "udp";
-                    port = 53;
-                    inherit (hostNet) iface;
-                    ipv4 = hostNet.v4.address or null;
-                    ipv6 = hostNet.v6.address or null;
-                  }
-                ];
+                uplink.forwards =
+                  (lib.optionals (hostNet.v4 != null) [
+                    {
+                      proto = "tcp";
+                      port = 53;
+                      inherit (hostNet) iface;
+                      ip.v4 = hostNet.v4.address;
+                    }
+                    {
+                      proto = "udp";
+                      port = 53;
+                      inherit (hostNet) iface;
+                      ip.v4 = hostNet.v4.address;
+                    }
+                  ])
+                  ++ (lib.optionals (hostNet.v6 != null) [
+                    {
+                      proto = "tcp";
+                      port = 53;
+                      inherit (hostNet) iface;
+                      ip.v6 = hostNet.v6.address;
+                    }
+                    {
+                      proto = "udp";
+                      port = 53;
+                      inherit (hostNet) iface;
+                      ip.v6 = hostNet.v6.address;
+                    }
+                  ]);
 
                 overlays = lib.genAttrs srv.allowedOverlays (_: { });
 

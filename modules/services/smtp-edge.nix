@@ -305,16 +305,21 @@
 
                     uplink = {
                       allowEgress = true;
-                      forwards = lib.optionals (hostNet.v4 != null || hostNet.v6 != null) [
-                        {
-                          proto = "tcp";
-                          port = 25;
-                          inherit (hostNet) iface;
-                          ipv4 = hostNet.v4.address or null;
-                          ipv6 = hostNet.v6.address or null;
-                        }
-                      ];
                     };
+
+                    uplink.forwards =
+                      (lib.optional (hostNet.v4 != null) {
+                        proto = "tcp";
+                        port = 25;
+                        inherit (hostNet) iface;
+                        ip.v4 = hostNet.v4.address;
+                      })
+                      ++ (lib.optional (hostNet.v6 != null) {
+                        proto = "tcp";
+                        port = 25;
+                        inherit (hostNet) iface;
+                        ip.v6 = hostNet.v6.address;
+                      });
 
                     overlays = lib.genAttrs srv.allowedOverlays (_: _: { });
 

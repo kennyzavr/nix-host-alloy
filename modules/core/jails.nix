@@ -49,8 +49,15 @@
               type = lib.types.bool;
               default = true;
             };
-          }
-          // alib.types.netMatchOpts;
+            iface = lib.mkOption {
+              default = null;
+              type = lib.types.nullOr lib.types.str;
+            };
+            ip = lib.mkOption {
+              default = null;
+              type = lib.types.nullOr alib.types.ip.addr;
+            };
+          };
         }
       );
 
@@ -166,18 +173,18 @@
                   message = "alloy: jail '${name}': forward '${toString forwardIdx}': both port and targetPort must have the same range length";
                 }
                 {
-                  assertion = forward.ipv4 != null || forward.ipv6 != null || forward.iface != null;
+                  assertion = forward.ip != null || forward.iface != null;
                   message = ''
                     [Alloy] Insecure NAT Forward rule in jail '${name}'!
 
-                    Forward index '${toString forwardIdx}' does not specify `ipv4`, `ipv6`, or `iface`.
+                    Forward index '${toString forwardIdx}' does not specify `ip.v4`, `ip.v6`, or `iface`.
                     This creates an unconditional catch-all rule that will intercept ALL traffic on port ${toString forward.port}
                     across the entire host, including internal traffic from other containers!
 
                     To fix this, specify at least one of:
-                    - ipv4 (host public IP)
-                    - ipv6 (host public IPv6)
-                    - iface (host external interface)
+                    - ip.v4
+                    - ip.v6
+                    - iface
                   '';
                 }
               ]) config.uplink.forwards
@@ -209,27 +216,19 @@
                       jail:
                       lib.map (
                         forward:
-                        let
-                          hasV4 = forward.ipv4 != null;
-                          hasV6 = forward.ipv6 != null;
-                          catchAll = !hasV4 && !hasV6;
-                          ifaceMatch = lib.optionalString (forward.iface != null) "iifname \"${forward.iface}\"";
-                          ruleV4 = lib.optionalString (hasV4 || catchAll) ''
-                            ${ifaceMatch} ${lib.optionalString hasV4 "ip daddr ${forward.ipv4}"} ${forward.proto} dport ${toString forward.port} dnat ip to ${mkVethIpv4 jail}:${toString forward.targetPort}
-                          '';
-                          ruleV6 = lib.optionalString (hasV6 || catchAll) ''
-                            ${ifaceMatch} ${lib.optionalString hasV6 "ip6 daddr ${forward.ipv6}"} ${forward.proto} dport ${toString forward.port} dnat ip6 to [${mkVethIpv6 jail}]:${toString forward.targetPort}
-                          '';
-                          ruleV4Output = lib.optionalString hasV4 ''
-                            ip daddr ${forward.ipv4} ${forward.proto} dport ${toString forward.port} dnat ip to ${mkVethIpv4 jail}:${toString forward.targetPort}
-                          '';
-                          ruleV6Output = lib.optionalString hasV6 ''
-                            ip6 daddr ${forward.ipv6} ${forward.proto} dport ${toString forward.port} dnat ip6 to [${mkVethIpv6 jail}]:${toString forward.targetPort}
-                          '';
-                        in
                         {
-                          prerouting = "${ruleV4}${ruleV6}";
-                          output = "${ruleV4Output}${ruleV6Output}";
+                          prerouting = ''
+                            ${lib.optionalString (forward.iface != null) ''iifname "${forward.iface}"''} ${lib.optionalString (forward.ip ? v4) "ip daddr ${forward.ip.v4}"} ${forward.proto} dport ${toString forward.port} dnat ip to ${mkVethIpv4 jail}:${toString forward.targetPort}
+                            ${lib.optionalString (forward.iface != null) ''iifname "${forward.iface}"''} ${lib.optionalString (forward.ip ? v6) "ip6 daddr ${forward.ip.v6}"} ${forward.proto} dport ${toString forward.port} dnat ip6 to [${mkVethIpv6 jail}]:${toString forward.targetPort}
+                          '';
+                          output = ''
+                            ${lib.optionalString (forward.ip ? v4) ''
+                              ip daddr ${forward.ip.v4} ${forward.proto} dport ${toString forward.port} dnat ip to ${mkVethIpv4 jail}:${toString forward.targetPort}
+                            ''}
+                            ${lib.optionalString (forward.ip ? v6) ''
+                              ip6 daddr ${forward.ip.v6} ${forward.proto} dport ${toString forward.port} dnat ip6 to [${mkVethIpv6 jail}]:${toString forward.targetPort}
+                            ''}
+                          '';
                         }
                       ) jail.uplink.forwards
                     ) (lib.filter (j: j.host == name) (builtins.attrValues alloy.jails));

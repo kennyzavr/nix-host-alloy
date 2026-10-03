@@ -66,7 +66,7 @@
                 jailName = "dns-auth-${srvName}-${hostName}";
               in
               lib.mapAttrsToList (overlayName: overlay: {
-                ipv6 = alloy.jails.${jailName}.overlays.${overlayName}.ipv6;
+                ip.v6 = alloy.jails.${jailName}.overlays.${overlayName}.ipv6;
                 overlay = overlayName;
               }) srv.overlays
             ) srv.hosts

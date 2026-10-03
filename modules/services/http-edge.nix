@@ -216,7 +216,9 @@
                                 ""
                             }
                             ${lib.concatMapStringsSep "\n" (target: ''
-                              server [${target.ipv6}]:${toString endpoint.port} weight=${toString target.weight} ${lib.optionalString target.backup "backup"} ${lib.optionalString target.down "down"};
+                              server ${
+                                  if target.ip ? v6 then "[${target.ip.v6}]" else target.ip.v4
+                                }:${toString endpoint.port} weight=${toString target.weight} ${lib.optionalString target.backup "backup"} ${lib.optionalString target.down "down"};
                             '') endpoint.targets}
                           }
                         ''

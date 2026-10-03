@@ -243,7 +243,7 @@
                   lib.mapAttrsToList (
                     hostName: _:
                     lib.map (overlayName: {
-                      ipv6 = alloy.jails."smtp-edge-${srvName}-${hostName}".overlays.${overlayName}.ipv6;
+                      ip.v6 = alloy.jails."smtp-edge-${srvName}-${hostName}".overlays.${overlayName}.ipv6;
                       overlay = overlayName;
                     }) allOverlays
                   ) srv.hosts
@@ -428,7 +428,9 @@
                             mydestination = "";
                             mynetworks = lib.pipe srv.routes [
                               (lib.mapAttrsToList (
-                                _: route: lib.map (t: "[${t.ipv6}]") alloy.endpoints.${route.upstream.endpoint}.targets
+                                _: route: lib.map (t: "${
+                                  if t.ip ? v6 then "[${t.ip.v6}]" else t.ip.v4
+                                }") alloy.endpoints.${route.upstream.endpoint}.targets
                               ))
                               lib.flatten
                             ];

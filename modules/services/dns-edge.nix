@@ -224,7 +224,9 @@
                             targetIdx: target:
                             lib.optionalString (!target.down) ''
                               newServer({
-                                address = "[${target.ipv6}]:${toString endpoint.port}",
+                                address = "${
+                                  if target.ip ? v6 then "[${target.ip.v6}]" else target.ip.v4
+                                }:${toString endpoint.port}",
                                 pool = "${route.name}",
                                 name = "${route.name}-${toString targetIdx}",
                                 order = ${toString (if target.backup then 2 else 1)},

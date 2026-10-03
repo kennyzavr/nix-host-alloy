@@ -209,6 +209,28 @@
           };
         };
 
+      endpointSubmodule = { config, ... }: {
+        options = {
+          targets = lib.mkOption {
+            type = lib.types.uniq (lib.types.listOf (lib.types.submodule endpointTargetSubmodule));
+          };
+          overlays = lib.mkOption {
+            type = lib.types.attrsOf (lib.types.submodule { });
+            readOnly = true;
+          };
+        };
+        config = {
+          overlays = lib.genAttrs (lib.unique (lib.map (t: t.overlay) config.targets)) (_: { });
+        };
+      };
+
+      endpointTargetSubmodule = {
+        options.overlay = lib.mkOption {
+          default = null;
+          type = lib.types.nullOr lib.types.str;
+        };
+      };
+
       mkBridgeIface = overlay: "al-br${toString overlay.idx}";
       mkDummyIface = overlay: "al-d${toString overlay.idx}";
       mkWgIface = overlay: "al-wg${toString overlay.idx}";
@@ -635,6 +657,10 @@
           type = lib.types.attrsOf (lib.types.submodule overlaySubmodule);
         };
 
+        endpoints = lib.mkOption {
+          type = lib.types.attrsOf (lib.types.submodule endpointSubmodule);
+        };
+
         hosts = lib.mkOption {
           type = lib.types.attrsOf (
             lib.types.submodule (
@@ -698,7 +724,35 @@
           );
         in
         {
-          assertions = lib.flatten (builtins.catAttrs "assertions" overlayConfigs);
+          assertions =
+            [ ]
+            ++ (lib.flatten (builtins.catAttrs "assertions" overlayConfigs))
+            ++ (lib.pipe alloy.endpoints [
+              (lib.mapAttrsToList (
+                endpointName: endpoint:
+                lib.imap1 (i: target: [
+                  {
+                    assertion = target.overlay != null -> builtins.hasAttr target.overlay alloy.overlays;
+                    message = "[Alloy] Endpoint '${endpointName}' target #${toString i}: uses an unknown overlay '${target.overlay}'. This overlay is not defined in 'config.overlays'.";
+                  }
+                  {
+                    assertion =
+                      builtins.hasAttr "v6" target.ip
+                      -> target.overlay != null
+                      -> builtins.hasAttr target.overlay alloy.overlays
+                      -> lib.hasPrefix alloy.overlays.${target.overlay}.ipv6Prefix target.ip.v6;
+                    message = "[Alloy] Endpoint '${endpointName}' target #${toString i}: IPv6 address '${target.ip.v6}' does not belong to the prefix of overlay '${target.overlay}' (prefix: '${
+                      alloy.overlays.${target.overlay}.ipv6Prefix
+                    }').";
+                  }
+                  {
+                    assertion = target.overlay == null -> !(builtins.hasAttr "v4" target.ip);
+                    message = "[Alloy] Endpoint '${endpointName}' target #${toString i}: IPv4 address '${target.ip.v4}' and overlay cannot be specified together.";
+                  }
+                ]) endpoint.targets
+              ))
+              lib.flatten
+            ]);
 
           indexes."overlays" = {
             minValue = 1;

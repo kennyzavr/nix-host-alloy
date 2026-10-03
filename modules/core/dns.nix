@@ -254,8 +254,8 @@
                           if r ? endpoint then
                             let
                               endpoint = alloy.endpoints.${r.endpoint};
-                              targets = lib.map (t: t.ipv6) (
-                                lib.filter (t: builtins.hasAttr t.overlay node.overlays) endpoint.targets
+                              targets = lib.map (t: t.ip.v6 or t.ip.v4) (
+                                lib.filter (t: t.overlay == null || builtins.hasAttr t.overlay node.overlays) endpoint.targets
                               );
                             in
                             targets
@@ -292,8 +292,8 @@
                           allEndpointRecords = lib.flatten (
                             lib.mapAttrsToList (
                               eName: e:
-                              (lib.map (t: "${t.ipv6} ${e.domain}") e.targets)
-                              ++ (lib.map (t: "${t.ipv6} ${e.overlays.${t.overlay}.domain}") e.targets)
+                              (lib.map (t: "${t.ip.v6 or t.ip.v4} ${e.domain}") e.targets)
+                              ++ (lib.map (t: "${t.ip.v6 or t.ip.v4} ${e.overlays.${t.overlay}.domain}") e.targets)
                             ) alloy.endpoints
                           );
                         in

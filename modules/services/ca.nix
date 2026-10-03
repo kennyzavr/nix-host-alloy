@@ -116,7 +116,7 @@
           port = 443;
           targets = lib.mapAttrsToList (overlayName: _: {
             overlay = overlayName;
-            ipv6 = alloy.jails."ca-${srvName}".overlays.${overlayName}.ipv6;
+            ip.v6 = alloy.jails."ca-${srvName}".overlays.${overlayName}.ipv6;
           }) srv.overlays;
         };
 

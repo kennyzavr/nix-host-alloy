@@ -332,7 +332,7 @@
           port = 443;
           httpBuffering = false;
           targets = lib.mapAttrsToList (o: _: {
-            ipv6 = alloy.jails."xhttp-proxy-${srvName}".overlays.${o}.ipv6;
+            ip.v6 = alloy.jails."xhttp-proxy-${srvName}".overlays.${o}.ipv6;
             overlay = o;
           }) srv.overlays;
         };
@@ -340,7 +340,7 @@
         endpoints.${srv.subsEndpoint} = {
           port = 8443;
           targets = lib.mapAttrsToList (o: _: {
-            ipv6 = alloy.jails."xhttp-proxy-${srvName}".overlays.${o}.ipv6;
+            ip.v6 = alloy.jails."xhttp-proxy-${srvName}".overlays.${o}.ipv6;
             overlay = o;
           }) srv.overlays;
         };

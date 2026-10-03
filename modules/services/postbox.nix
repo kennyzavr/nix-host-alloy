@@ -130,7 +130,7 @@
             ${srv.smtp.endpoint} = {
               port = 25;
               targets = lib.mapAttrsToList (overlayName: _: {
-                ipv6 = alloy.jails."postbox-${srvName}".overlays.${overlayName}.ipv6;
+                ip.v6 = alloy.jails."postbox-${srvName}".overlays.${overlayName}.ipv6;
                 overlay = overlayName;
               }) srv.overlays;
             };

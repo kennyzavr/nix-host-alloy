@@ -34,7 +34,7 @@
         };
       };
       netSubmodule = { config, name, ... }: {
-        options = alib.types.netMatchOpts // {
+        options = {
           static = lib.mkOption {
             default = false;
             type = lib.types.bool;

@@ -146,18 +146,6 @@ in
       };
     };
 
-    types.netMatchOpts = {
-      iface = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-      };
-      ipv4 = lib.mkOption {
-        type = lib.types.nullOr alib.types.ip.v4addr;
-      };
-      ipv6 = lib.mkOption {
-        type = lib.types.nullOr alib.types.ip.v6addr;
-      };
-    };
-
     mkArpaIpv6 =
       ipv6:
       let

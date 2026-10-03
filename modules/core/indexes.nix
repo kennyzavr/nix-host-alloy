@@ -79,7 +79,7 @@
                   Run: alloy indexes generate --instace "${name}"
                   to regenerate it.
                 '';
-            get = key: config.values.${key};
+            get = key: config.values.${key} or (throw "[Alloy]: index '${name}': key '${key}' missing");
             # if config.values ? ${key}
             #   config.values.${key}
             # else

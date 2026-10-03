@@ -657,6 +657,11 @@
           type = lib.types.attrsOf (lib.types.submodule overlaySubmodule);
         };
 
+        checkEndpointOverlays = lib.mkOption {
+          readOnly = true;
+          type = lib.types.unspecified;
+        };
+
         endpoints = lib.mkOption {
           type = lib.types.attrsOf (lib.types.submodule endpointSubmodule);
         };
@@ -724,6 +729,23 @@
           );
         in
         {
+          checkEndpointOverlays =
+            contextMessage: endpointName: allowedOverlays:
+            let
+              endpoint = alloy.endpoints.${endpointName};
+              invalidTargets = lib.filter (
+                { idx, target }: target.overlay != null && !(builtins.elem target.overlay allowedOverlays)
+              ) (lib.imap0 (idx: target: { inherit idx target; }) endpoint.targets);
+            in
+            lib.warnIf (invalidTargets != [ ])
+              "[Alloy] ${contextMessage} Endpoint '${endpointName}' has invalid overlay references, allowed overlays: [ ${lib.concatStringsSep ", " allowedOverlays} ], invalid targets: [ ${
+                lib.concatMapStringsSep ", " (
+                  { idx, target }:
+                  ''${toString idx}: { overlay = "${target.overlay}"; ip = "${target.ip.v6 or target.ip.v4}"; } ''
+                ) invalidTargets
+              } ]"
+              allowedOverlays;
+
           assertions =
             [ ]
             ++ (lib.flatten (builtins.catAttrs "assertions" overlayConfigs))

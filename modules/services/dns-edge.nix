@@ -34,8 +34,30 @@
             type = lib.types.bool;
           };
           allowedOverlays = lib.mkOption {
-            default = [ ];
+            default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            apply =
+              allowedOverlays:
+              if allowedOverlays != null then
+                lib.pipe config.routes [
+                  (lib.mapAttrsToList (routeName: route: { inherit routeName route; }))
+                  (lib.foldl (
+                    overlays:
+                    { routeName, route }:
+                    alloy.checkEndpointOverlays "Service dns-edge '${name}': route '${routeName}':"
+                      route.upstream.endpoint
+                      overlays
+                  ) allowedOverlays)
+                  lib.unique
+                ]
+              else
+                lib.pipe config.routes [
+                  (lib.mapAttrsToList (
+                    _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
+                  ))
+                  lib.flatten
+                  lib.unique
+                ];
           };
           hosts = lib.mkOption {
             default = { };
@@ -51,14 +73,6 @@
       mkService =
         srvName: srv:
         let
-          allOverlays = lib.pipe srv.routes [
-            (lib.mapAttrsToList (
-              _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
-            ))
-            lib.flatten
-            lib.unique
-          ];
-
           sortedRoutes = lib.pipe srv.routes [
             (lib.mapAttrsToList (name: route: route // { inherit name; }))
             (lib.imap (idx: route: route // { inherit idx; }))
@@ -71,12 +85,6 @@
         in
         {
           assertions = [
-            {
-              assertion =
-                srv.allowedOverlays != [ ]
-                -> lib.all (overlayName: builtins.elem overlayName srv.allowedOverlays) allOverlays;
-              message = "[Alloy] dns-edge '${srvName}': there are some dns endpoint targets with addresses outside of the allowed overlays";
-            }
             {
               assertion = srv.hosts != { };
               message = "[Alloy] dns-edge '${srvName}': at least one host must be specified";
@@ -191,7 +199,7 @@
                   }
                 ];
 
-                overlays = lib.genAttrs allOverlays (_: { });
+                overlays = lib.genAttrs srv.allowedOverlays (_: { });
 
                 nixosModule = { pkgs, ... }: {
                   networking.firewall.allowedUDPPorts = [ 53 ];
@@ -207,7 +215,7 @@
                       addLocal('[${jail.uplink.ipv6}]:53')
                       ${lib.concatMapStringsSep "\n" (overlayName: ''
                         addLocal('[${jail.overlays.${overlayName}.ipv6}]:53')                        
-                      '') allOverlays}
+                      '') srv.allowedOverlays}
 
                       setACL({
                         '0.0.0.0/0',

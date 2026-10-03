@@ -73,8 +73,30 @@
             type = lib.types.attrsOf hostType;
           };
           allowedOverlays = lib.mkOption {
-            default = [ ];
+            default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            apply =
+              allowedOverlays:
+              if allowedOverlays != null then
+                lib.pipe config.routes [
+                  (lib.mapAttrsToList (routeName: route: { inherit routeName route; }))
+                  (lib.foldl (
+                    overlays:
+                    { routeName, route }:
+                    alloy.checkEndpointOverlays "Service smtp-edge '${name}': route '${routeName}':"
+                      route.upstream.endpoint
+                      overlays
+                  ) allowedOverlays)
+                  lib.unique
+                ]
+              else
+                lib.pipe config.routes [
+                  (lib.mapAttrsToList (
+                    _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
+                  ))
+                  lib.flatten
+                  lib.unique
+                ];
           };
           dkim = {
             enable = lib.mkOption {
@@ -124,26 +146,11 @@
         let
           mkService =
             srvName: srv:
-            let
-              allOverlays = lib.unique (
-                lib.flatten (
-                  lib.mapAttrsToList (
-                    _: route: lib.map (target: target.overlay) alloy.endpoints.${route.upstream.endpoint}.targets
-                  ) srv.routes
-                )
-              );
-            in
             {
               assertions = [
                 {
                   assertion = alib.types.dns.label.check srvName;
                   message = "[Alloy] smtp-edge name '${srvName}' must be valid dns label.";
-                }
-                {
-                  assertion =
-                    srv.allowedOverlays != [ ]
-                    -> lib.all (overlayName: builtins.elem overlayName srv.allowedOverlays) allOverlays;
-                  message = "[Alloy] smtp-edge '${srvName}': there are some endpoint targets with addresses outside of the allowed overlays";
                 }
                 {
                   assertion = srv.hosts != { };
@@ -245,7 +252,7 @@
                     lib.map (overlayName: {
                       ip.v6 = alloy.jails."smtp-edge-${srvName}-${hostName}".overlays.${overlayName}.ipv6;
                       overlay = overlayName;
-                    }) allOverlays
+                    }) srv.allowedOverlays
                   ) srv.hosts
                 );
               };
@@ -300,7 +307,7 @@
                       ];
                     };
 
-                    overlays = lib.genAttrs allOverlays (_: _: { });
+                    overlays = lib.genAttrs srv.allowedOverlays (_: _: { });
 
                     endpoints.${srv.endpoint} = { };
 

@@ -43,15 +43,37 @@
         };
       };
 
-      serviceSubmodule = { name, ... }: {
+      serviceSubmodule = { config, name, ... }: {
         options = {
           enable = lib.mkOption {
             default = true;
             type = lib.types.bool;
           };
           allowedOverlays = lib.mkOption {
-            default = [ ];
-            type = lib.types.listOf lib.types.str;
+            default = null;
+            type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            apply =
+              allowedOverlays:
+              if allowedOverlays != null then
+                lib.pipe config.routes [
+                  (lib.mapAttrsToList (routeName: route: { inherit routeName route; }))
+                  (lib.foldl (
+                    overlays:
+                    { routeName, route }:
+                    alloy.checkEndpointOverlays "Service tls-edge '${name}': route '${routeName}':"
+                      route.upstream.endpoint
+                      overlays
+                  ) allowedOverlays)
+                  lib.unique
+                ]
+              else
+                lib.pipe config.routes [
+                  (lib.mapAttrsToList (
+                    _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
+                  ))
+                  lib.flatten
+                  lib.unique
+                ];
           };
           hosts = lib.mkOption {
             default = { };
@@ -66,26 +88,11 @@
 
       mkService =
         srvName: srv:
-        let
-          allOverlays = lib.pipe srv.routes [
-            (lib.mapAttrsToList (
-              _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
-            ))
-            lib.flatten
-            lib.unique
-          ];
-        in
         {
           assertions = [
             {
               assertion = alib.types.dns.label.check srvName;
               message = "[Alloy] tls-edge name '${srvName}' must be valid dns label.";
-            }
-            {
-              assertion =
-                srv.allowedOverlays != [ ]
-                -> lib.all (overlayName: builtins.elem overlayName srv.allowedOverlays) allOverlays;
-              message = "[Alloy] tls-edge '${srvName}': there are some endpoint targets with addresses outside of the allowed overlays";
             }
             {
               assertion = srv.hosts != { };
@@ -161,7 +168,7 @@
                   inherit (hostCfg) iface ipv4 ipv6;
                 }) srv.routes;
 
-                overlays = lib.genAttrs allOverlays (_: _: { });
+                overlays = lib.genAttrs srv.allowedOverlays (_: _: { });
 
                 tls.certs = lib.pipe srv.routes [
                   (lib.filterAttrs (_: route: route.downstream.tls.enable && route.downstream.tls.cert != null))

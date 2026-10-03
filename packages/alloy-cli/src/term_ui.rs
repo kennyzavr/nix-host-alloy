@@ -73,6 +73,10 @@ impl TermUi {
         eprintln!("{}{tag} {}", indent_str, self.colorize_msg(msg));
     }
 
+    pub fn print_newline(&self) {
+        eprintln!("");
+    }
+
     pub fn print_info(&self, msg: &str) {
         let tag = format!("{:>12}", "Info:").bright_blue().bold().to_string();
         let indent_str = self.indent_str();

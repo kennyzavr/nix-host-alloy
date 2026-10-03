@@ -43,7 +43,7 @@ pub struct ShowArgs {
     pub generator: String,
 }
 
-pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
+pub fn handle(args: Args, ctx: &mut Ctx, ui: TermUi) {
     match args.cmd {
         Cmd::Exec(args) => handle_exec(args, ctx, ui),
         Cmd::List(args) => handle_list(args, ctx, ui),
@@ -51,7 +51,7 @@ pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_exec(args: ExecArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_exec(args: ExecArgs, ctx: &mut Ctx, ui: TermUi) {
     log::info!("Executing generators");
 
     let _ = exec_gens(
@@ -77,7 +77,7 @@ fn handle_exec(args: ExecArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     );
 }
 
-fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: TermUi) {
     let headers = if args.verbose {
         vec!["Generator", "Wants", "After", "Secrets", "Facts", "Tags"]
     } else {
@@ -137,7 +137,7 @@ fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: TermUi) {
     let _ = show_gen(
         &args.generator,
         ctx,

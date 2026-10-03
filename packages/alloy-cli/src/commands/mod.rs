@@ -116,13 +116,13 @@ pub fn handle_args(args: Args) {
         system: alloy_core::infra::System {},
     };
 
-    let mut ui = TermUi { depth: args.depth };
+    let ui = TermUi { depth: args.depth };
 
     match args.cmd {
-        Cmd::Facts(cmd_args) => facts::handle(cmd_args, &mut ctx, &mut ui),
-        Cmd::Secrets(cmd_args) => secrets::handle(cmd_args, &mut ctx, &mut ui),
-        Cmd::Indexes(cmd_args) => indexes::handle(cmd_args, &mut ctx, &mut ui),
-        Cmd::Gens(cmd_args) => gens::handle(cmd_args, &mut ctx, &mut ui),
-        Cmd::Qemu(cmd_args) => qemu::handle(cmd_args, &mut ctx, &mut ui),
+        Cmd::Facts(cmd_args) => facts::handle(cmd_args, &mut ctx, ui),
+        Cmd::Secrets(cmd_args) => secrets::handle(cmd_args, &mut ctx, ui),
+        Cmd::Indexes(cmd_args) => indexes::handle(cmd_args, &mut ctx, ui),
+        Cmd::Gens(cmd_args) => gens::handle(cmd_args, &mut ctx, ui),
+        Cmd::Qemu(cmd_args) => qemu::handle(cmd_args, &mut ctx, ui),
     }
 }

@@ -87,7 +87,7 @@ pub struct ShowArgs {
     pub secret: String,
 }
 
-pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
+pub fn handle(args: Args, ctx: &mut Ctx, ui: TermUi) {
     match args.cmd {
         Cmd::Get(args) => handle_get(args, ctx, ui),
         Cmd::Set(args) => handle_set(args, ctx, ui),
@@ -98,7 +98,7 @@ pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_get(args: GetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_get(args: GetArgs, ctx: &mut Ctx, ui: TermUi) {
     if let Ok(data) = get_secret_value(
         &args.secret,
         ctx,
@@ -113,7 +113,7 @@ fn handle_get(args: GetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     };
 }
 
-fn handle_set(args: SetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_set(args: SetArgs, ctx: &mut Ctx, ui: TermUi) {
     let stdin = std::io::stdin();
     if stdin.is_terminal() {
         ui.print_error(&err_msg("No data was provided through stdin"));
@@ -151,7 +151,7 @@ fn handle_set(args: SetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     );
 }
 
-fn handle_edit(args: EditArgs, ctx: &mut Ctx, ui: &TermUi) {
+fn handle_edit(args: EditArgs, ctx: &mut Ctx, ui: TermUi) {
     let data = match get_secret_value(
         &args.secret,
         ctx,
@@ -211,7 +211,7 @@ fn handle_edit(args: EditArgs, ctx: &mut Ctx, ui: &TermUi) {
     );
 }
 
-fn handle_rekey(args: RekeyArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_rekey(args: RekeyArgs, ctx: &mut Ctx, ui: TermUi) {
     let _ = rekey_secrets(
         &args.secrets,
         &args.hosts,
@@ -262,7 +262,7 @@ fn handle_rekey(args: RekeyArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     );
 }
 
-fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: TermUi) {
     let has_target_filters = !args.hosts.is_empty() || !args.jails.is_empty();
 
     if has_target_filters {
@@ -333,7 +333,7 @@ fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: TermUi) {
     let headers = vec!["Property", "Value"];
     let mut table_rows = Vec::new();
     let mut targets = Vec::new();

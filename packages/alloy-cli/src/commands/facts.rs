@@ -66,7 +66,7 @@ pub struct ShowArgs {
     pub fact: String,
 }
 
-pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
+pub fn handle(args: Args, ctx: &mut Ctx, ui: TermUi) {
     match args.cmd {
         Cmd::Get(args) => handle_get(args, ctx, ui),
         Cmd::Set(args) => handle_set(args, ctx, ui),
@@ -76,7 +76,7 @@ pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_get(args: GetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_get(args: GetArgs, ctx: &mut Ctx, ui: TermUi) {
     if let Ok(data) = get_fact_value(
         &args.fact,
         ctx,
@@ -91,7 +91,7 @@ fn handle_get(args: GetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     };
 }
 
-fn handle_set(args: SetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_set(args: SetArgs, ctx: &mut Ctx, ui: TermUi) {
     let stdin = std::io::stdin();
     if stdin.is_terminal() {
         ui.print_error(&err_msg("No data was provided through stdin"));
@@ -129,7 +129,7 @@ fn handle_set(args: SetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     );
 }
 
-fn handle_edit(args: EditArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_edit(args: EditArgs, ctx: &mut Ctx, ui: TermUi) {
     let data = match get_fact_value(&args.fact, ctx, |_: &mut Ctx, _: GetFactValueEvent<'_>| {}) {
         Ok(data) => data,
         Err(err) => {
@@ -177,7 +177,7 @@ fn handle_edit(args: EditArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     );
 }
 
-fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: TermUi) {
     let headers = vec!["Fact", "File", "Tags"];
     let mut rows = Vec::new();
 
@@ -206,7 +206,7 @@ fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: TermUi) {
     let _ = show_fact(
         &args.fact,
         ctx,

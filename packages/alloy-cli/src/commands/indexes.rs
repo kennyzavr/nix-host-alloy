@@ -46,7 +46,7 @@ pub struct GetArgs {
     pub name: String,
 }
 
-pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
+pub fn handle(args: Args, ctx: &mut Ctx, ui: TermUi) {
     match args.cmd {
         Cmd::Alloc(args) => handle_alloc(args, ctx, ui),
         Cmd::List(args) => handle_list(args, ctx, ui),
@@ -55,7 +55,7 @@ pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_alloc(args: AllocArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_alloc(args: AllocArgs, ctx: &mut Ctx, ui: TermUi) {
     log::info!("Starting index allocation");
     log::debug!("Indexes to alloc: {:?}", args.indexes);
 
@@ -88,7 +88,7 @@ fn handle_alloc(args: AllocArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     );
 }
 
-fn handle_list(_args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_list(_args: ListArgs, ctx: &mut Ctx, ui: TermUi) {
     let headers = vec!["Name", "Fact Name", "Min", "Max", "Keys"];
     let mut rows = Vec::new();
 
@@ -121,7 +121,7 @@ fn handle_list(_args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: TermUi) {
     let _ = show_index(
         &args.name,
         ctx,
@@ -158,7 +158,7 @@ fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     );
 }
 
-fn handle_get(args: GetArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_get(args: GetArgs, ctx: &mut Ctx, ui: TermUi) {
     let _ = get_index_value(
         &args.name,
         ctx,

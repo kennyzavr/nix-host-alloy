@@ -36,7 +36,7 @@ pub struct ShowArgs {
     pub host: String,
 }
 
-pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
+pub fn handle(args: Args, ctx: &mut Ctx, ui: TermUi) {
     match args.cmd {
         Cmd::Launch(args) => handle_launch(args, ctx, ui),
         Cmd::List(args) => handle_list(args, ctx, ui),
@@ -44,7 +44,7 @@ pub fn handle(args: Args, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_launch(args: LaunchArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_launch(args: LaunchArgs, ctx: &mut Ctx, ui: TermUi) {
     let _ = launch_qemu_guests(
         &args.hosts,
         &args.tags,
@@ -100,7 +100,7 @@ fn handle_launch(args: LaunchArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     );
 }
 
-fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: TermUi) {
     let headers = vec!["Host", "Variant", "Tags"];
     let mut rows = Vec::new();
 
@@ -130,7 +130,7 @@ fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: &mut TermUi) {
     }
 }
 
-fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: &mut TermUi) {
+fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: TermUi) {
     let _ = show_qemu_guest(
         &args.host,
         ctx,

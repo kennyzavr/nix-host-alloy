@@ -4,7 +4,7 @@ use crate::error::WrapErrExt;
 use alloy_core::domain::{NameMarker, PathMarker};
 use owo_colors::OwoColorize;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct TermUi {
     pub depth: u64,
 }

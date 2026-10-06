@@ -2,6 +2,7 @@
   imports = [
     ./core
     ./services
+    ./disko.nix
   ];
 
   flake.alloyModules.default = {

@@ -10,7 +10,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     disko = {
-      url = "github:nix-community/disko";
+      url = "github:nix-community/disko?ref=refs/pull/1277/head";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     rust-overlay = {

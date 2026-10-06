@@ -69,32 +69,24 @@ pub enum LaunchError {
 impl System {
     pub fn launch_guest<'v>(
         &self,
-        // alloy_name: &str,
         guest_name: &str,
         cache_dir: &Path,
         script_path: &Path,
         vde_switches: impl IntoIterator<Item = &'v dyn ports::VdeSwitchProc>,
     ) -> Result<QemuGuestProc, LaunchError> {
-        // let cache_dir = self.env.cache_dir.join(alloy_name).join("qemu");
-        std::fs::create_dir_all(&cache_dir.join("qemu")).map_err(|source| {
-            LaunchError::CreateCacheDir {
-                path: cache_dir.join("qemu").to_path_buf(),
-                source,
-            }
+        let cwd = std::env::current_dir().unwrap_or(".".into());
+        let cache_dir = cwd.join(cache_dir).join("qemu");
+        let script_path = cwd.join(script_path);
+
+        std::fs::create_dir_all(&cache_dir).map_err(|source| LaunchError::CreateCacheDir {
+            path: cache_dir.to_path_buf(),
+            source,
         })?;
 
-        // let state_dir = self
-        //     .env
-        //     .state_source
-        //     .as_ref()
-        //     .expect("State dir path should be present before QEMU script launch")
-        //     .dir();
-
-        // let bin_path = state_dir.join(script_path);
         let mut cmd = Command::new(&script_path);
-        cmd.current_dir(cache_dir);
+        cmd.current_dir(&cache_dir);
 
-        let disk_img = cache_dir.join("qemu").join(format!("{}.qcow2", guest_name));
+        let disk_img = cache_dir.join(format!("{}.qcow2", guest_name));
         cmd.env("NIX_DISK_IMAGE", &disk_img);
 
         for switch in vde_switches {
@@ -105,9 +97,7 @@ impl System {
         }
 
         let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-        let log_filename = cache_dir
-            .join("qemu")
-            .join(format!("{guest_name}_log_{timestamp}.log"));
+        let log_filename = cache_dir.join(format!("{guest_name}_log_{timestamp}.log"));
 
         let stdout_file = File::create(log_filename).map_err(LaunchError::LogFile)?;
         let stderr_file = stdout_file.try_clone().map_err(LaunchError::LogFile)?;
@@ -140,12 +130,12 @@ impl System {
     }
 
     pub fn launch_vde(&self, cache_dir: &Path, idx: u64) -> Result<VdeSwitchProc, LaunchError> {
-        // let cache_dir = self.env.cache_dir.join(alloy_name).join("vde");
-        std::fs::create_dir_all(&cache_dir.join("qemu")).map_err(|source| {
-            LaunchError::CreateCacheDir {
-                path: cache_dir.join("qemu").to_path_buf(),
-                source,
-            }
+        let cwd = std::env::current_dir().unwrap_or(".".into());
+        let cache_dir = cwd.join(cache_dir).join("qemu");
+
+        std::fs::create_dir_all(&cache_dir).map_err(|source| LaunchError::CreateCacheDir {
+            path: cache_dir.to_path_buf(),
+            source,
         })?;
 
         let temp_dir = TempDir::new().map_err(|source| LaunchError::CreateTempDir { source })?;
@@ -159,10 +149,8 @@ impl System {
         cmd.args(["-s", socket_path.to_str().unwrap(), "--nostdin"]);
 
         let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-        let log_filename = cache_dir
-            .join("qemu")
-            .join(format!("vde{idx}_log_{timestamp}.log"));
-        // let stdout_file = File::create(&log_filename).map_err(LaunchError::LogFile)?;
+        let log_filename = cache_dir.join(format!("vde{idx}_log_{timestamp}.log"));
+
         let stdout_file = File::create(log_filename).map_err(LaunchError::LogFile)?;
         let stderr_file = stdout_file.try_clone().map_err(LaunchError::LogFile)?;
 

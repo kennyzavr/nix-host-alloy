@@ -43,9 +43,8 @@ pub struct Args {
     #[arg(
         long = "cache-dir",
         env = Env::CACHE_DIR,
-        default_value = "./.alloy"
     )]
-    cache_dir: PathBuf,
+    cache_dir: Option<PathBuf>,
 
     #[arg(
         long = "show-nix-trace",
@@ -67,7 +66,17 @@ pub enum Cmd {
 }
 
 pub fn handle_args(args: Args) {
-    if let Err(e) = std::fs::create_dir_all(&args.cache_dir) {
+    let workspace_root = args
+        .workspace_root
+        .clone()
+        .unwrap_or(std::env::current_dir().unwrap());
+
+    let cache_dir = args
+        .cache_dir
+        .clone()
+        .unwrap_or(workspace_root.join(".alloy"));
+
+    if let Err(e) = std::fs::create_dir_all(&cache_dir) {
         eprintln!("Failed to create cache dir: {}", e);
         return;
     } else {
@@ -75,7 +84,7 @@ pub fn handle_args(args: Args) {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let log_file = args.cache_dir.join(format!("alloy-{}.log", ts));
+        let log_file = cache_dir.join(format!("alloy-{}.log", ts));
 
         if let Ok(file) = std::fs::OpenOptions::new()
             .create(true)
@@ -89,11 +98,6 @@ pub fn handle_args(args: Args) {
             );
         }
     }
-
-    let workspace_root = args
-        .workspace_root
-        .clone()
-        .unwrap_or(std::env::current_dir().unwrap());
 
     log::info!("Starting alloy-cli");
     log::debug!("Parsed Arguments: {:#?}", args);
@@ -110,7 +114,7 @@ pub fn handle_args(args: Args) {
         depth: args.depth,
         alloy_url: args.alloy_url,
         nixpkgs_url: args.nixpkgs_url,
-        cache_dir: args.cache_dir,
+        cache_dir,
         force: args.force,
         add_to_git: args.add_to_git,
         show_nix_trace: args.show_nix_trace,

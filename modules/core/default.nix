@@ -2,7 +2,6 @@
   imports = [
     ./hosts.nix
     ./jails.nix
-    ./cli.nix
     ./secrets.nix
     ./facts.nix
     ./generators.nix

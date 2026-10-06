@@ -8,7 +8,7 @@
     }:
     let
       alloy = config;
-      userSubmodule = { config, name, ... }: {
+      userSubmodule = hostName: { config, name, ... }: {
         options = {
           name = lib.mkOption {
             default = name;
@@ -32,11 +32,11 @@
             secret = {
               secret = lib.mkOption {
                 type = lib.types.str;
-                default = "users/${name}/hashed-passwd";
+                default = "hosts/${hostName}/users/${name}/hashed-passwd";
               };
               generator = lib.mkOption {
                 type = lib.types.str;
-                default = "users/${name}/hashed-passwd";
+                default = "hosts/${hostName}/users/${name}/hashed-passwd";
               };
             };
           };

@@ -11,12 +11,6 @@
 
       hostSubmodule = { config, name, ... }: {
         options.boot = {
-          grub = {
-            enable = lib.mkOption {
-              default = true;
-              type = lib.types.bool;
-            };
-          };
           facts = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (
@@ -37,7 +31,7 @@
         };
 
         config.nixosModule = { pkgs, ... }: {
-          boot.loader.grub.enable = lib.mkIf config.boot.grub.enable true;
+          # boot.loader.grub.enable = lib.mkIf config.boot.grub.enable true;
 
           boot.initrd.enable = true;
           boot.initrd.systemd.enable = true;

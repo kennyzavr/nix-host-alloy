@@ -255,8 +255,8 @@ fn handle_rekey(args: RekeyArgs, ctx: &mut Ctx, ui: TermUi) {
             RekeySecretsEvent::NoMatchingSecrets => {
                 ui.print_info("No secrets found matching the criteria.");
             }
-            RekeySecretsEvent::ListError(_) => {
-                ui.print_info("No secrets found matching the criteria.");
+            RekeySecretsEvent::ListError(err) => {
+                ui.print_error(&err);
             }
         },
     );

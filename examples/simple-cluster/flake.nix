@@ -24,6 +24,16 @@
           ./config.nix
         ];
 
+        perSystem =
+          {
+            pkgs,
+            ...
+          }:
+          {
+
+            formatter = pkgs.nixfmt-tree;
+          };
+
         systems = [
           "x86_64-linux"
         ];

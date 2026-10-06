@@ -75,8 +75,54 @@
       hostQemuSubmodule =
         hostName: host:
         { config, ... }:
-        let
-          commonModule = { modulesPath, ... }: {
+        {
+          options = {
+            memory = lib.mkOption {
+              type = lib.types.ints.positive;
+              default = 2048;
+              description = "VM memory in MiB.";
+            };
+            cores = lib.mkOption {
+              type = lib.types.ints.positive;
+              default = 2;
+              description = "Number of virtual CPU cores.";
+            };
+            graphics = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Whether to enable graphical output.";
+            };
+            nets = lib.mkOption {
+              default = { };
+              type = lib.types.attrsOf (lib.types.submodule (hostNetSubmodule host.idx));
+            };
+            forwardPorts = lib.mkOption {
+              default = [ ];
+              type = lib.types.listOf (lib.types.submodule fpSubmodule);
+              description = "Ports to forward from hypervisor localhost into the VM guest via QEMU user-mode networking.";
+            };
+            nixosModule = lib.mkOption {
+              type = lib.types.deferredModule;
+              default = { };
+              apply = module: {
+                _class = "nixos";
+                _file = "hosts.${lib.strings.escapeNixIdentifier hostName}.qemu.nixosModule";
+                imports = [ module ];
+              };
+            };
+            variants = lib.mkOption {
+              type = lib.types.attrsOf (lib.types.submodule variantSubmodule);
+              default = { };
+              description = "Registered VM launch-script variants for this host, keyed by variant name (e.g. \"qemu-vm\", \"disko\"). Each variant module contributes its own key.";
+            };
+            variant = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Which entry of `variants` the CLI runs when `--variant` is not given.";
+            };
+          };
+
+          config.nixosModule = { modulesPath, ... }: {
             imports = [
               "${modulesPath}/virtualisation/qemu-vm.nix"
             ];
@@ -114,52 +160,13 @@
               );
           };
 
-        in
-        {
-          options = {
-            memory = lib.mkOption {
-              type = lib.types.ints.positive;
-              default = 2048;
-              description = "VM memory in MiB.";
-            };
-            cores = lib.mkOption {
-              type = lib.types.ints.positive;
-              default = 2;
-              description = "Number of virtual CPU cores.";
-            };
-            graphics = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "Whether to enable graphical output.";
-            };
-            nets = lib.mkOption {
-              default = { };
-              type = lib.types.attrsOf (lib.types.submodule (hostNetSubmodule host.idx));
-            };
-            forwardPorts = lib.mkOption {
-              default = [ ];
-              type = lib.types.listOf (lib.types.submodule fpSubmodule);
-              description = "Ports to forward from hypervisor localhost into the VM guest via QEMU user-mode networking.";
-            };
-            variants = lib.mkOption {
-              type = lib.types.attrsOf (lib.types.submodule variantSubmodule);
-              default = { };
-              description = "Registered VM launch-script variants for this host, keyed by variant name (e.g. \"qemu-vm\", \"disko\"). Each variant module contributes its own key.";
-            };
-            variant = lib.mkOption {
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              description = "Which entry of `variants` the CLI runs when `--variant` is not given.";
-            };
-          };
-
           config.variants."direct-boot".package =
             { ... }:
             (lib.nixosSystem {
               inherit (host) system;
               modules = [
                 host.nixosModule
-                commonModule
+                config.nixosModule
               ];
             }).config.system.build.vm;
 
@@ -169,7 +176,7 @@
               inherit (host) system;
               modules = [
                 host.nixosModule
-                commonModule
+                config.nixosModule
                 ({ config, ... }: {
                   virtualisation.useBootLoader = true;
                   virtualisation.useEFIBoot =
@@ -271,13 +278,13 @@
         };
 
         _internal.stateScript =
-          { pkgs, mode, ... }@args:
+          { pkgs, mode, ... }:
           lib.concatMapAttrsStringSep "\n" (
             hostName: host:
             lib.optionalString (mode == "full" && host.qemu.variant != null) ''
               mkdir -p $(dirname "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}")
               ln -s ${
-                pkgs.lib.getExe (host.qemu.variants.${host.qemu.variant}.package args)
+                pkgs.lib.getExe (host.qemu.variants.${host.qemu.variant}.package { inherit pkgs; })
               } "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}"
             ''
           ) alloy.hosts;

@@ -1,7 +1,5 @@
 { inputs, ... }: {
 
-  # ALLOY_URL="$(pwd)/../.." ALLOY_ROOT="$(pwd)/../../examples/simple-cluster"  cargo run -q -- --attr alloyModules.simpleCluster generators run
-
   perSystem =
     {
       pkgs,
@@ -23,7 +21,6 @@
       craneLib = (inputs.crane.mkLib rustPkgs).overrideToolchain rustToolchain;
 
       commonArgs = {
-        # Using the repo root as the workspace root
         src = craneLib.cleanCargoSource ../.;
         strictDeps = true;
         CARGO_BUILD_TARGET = target;

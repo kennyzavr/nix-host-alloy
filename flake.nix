@@ -38,7 +38,7 @@
           ./parts.nix
           ./lib
           ./modules
-          ./packages/rust.nix
+          ./packages
         ];
 
         flake.flakeModules = {

@@ -5,542 +5,393 @@
   ...
 }:
 let
-  infra = (inputs.alloy.lib.evalModule self.alloyModules.simpleCluster).config;
+  cluster = (inputs.alloy.lib.evalModule self.alloyModules.simpleCluster).config;
 in
 {
   imports = [
     inputs.alloy.flakeModules.default
   ];
 
-  config = {
-    flake.nixosConfigurations = lib.mapAttrs (_: host: host.nixosConfiguration) infra.hosts;
+  flake.nixosConfigurations = lib.mapAttrs (_: host: host.nixosConfiguration) cluster.hosts;
 
-    perSystem = { pkgs, config, ... }: {
-      packages.cli = inputs.alloy.lib.mkCli {
-        module = self.alloyModules.simpleCluster;
-        inherit pkgs;
+  flake.alloyModules.simpleCluster =
+    { alib, config, ... }:
+    let
+      alloy = config;
+    in
+    {
+      imports = [
+        inputs.alloy.alloyModules.disko
+      ];
+
+      name = "simple-cluster";
+
+      workspace.root = toString self;
+
+      workspace.secrets = {
+        age.keyPairs = [
+          {
+            identity = alloy.facts."test_ssh_key".path;
+            recipient = alloy.facts."test_ssh_pub_key".path;
+          }
+        ];
+      };
+
+      qemu.nets."main" = { };
+
+      overlays."main" = {
+        links = [
+          {
+            a.host = "iridium";
+            b.host = "gallium";
+          }
+        ];
+      };
+
+      facts."test_ssh_pub_key" = {
+        file = "test_ssh_pub_key";
+      };
+      facts."test_ssh_key" = {
+        file = "test_ssh_key";
+      };
+
+      hosts.iridium = { config, ... }: {
+        system = "x86_64-linux";
+
+        facts."test_ssh_key" = {
+          permissions.mode = "0600";
+        };
+
+        workspace.secrets = {
+          age.keyPairs = [
+            {
+              identity = alloy.facts."test_ssh_key".path;
+              recipient = alloy.facts."test_ssh_pub_key".path;
+            }
+          ];
+        };
+
+        ssh = {
+          enable = true;
+          listen = [
+            {
+              net = "slipr";
+              port = 22;
+            }
+          ];
+          keyPaths = [
+            config.facts."test_ssh_key".path
+          ];
+        };
+
+        boot = {
+          facts."test_ssh_key" = { };
+
+          ssh = {
+            enable = true;
+            authKeyFacts = [ "test_ssh_pub_key" ];
+            keyPaths = [ config.boot.facts."test_ssh_key".path ];
+            port = 2022;
+          };
+        };
+
+        qemu.forwardPorts = [
+          {
+            name = "ssh";
+            hypervisor = 2251;
+            guest = 22;
+            proto = "tcp";
+          }
+          {
+            name = "initrd ssh";
+            hypervisor = 2250;
+            guest = 2022;
+            proto = "tcp";
+          }
+        ];
+
+        nets."slipr" = {
+          default = true;
+          static = true;
+          v4.address = "10.0.2.15";
+          v4.prefixLength = 24;
+          v4.gateway = "10.0.2.2";
+          iface = "eth0";
+        };
+
+        nets."public" = {
+          primary = true;
+          static = true;
+          iface = config.qemu.nets."main".iface;
+          v4 = {
+            address = "192.168.100.${toString config.idx}";
+            prefixLength = 24;
+          };
+        };
+
+        overlays."main" = {
+          wg.endpoint = "192.168.100.${toString config.idx}";
+        };
+
+        users.admin = {
+          isAdmin = true;
+          ssh.authKeyFacts = [
+            "test_ssh_pub_key"
+          ];
+        };
+
+        disko = {
+          enable = true;
+          settings = { ... }: {
+            devices.disk.main = {
+              type = "disk";
+              device = "/dev/vda";
+              content = {
+                type = "gpt";
+                partitions = {
+                  ESP = {
+                    size = "512M";
+                    type = "EF00";
+                    content = {
+                      type = "filesystem";
+                      format = "vfat";
+                      mountpoint = "/boot";
+                    };
+                  };
+                  luks = {
+                    size = "100%";
+                    content = {
+                      type = "luks";
+                      name = "cryptroot";
+                      settings = { };
+                      askPassword = true;
+                      content = {
+                        type = "filesystem";
+                        format = "ext4";
+                        mountpoint = "/";
+                      };
+                    };
+                  };
+                };
+              };
+            };
+          };
+        };
+
+        qemu.nets."main" = { };
+        qemu.variant = "direct-boot";
+
+        nixosModule = {
+          boot.loader.systemd-boot.enable = true;
+          boot.loader.efi.canTouchEfiVariables = true;
+
+          system.stateVersion = "26.05";
+
+          nixpkgs = {
+            config.allowUnfree = true;
+          };
+
+          nix.settings.experimental-features = [
+            "nix-command"
+            "flakes"
+          ];
+        };
+      };
+
+      hosts.gallium = { config, ... }: {
+        system = "x86_64-linux";
+
+        workspace.secrets = {
+          age.keyPairs = [
+            {
+              identity = alloy.facts."test_ssh_key".path;
+              recipient = alloy.facts."test_ssh_pub_key".path;
+            }
+          ];
+        };
+
+        facts."test_ssh_key" = {
+          permissions.mode = "0600";
+        };
+
+        nets."public" = {
+          primary = true;
+          static = true;
+          iface = config.qemu.nets."main".iface;
+          v4 = {
+            address = "192.168.100.${toString config.idx}";
+            prefixLength = 24;
+          };
+        };
+
+        nets."slipr" = {
+          default = true;
+          v4.address = "10.0.2.15";
+          v4.prefixLength = 24;
+          iface = "eth0";
+        };
+
+        ssh = {
+          enable = true;
+          listen = [
+            {
+              net = "slipr";
+              port = 22;
+            }
+          ];
+          keyPaths = [
+            config.facts."test_ssh_key".path
+          ];
+        };
+
+        qemu.forwardPorts = [
+          {
+            name = "ssh";
+            hypervisor = 2261;
+            guest = 22;
+            proto = "tcp";
+          }
+        ];
+
+        users.admin = {
+          isAdmin = true;
+          ssh.authKeyFacts = [
+            "test_ssh_pub_key"
+          ];
+        };
+
+        qemu.nets."main" = { };
+        qemu.variant = "direct-boot";
+
+        overlays."main" = {
+          wg.endpoint = "192.168.100.${toString config.idx}";
+        };
+
+        nixosModule = {
+          boot.loader.systemd-boot.enable = true;
+          boot.loader.efi.canTouchEfiVariables = true;
+
+          system.stateVersion = "26.05";
+
+          nixpkgs = {
+            config.allowUnfree = true;
+          };
+
+          nix.settings.experimental-features = [
+            "nix-command"
+            "flakes"
+          ];
+        };
+      };
+
+      dns.zones."main" = {
+        apex = "simple-cluster.internal";
+        rname = "admin.simple-cluster.internal";
+      };
+      dns.zones."main-acme" = {
+        apex = "acme.simple-cluster.internal";
+        rname = "admin.simple-cluster.internal";
+        parentZone = "main";
+      };
+
+      tls.ca."main" = { };
+
+      tls.certs."ca" = {
+        domains = [
+          {
+            zone = "main";
+            name = "ca";
+          }
+        ];
+        ca = "main";
+        src.acme = {
+          email = "admin@simple-cluster.internal";
+          challenge.dns.dnsupdate = {
+            server.endpoint = alloy.services.dns-acme."main".endpoint;
+          };
+        };
+      };
+
+      tls.certs."mail" = {
+        domains = [
+          {
+            zone = "main";
+            name = "mail";
+          }
+        ];
+        ca = "main";
+        src.acme = {
+          email = "me@simple-cluster.internal";
+          challenge.dns.dnsupdate = {
+            server.endpoint = alloy.services.dns-acme."main".endpoint;
+          };
+        };
+      };
+
+      services.dns-resolver."main" = {
+        host = "gallium";
+        overlays."main" = { };
+      };
+
+      services.dns-edge."public" = {
+        routes."main" = {
+          zone = "main";
+          upstream.endpoint = alloy.services.dns-auth."main".endpoint;
+        };
+        routes."main-acme" = {
+          zone = "main-acme";
+          upstream.endpoint = alloy.services.dns-acme."main".endpoint;
+        };
+        hosts."iridium" = { };
+        hosts."gallium" = { };
+      };
+
+      services.http-edge."public" = {
+        routes."ca" = {
+          domain = {
+            zone = "main";
+            name = "ca";
+          };
+          downstream.tls.mode = "only";
+          downstream.tls.cert = "ca";
+          upstream.endpoint = alloy.services.ca."main".endpoint;
+        };
+        hosts."iridium" = { };
+        hosts."gallium" = { };
+      };
+
+      services.dns-auth."main" = {
+        zones = [
+          "main"
+        ];
+        hosts."iridium" = { };
+        hosts."gallium" = { };
+        overlays."main" = { };
+      };
+
+      services.dns-acme."main" = {
+        zones = [
+          "main-acme"
+        ];
+        host = "iridium";
+        overlays."main" = { };
+      };
+
+      services.ca."main" = {
+        subject = "SimpleCluster";
+        domain = {
+          zone = "main";
+          name = "ca";
+        };
+        permittedDomains = [
+          {
+            zone = "main";
+            name = "@";
+          }
+        ];
+        acme.enable = true;
+        overlays."main" = { };
+        host = "iridium";
       };
     };
-
-    flake.alloyModules.foo = { };
-
-    flake.alloyModules.simpleCluster =
-      { alib, config, ... }:
-      let
-        alloy = config;
-
-        hostSubmodule =
-          { name, config, ... }:
-          {
-            config.nixosModule = { pkgs, ... }: {
-              system.stateVersion = "26.05";
-
-              security.sudo = {
-                wheelNeedsPassword = false;
-                extraConfig = ''
-                  Defaults pwfeedback
-                '';
-              };
-
-              nixpkgs = {
-                config.allowUnfree = true;
-              };
-
-              nix.settings.experimental-features = [
-                "nix-command"
-                "flakes"
-              ];
-            };
-          };
-
-      in
-      {
-        options.hosts = lib.mkOption {
-          type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
-        };
-
-        config = {
-          name = "simple-cluster";
-
-          workspace.root = toString self;
-
-          workspace.secrets = {
-            age.keyPairs = [
-              {
-                identity = alloy.facts."test_ssh_key".path;
-                recipient = alloy.facts."test_ssh_pub_key".path;
-              }
-            ];
-          };
-
-          qemu.nets."main" = { };
-
-          overlays."main" = {
-            links = [
-              {
-                a.host = "iridium";
-                b.host = "gallium";
-              }
-            ];
-          };
-
-          facts."test_ssh_pub_key" = {
-            file = "test_ssh_pub_key";
-          };
-          facts."test_ssh_key" = {
-            file = "test_ssh_key";
-          };
-
-          facts."foobar" = { };
-          secrets."foobar" = { };
-
-          jails."abc" = {
-            host = "gallium";
-          };
-
-          hosts.iridium = { config, ... }: {
-            system = "x86_64-linux";
-
-            secrets."foobar" = { };
-
-            facts."test_ssh_key" = {
-              permissions.mode = "0600";
-            };
-
-            workspace.secrets = {
-              age.keyPairs = [
-                {
-                  identity = alloy.facts."test_ssh_key".path;
-                  recipient = alloy.facts."test_ssh_pub_key".path;
-                }
-              ];
-            };
-
-            ssh = {
-              enable = true;
-              listen = [
-                {
-                  net = "slipr";
-                  port = 22;
-                }
-              ];
-              keyPaths = [
-                config.facts."test_ssh_key".path
-              ];
-            };
-            boot = {
-              facts."test_ssh_key" = { };
-
-              ssh = {
-                enable = true;
-                authKeyFacts = [ "test_ssh_pub_key" ];
-                keyPaths = [ config.boot.facts."test_ssh_key".path ];
-                port = 2022;
-              };
-            };
-
-            qemu.forwardPorts = [
-              {
-                name = "ssh";
-                hypervisor = 2251;
-                guest = 22;
-                proto = "tcp";
-              }
-              {
-                name = "initrd ssh";
-                hypervisor = 2250;
-                guest = 2022;
-                proto = "tcp";
-              }
-            ];
-
-            nets."slipr" = {
-              default = true;
-              static = true;
-              v4.address = "10.0.2.15";
-              v4.prefixLength = 24;
-              v4.gateway = "10.0.2.2";
-              iface = "eth0";
-            };
-
-            nets."public" = {
-              primary = true;
-              static = true;
-              iface = config.qemu.nets."main".iface;
-              v4 = {
-                address = "192.168.100.${toString config.idx}";
-                prefixLength = 24;
-              };
-            };
-
-            overlays."main" = {
-              wg.endpoint = "192.168.100.${toString config.idx}";
-            };
-
-            users.admin = {
-              isAdmin = true;
-              ssh.authKeyFacts = [
-                "test_ssh_pub_key"
-              ];
-            };
-
-            qemu.nets."main" = { };
-            # qemu.variant = "full-boot";
-            qemu.variant = "direct-boot";
-            # qemu.graphics = true;
-          };
-
-          hosts.gallium = { config, ... }: {
-            system = "x86_64-linux";
-
-            workspace.secrets = {
-              age.keyPairs = [
-                {
-                  identity = alloy.facts."test_ssh_key".path;
-                  recipient = alloy.facts."test_ssh_pub_key".path;
-                }
-              ];
-            };
-
-            facts."test_ssh_key" = {
-              permissions.mode = "0600";
-            };
-
-            nets."public" = {
-              primary = true;
-              static = true;
-              iface = config.qemu.nets."main".iface;
-              v4 = {
-                address = "192.168.100.${toString config.idx}";
-                prefixLength = 24;
-              };
-            };
-
-            nets."slipr" = {
-              default = true;
-              v4.address = "10.0.2.15";
-              v4.prefixLength = 24;
-              iface = "eth0";
-            };
-
-            ssh = {
-              enable = true;
-              listen = [
-                {
-                  net = "slipr";
-                  port = 22;
-                }
-              ];
-              keyPaths = [
-                config.facts."test_ssh_key".path
-              ];
-            };
-
-            qemu.forwardPorts = [
-              {
-                name = "ssh";
-                hypervisor = 2261;
-                guest = 22;
-                proto = "tcp";
-              }
-            ];
-
-            users.admin = {
-              isAdmin = true;
-              ssh.authKeyFacts = [
-                "test_ssh_pub_key"
-              ];
-            };
-
-            qemu.nets."main" = { };
-            # qemu.variant = "full-boot";
-            qemu.variant = "direct-boot";
-            # qemu.graphics = true;
-            # qemu.variant = null;
-
-            overlays."main" = {
-              wg.endpoint = "192.168.100.${toString config.idx}";
-            };
-          };
-
-          # dns.zones."public" = {
-          #   apex = "d108.dev";
-          #   rname = "me.d108.dev";
-          # };
-          # dns.zones."public-acme" = {
-          #   apex = "acme.d108.dev";
-          #   rname = "me.d108.dev";
-          #   parentZone = "public";
-          # };
-
-          # tls.ca."d108" = { };
-
-          # tls.certs."filebrowser" = {
-          #   domains = [
-          #     {
-          #       zone = "public";
-          #       name = "filebrowser";
-          #     }
-          #   ];
-          #   ca = "d108";
-          #   src.acme = {
-          #     email = "me@d108.dev";
-          #     challenge.dns.dnsupdate = {
-          #       server.endpoint = alloy.services.dns-acme."public".endpoint;
-          #     };
-          #   };
-          # };
-
-          # tls.certs."public-ca" = {
-          #   domains = [
-          #     {
-          #       zone = "public";
-          #       name = "ca";
-          #     }
-          #   ];
-          #   ca = "d108";
-          #   src.acme = {
-          #     email = "me@d108.dev";
-          #     challenge.dns.dnsupdate = {
-          #       server.endpoint = alloy.services.dns-acme."public".endpoint;
-          #     };
-          #   };
-          # };
-
-          # tls.certs."public-mail" = {
-          #   domains = [
-          #     {
-          #       zone = "public";
-          #       name = "mail";
-          #     }
-          #   ];
-          #   ca = "d108";
-          #   src.acme = {
-          #     email = "me@d108.dev";
-          #     challenge.dns.dnsupdate = {
-          #       server.endpoint = alloy.services.dns-acme."public".endpoint;
-          #     };
-          #   };
-          # };
-
-          # services.dns-resolver."main" = {
-          #   host = "gallium";
-          #   overlays."main" = { };
-          # };
-
-          # services.dns-edge."public" = {
-          #   routes."public" = {
-          #     zone = "public";
-          #     upstream.endpoint = alloy.services.dns-auth."public".endpoint;
-          #   };
-          #   routes."public-acme" = {
-          #     zone = "public-acme";
-          #     upstream.endpoint = alloy.services.dns-acme."public".endpoint;
-          #   };
-          #   hosts."iridium" = {
-          #     ipv4 = "192.168.100.2";
-          #   };
-          #   hosts."gallium" = {
-          #     ipv4 = "192.168.100.1";
-          #   };
-          # };
-
-          # services.http-edge."public" = {
-          #   routes."filebrowser" = {
-          #     domain = {
-          #       zone = "public";
-          #       name = "filebrowser";
-          #     };
-          #     downstream.tls.mode = "only";
-          #     downstream.tls.cert = "filebrowser";
-          #     upstream.endpoint = alloy.services.xhttp-proxy."main".tunnelEndpoint;
-          #   };
-
-          #   routes."public-ca" = {
-          #     domain = {
-          #       zone = "public";
-          #       name = "ca";
-          #     };
-          #     downstream.tls.mode = "only";
-          #     downstream.tls.cert = "public-ca";
-          #     upstream.endpoint = alloy.services.ca."d108".endpoint;
-          #   };
-          #   hosts."iridium" = {
-          #     ipv4 = "192.168.100.2";
-          #   };
-          #   hosts."gallium" = {
-          #     ipv4 = "192.168.100.1";
-          #   };
-          # };
-
-          # services.tls-edge."public" = {
-          #   routes."main-mail-smtps" = {
-          #     domain = {
-          #       zone = "public";
-          #       name = "mail";
-          #     };
-          #     downstream.port = 465;
-          #     downstream.tls.enable = true;
-          #     downstream.tls.cert = "public-mail";
-          #     upstream.endpoint = alloy.services.postbox."public".smtps.endpoint;
-          #   };
-          #   routes."public-mail-imap" = {
-          #     domain = {
-          #       zone = "public";
-          #       name = "mail";
-          #     };
-          #     downstream.port = 993;
-          #     downstream.tls.enable = true;
-          #     downstream.tls.cert = "public-mail";
-          #     upstream.endpoint = alloy.services.postbox."public".imap.endpoint;
-          #   };
-          #   hosts."iridium" = {
-          #     ipv4 = "192.168.100.2";
-          #   };
-          #   hosts."gallium" = {
-          #     ipv4 = "192.168.100.1";
-          #   };
-          # };
-
-          # services.smtp-edge."public" = {
-          #   hostname = {
-          #     zone = "public";
-          #     name = "mail";
-          #   };
-          #   routes."public-email-smtp" = {
-          #     domain = {
-          #       zone = "public";
-          #       name = "@";
-          #     };
-          #     upstream.endpoint = alloy.services.postbox."public".smtp.endpoint;
-          #   };
-          #   explicitTLS.mode = "require";
-          #   explicitTLS.cert = "public-mail";
-          #   dkim.enable = true;
-          #   hosts."iridium" = {
-          #     ipv4 = "192.168.100.2";
-          #   };
-          #   hosts."gallium" = {
-          #     ipv4 = "192.168.100.1";
-          #   };
-          # };
-
-          # services.dns-auth."public" = {
-          #   zones = [
-          #     "public"
-          #   ];
-          #   hosts."iridium" = { };
-          #   hosts."gallium" = { };
-          #   overlays."main" = { };
-          # };
-
-          # services.dns-acme."public" = {
-          #   zones = [
-          #     "public-acme"
-          #   ];
-          #   host = "iridium";
-          #   overlays."main" = { };
-          # };
-
-          # services.ca."d108" = {
-          #   subject = "D108";
-          #   domain = {
-          #     zone = "public";
-          #     name = "ca";
-          #   };
-          #   permittedDomains = [
-          #     {
-          #       zone = "public";
-          #       name = "@";
-          #     }
-          #   ];
-          #   acme.enable = true;
-          #   overlays."main" = { };
-          #   host = "iridium";
-          # };
-
-          # facts."users/admin/login" = { };
-
-          # services.postbox."public" = {
-          #   domain = {
-          #     zone = "public";
-          #     name = "@";
-          #   };
-          #   admin = "admin";
-          #   users.admin = {
-          #     loginFact = "users/admin/login";
-          #   };
-          #   overlays."main" = { };
-          #   host = "gallium";
-          #   smtp.relayEndpoint = alloy.services.smtp-edge."public".endpoint;
-          # };
-
-          # services.xhttp-proxy."main" = {
-          #   host = "iridium";
-          #   overlays."main" = { };
-          #   domain = {
-          #     zone = "public";
-          #     name = "filebrowser";
-          #   };
-          #   fallbackEndpoint = "filebrowser";
-          #   clients."me" = { };
-          #   profiles."default" = { };
-          # };
-
-          # endpoints."filebrowser" = {
-          #   port = 443;
-          #   targets = [
-          #     {
-          #       ipv6 = alloy.jails."filebrowser".overlays."main".ipv6;
-          #       overlay = "main";
-          #     }
-          #   ];
-          # };
-          # jails."filebrowser" = { config, ... }: {
-          #   host = "gallium";
-          #   overlays."main" = { };
-          #   endpoints."filebrowser" = {};
-          #   mtls.permissions = {
-          #     owner = "nginx";
-          #     group = "nginx";
-          #     mode = "0640";
-          #   };
-          #   volumes."db" = {
-          #     path = "/var/lib/filebrowser";
-          #     driver.directory = { };
-          #     permissions = {
-          #       owner = "filebrowser";
-          #       group = "filebrowser";
-          #       mode = "0750";
-          #     };
-          #   };
-          #   nixosModule = {
-          #     networking.firewall.allowedTCPPorts = [ 443 ];
-
-          #     services.nginx = {
-          #       enable = true;
-          #       virtualHosts."_" = {
-          #         default = true;
-          #         listenAddresses = [ "[::]" ];
-          #         onlySSL = true;
-          #         sslCertificate = config.mtls.certPath;
-          #         sslCertificateKey = config.mtls.keyPath;
-          #         locations."/" = {
-          #           recommendedProxySettings = true;
-          #           proxyPass = "http://127.0.0.1:8080";
-          #         };
-          #       };
-          #     };
-
-          #     services.filebrowser = {
-          #       enable = true;
-          #       settings.port = 8080;
-          #       settings.address = "127.0.0.1";
-          #     };
-          #   };
-          # };
-
-        };
-      };
-  };
 }

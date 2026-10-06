@@ -131,17 +131,6 @@ impl System {
                 format!("import {}", path.to_str().unwrap())
             }
             EnvModuleSource::FlakeAttr(attr) => {
-                let status = std::process::Command::new("nix")
-                    .arg("eval")
-                    .arg(format!("{}#{}", ctx.flake_url, attr))
-                    .stderr(std::process::Stdio::inherit())
-                    .stdout(std::process::Stdio::null())
-                    .status()
-                    .map_err(NixError::Execution)?;
-
-                if !status.success() {
-                    return Err(NixError::Nix(status));
-                }
                 format!(r#"(builtins.getFlake "{}").{}"#, ctx.flake_url, attr)
             }
         };

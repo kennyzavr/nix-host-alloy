@@ -179,7 +179,7 @@ in
         };
 
         qemu.nets."main" = { };
-        qemu.variant = "direct-boot";
+        qemu.variant = "disko-boot";
 
         nixosModule = {
           boot.loader.systemd-boot.enable = true;

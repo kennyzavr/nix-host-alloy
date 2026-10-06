@@ -35,14 +35,14 @@
       {
         imports = [
           inputs.devshell.flakeModule
-          ./parts.nix
+          ./flakeModule.nix
           ./lib
           ./modules
           ./packages
         ];
 
         flake.flakeModules = {
-          default = ./parts.nix;
+          default = ./flakeModule.nix;
         };
 
         perSystem =

@@ -92,6 +92,7 @@ impl System {
 
         // let bin_path = state_dir.join(script_path);
         let mut cmd = Command::new(&script_path);
+        cmd.current_dir(cache_dir);
 
         let disk_img = cache_dir.join("qemu").join(format!("{}.qcow2", guest_name));
         cmd.env("NIX_DISK_IMAGE", &disk_img);

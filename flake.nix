@@ -59,8 +59,6 @@
             devshells.default = {
               packages = [
                 pkgs.nil
-                # pkgs.pyright
-                # pkgs.ruff
               ];
               commands = [
                 {

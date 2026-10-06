@@ -68,7 +68,7 @@
       hostSubmodule = { config, name, ... }: {
         options.users = lib.mkOption {
           default = { };
-          type = lib.types.attrsOf (lib.types.submodule userSubmodule);
+          type = lib.types.attrsOf (lib.types.submodule (userSubmodule name));
         };
         config =
           let

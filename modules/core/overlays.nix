@@ -284,7 +284,8 @@
                 tags = [
                   "overlay"
                   "overlay/${overlayName}"
-                ] ++ host.tags;
+                ]
+                ++ host.tags;
                 secrets.${privKeySecret} = { };
                 facts.${pubKeyFact} = { };
                 package =

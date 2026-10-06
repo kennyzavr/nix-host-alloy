@@ -99,213 +99,211 @@
         };
       };
 
-      mkService =
-        srvName: srv:
-        {
-          assertions = [
+      mkService = srvName: srv: {
+        assertions = [
+          {
+            assertion = srv.hosts != { };
+            message = "[Alloy] http-edge '${srvName}': at least one host must be specified";
+          }
+        ]
+        ++ (lib.flatten (
+          lib.mapAttrsToList (hostName: hostCfg: [
             {
-              assertion = srv.hosts != { };
-              message = "[Alloy] http-edge '${srvName}': at least one host must be specified";
+              assertion = builtins.hasAttr hostName alloy.hosts;
+              message = "[Alloy] http-edge '${srvName}': host '${hostName}' is unknown";
             }
-          ]
-          ++ (lib.flatten (
-            lib.mapAttrsToList (hostName: hostCfg: [
-              {
-                assertion = builtins.hasAttr hostName alloy.hosts;
-                message = "[Alloy] http-edge '${srvName}': host '${hostName}' is unknown";
-              }
-            ]) srv.hosts
-          ));
+          ]) srv.hosts
+        ));
 
-          dns.records = lib.pipe srv.routes [
-            (lib.filterAttrs (_: route: route.addDnsRecords))
-            (lib.mapAttrsToList (
-              _: route:
-              lib.mapAttrsToList (
-                hostName: hostCfg:
-                let
-                  host = alloy.hosts.${hostName};
-                  hostNet = host.nets.${hostCfg.net};
-                in
-                [ ]
-                ++ (lib.optional (hostNet.v4 != null) {
-                  inherit (route) domain;
-                  data.a = hostNet.v4.address;
-                })
-                ++ (lib.optional (hostNet.v6 != null) {
-                  inherit (route) domain;
-                  data.aaaa = hostNet.v6.address;
-                })
-              ) srv.hosts
-            ))
-            lib.flatten
-          ];
-
-          jails = lib.mapAttrs' (
-            hostName: hostCfg:
-            lib.nameValuePair "http-edge-${srvName}-${hostName}" (
-              { config, ... }:
+        dns.records = lib.pipe srv.routes [
+          (lib.filterAttrs (_: route: route.addDnsRecords))
+          (lib.mapAttrsToList (
+            _: route:
+            lib.mapAttrsToList (
+              hostName: hostCfg:
               let
-                jail = config;
                 host = alloy.hosts.${hostName};
                 hostNet = host.nets.${hostCfg.net};
               in
-              {
-                host = hostName;
+              [ ]
+              ++ (lib.optional (hostNet.v4 != null) {
+                inherit (route) domain;
+                data.a = hostNet.v4.address;
+              })
+              ++ (lib.optional (hostNet.v6 != null) {
+                inherit (route) domain;
+                data.aaaa = hostNet.v6.address;
+              })
+            ) srv.hosts
+          ))
+          lib.flatten
+        ];
 
-                tags = [
-                  "http-edge"
-                  "http-edge/${srvName}"
+        jails = lib.mapAttrs' (
+          hostName: hostCfg:
+          lib.nameValuePair "http-edge-${srvName}-${hostName}" (
+            { config, ... }:
+            let
+              jail = config;
+              host = alloy.hosts.${hostName};
+              hostNet = host.nets.${hostCfg.net};
+            in
+            {
+              host = hostName;
+
+              tags = [
+                "http-edge"
+                "http-edge/${srvName}"
+              ];
+
+              uplink.forwards =
+                (lib.optionals (hostNet.v4 != null) [
+                  {
+                    proto = "tcp";
+                    port = 80;
+                    inherit (hostNet) iface;
+                    ip.v4 = hostNet.v4.address;
+                  }
+                  {
+                    proto = "tcp";
+                    port = 443;
+                    inherit (hostNet) iface;
+                    ip.v4 = hostNet.v4.address;
+                  }
+                  {
+                    proto = "udp";
+                    port = 443;
+                    inherit (hostNet) iface;
+                    ip.v4 = hostNet.v4.address;
+                  }
+                ])
+                ++ (lib.optionals (hostNet.v6 != null) [
+                  {
+                    proto = "tcp";
+                    port = 80;
+                    inherit (hostNet) iface;
+                    ip.v6 = hostNet.v6.address;
+                  }
+                  {
+                    proto = "tcp";
+                    port = 443;
+                    inherit (hostNet) iface;
+                    ip.v6 = hostNet.v6.address;
+                  }
+                  {
+                    proto = "udp";
+                    port = 443;
+                    inherit (hostNet) iface;
+                    ip.v6 = hostNet.v6.address;
+                  }
+                ]);
+
+              overlays = lib.genAttrs srv.allowedOverlays (_: _: { });
+
+              tls.certs = lib.pipe srv.routes [
+                (lib.filterAttrs (_: r: r.downstream.tls.mode != "none" && r.downstream.tls.cert != null))
+                (lib.mapAttrsToList (
+                  _: route: {
+                    ${route.downstream.tls.cert} = {
+                      restartServices = [ "nginx.service" ];
+                    };
+                  }
+                ))
+                lib.mkMerge
+              ];
+
+              mtls.permissions = {
+                owner = "nginx";
+                group = "nginx";
+                mode = "0640";
+              };
+
+              nixosModule = { pkgs, ... }: {
+                networking.firewall.allowedUDPPorts = [
+                  443
+                ];
+                networking.firewall.allowedTCPPorts = [
+                  80
+                  443
                 ];
 
-                uplink.forwards =
-                  (lib.optionals (hostNet.v4 != null) [
-                    {
-                      proto = "tcp";
-                      port = 80;
-                      inherit (hostNet) iface;
-                      ip.v4 = hostNet.v4.address;
-                    }
-                    {
-                      proto = "tcp";
-                      port = 443;
-                      inherit (hostNet) iface;
-                      ip.v4 = hostNet.v4.address;
-                    }
-                    {
-                      proto = "udp";
-                      port = 443;
-                      inherit (hostNet) iface;
-                      ip.v4 = hostNet.v4.address;
-                    }
-                  ])
-                  ++ (lib.optionals (hostNet.v6 != null) [
-                    {
-                      proto = "tcp";
-                      port = 80;
-                      inherit (hostNet) iface;
-                      ip.v6 = hostNet.v6.address;
-                    }
-                    {
-                      proto = "tcp";
-                      port = 443;
-                      inherit (hostNet) iface;
-                      ip.v6 = hostNet.v6.address;
-                    }
-                    {
-                      proto = "udp";
-                      port = 443;
-                      inherit (hostNet) iface;
-                      ip.v6 = hostNet.v6.address;
-                    }
-                  ]);
-
-                overlays = lib.genAttrs srv.allowedOverlays (_: _: { });
-
-                tls.certs = lib.pipe srv.routes [
-                  (lib.filterAttrs (_: r: r.downstream.tls.mode != "none" && r.downstream.tls.cert != null))
-                  (lib.mapAttrsToList (
-                    _: route: {
-                      ${route.downstream.tls.cert} = {
-                        restartServices = [ "nginx.service" ];
-                      };
-                    }
-                  ))
-                  lib.mkMerge
-                ];
-
-                mtls.permissions = {
-                  owner = "nginx";
-                  group = "nginx";
-                  mode = "0640";
+                users.users.nginx = {
+                  extraGroups = lib.mapAttrsToList (_: cert: cert.group) jail.tls.certs;
                 };
 
-                nixosModule = { pkgs, ... }: {
-                  networking.firewall.allowedUDPPorts = [
-                    443
-                  ];
-                  networking.firewall.allowedTCPPorts = [
-                    80
-                    443
-                  ];
-
-                  users.users.nginx = {
-                    extraGroups = lib.mapAttrsToList (_: cert: cert.group) jail.tls.certs;
-                  };
-
-                  services.nginx = {
-                    enable = true;
-                    appendHttpConfig = ''
-                      ${lib.concatMapAttrsStringSep "\n" (
-                        routeName: route:
-                        let
-                          endpoint = alloy.endpoints.${route.upstream.endpoint};
-                          policy = endpoint.loadBalancing.policy;
-                        in
-                        ''
-                          upstream route-${routeName} {
-                            ${
-                              if policy == "round-robin" then
-                                ""
-                              else if policy == "least-connections" then
-                                "least_conn;"
-                              else if policy == "ip-hash" then
-                                "ip_hash;"
-                              else if policy == "random" then
-                                "random;"
-                              else
-                                ""
-                            }
-                            ${lib.concatMapStringsSep "\n" (target: ''
-                              server ${
-                                  if target.ip ? v6 then "[${target.ip.v6}]" else target.ip.v4
-                                }:${toString endpoint.port} weight=${toString target.weight} ${lib.optionalString target.backup "backup"} ${lib.optionalString target.down "down"};
-                            '') endpoint.targets}
-                          }
-                        ''
-                      ) srv.routes}
-                    '';
-                    virtualHosts = lib.mapAttrs' (
+                services.nginx = {
+                  enable = true;
+                  appendHttpConfig = ''
+                    ${lib.concatMapAttrsStringSep "\n" (
                       routeName: route:
-                      lib.nameValuePair "route-${routeName}" (
-                        let
-                          isTls = route.downstream.tls.mode != "none";
-                          cert = jail.tls.certs.${route.downstream.tls.cert};
-                          endpoint = alloy.endpoints.${route.upstream.endpoint};
-                        in
-                        {
-                          serverName = alloy.dns.resolveNode route.domain;
-                          addSSL = route.downstream.tls.mode == "add";
-                          onlySSL = route.downstream.tls.mode == "only";
-                          forceSSL = route.downstream.tls.mode == "force";
-                          sslCertificate = lib.mkIf isTls cert.certPath;
-                          sslCertificateKey = lib.mkIf isTls cert.keyPath;
-                          http2 = route.downstream.http2;
-                          http3 = route.downstream.http3;
-                          quic = route.downstream.http3;
-                          locations."/" = {
-                            recommendedProxySettings = true;
-                            proxyPass = "https://route-${routeName}";
-                          };
-                          extraConfig = ''
-                            ${if endpoint.httpBuffering != false then "proxy_buffering on;" else "proxy_buffering off;"}
-                            proxy_ssl_certificate ${jail.mtls.certPath};
-                            proxy_ssl_certificate_key ${jail.mtls.keyPath};
-
-                            proxy_ssl_trusted_certificate ${alloy.mtls.certPath};
-                            proxy_ssl_verify on;
-                            proxy_ssl_verify_depth 1;
-                            proxy_ssl_name ${endpoint.domain};
-                          '';
+                      let
+                        endpoint = alloy.endpoints.${route.upstream.endpoint};
+                        policy = endpoint.loadBalancing.policy;
+                      in
+                      ''
+                        upstream route-${routeName} {
+                          ${
+                            if policy == "round-robin" then
+                              ""
+                            else if policy == "least-connections" then
+                              "least_conn;"
+                            else if policy == "ip-hash" then
+                              "ip_hash;"
+                            else if policy == "random" then
+                              "random;"
+                            else
+                              ""
+                          }
+                          ${lib.concatMapStringsSep "\n" (target: ''
+                            server ${
+                              if target.ip ? v6 then "[${target.ip.v6}]" else target.ip.v4
+                            }:${toString endpoint.port} weight=${toString target.weight} ${lib.optionalString target.backup "backup"} ${lib.optionalString target.down "down"};
+                          '') endpoint.targets}
                         }
-                      )
-                    ) srv.routes;
-                  };
+                      ''
+                    ) srv.routes}
+                  '';
+                  virtualHosts = lib.mapAttrs' (
+                    routeName: route:
+                    lib.nameValuePair "route-${routeName}" (
+                      let
+                        isTls = route.downstream.tls.mode != "none";
+                        cert = jail.tls.certs.${route.downstream.tls.cert};
+                        endpoint = alloy.endpoints.${route.upstream.endpoint};
+                      in
+                      {
+                        serverName = alloy.dns.resolveNode route.domain;
+                        addSSL = route.downstream.tls.mode == "add";
+                        onlySSL = route.downstream.tls.mode == "only";
+                        forceSSL = route.downstream.tls.mode == "force";
+                        sslCertificate = lib.mkIf isTls cert.certPath;
+                        sslCertificateKey = lib.mkIf isTls cert.keyPath;
+                        http2 = route.downstream.http2;
+                        http3 = route.downstream.http3;
+                        quic = route.downstream.http3;
+                        locations."/" = {
+                          recommendedProxySettings = true;
+                          proxyPass = "https://route-${routeName}";
+                        };
+                        extraConfig = ''
+                          ${if endpoint.httpBuffering != false then "proxy_buffering on;" else "proxy_buffering off;"}
+                          proxy_ssl_certificate ${jail.mtls.certPath};
+                          proxy_ssl_certificate_key ${jail.mtls.keyPath};
+
+                          proxy_ssl_trusted_certificate ${alloy.mtls.certPath};
+                          proxy_ssl_verify on;
+                          proxy_ssl_verify_depth 1;
+                          proxy_ssl_name ${endpoint.domain};
+                        '';
+                      }
+                    )
+                  ) srv.routes;
                 };
-              }
-            )
-          ) srv.hosts;
-        };
+              };
+            }
+          )
+        ) srv.hosts;
+      };
     in
     {
       options.services.http-edge = lib.mkOption {

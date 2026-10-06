@@ -214,23 +214,24 @@
                   let
                     forwardsRules = lib.concatMap (
                       jail:
-                      lib.map (
-                        forward:
-                        {
-                          prerouting = ''
-                            ${lib.optionalString (forward.iface != null) ''iifname "${forward.iface}"''} ${lib.optionalString (forward.ip ? v4) "ip daddr ${forward.ip.v4}"} ${forward.proto} dport ${toString forward.port} dnat ip to ${mkVethIpv4 jail}:${toString forward.targetPort}
-                            ${lib.optionalString (forward.iface != null) ''iifname "${forward.iface}"''} ${lib.optionalString (forward.ip ? v6) "ip6 daddr ${forward.ip.v6}"} ${forward.proto} dport ${toString forward.port} dnat ip6 to [${mkVethIpv6 jail}]:${toString forward.targetPort}
-                          '';
-                          output = ''
-                            ${lib.optionalString (forward.ip ? v4) ''
-                              ip daddr ${forward.ip.v4} ${forward.proto} dport ${toString forward.port} dnat ip to ${mkVethIpv4 jail}:${toString forward.targetPort}
-                            ''}
-                            ${lib.optionalString (forward.ip ? v6) ''
-                              ip6 daddr ${forward.ip.v6} ${forward.proto} dport ${toString forward.port} dnat ip6 to [${mkVethIpv6 jail}]:${toString forward.targetPort}
-                            ''}
-                          '';
-                        }
-                      ) jail.uplink.forwards
+                      lib.map (forward: {
+                        prerouting = ''
+                          ${lib.optionalString (forward.iface != null) ''iifname "${forward.iface}"''} ${
+                            lib.optionalString (forward.ip ? v4) "ip daddr ${forward.ip.v4}"
+                          } ${forward.proto} dport ${toString forward.port} dnat ip to ${mkVethIpv4 jail}:${toString forward.targetPort}
+                          ${lib.optionalString (forward.iface != null) ''iifname "${forward.iface}"''} ${
+                            lib.optionalString (forward.ip ? v6) "ip6 daddr ${forward.ip.v6}"
+                          } ${forward.proto} dport ${toString forward.port} dnat ip6 to [${mkVethIpv6 jail}]:${toString forward.targetPort}
+                        '';
+                        output = ''
+                          ${lib.optionalString (forward.ip ? v4) ''
+                            ip daddr ${forward.ip.v4} ${forward.proto} dport ${toString forward.port} dnat ip to ${mkVethIpv4 jail}:${toString forward.targetPort}
+                          ''}
+                          ${lib.optionalString (forward.ip ? v6) ''
+                            ip6 daddr ${forward.ip.v6} ${forward.proto} dport ${toString forward.port} dnat ip6 to [${mkVethIpv6 jail}]:${toString forward.targetPort}
+                          ''}
+                        '';
+                      }) jail.uplink.forwards
                     ) (lib.filter (j: j.host == name) (builtins.attrValues alloy.jails));
                   in
                   ''

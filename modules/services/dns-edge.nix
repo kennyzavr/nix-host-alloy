@@ -112,8 +112,10 @@
                   let
                     host = alloy.hosts.${hostName};
                     hostNet = host.nets.${hostCfg.net};
-                  in 
-                  [ ] ++ (lib.optional (hostNet.v4 != null) hostNet.v4.address) ++ (lib.optional (hostNet.v6 != null) hostNet.v6.address)
+                  in
+                  [ ]
+                  ++ (lib.optional (hostNet.v4 != null) hostNet.v4.address)
+                  ++ (lib.optional (hostNet.v6 != null) hostNet.v6.address)
                 ) srv.hosts
               );
             }
@@ -123,7 +125,8 @@
             lib.map (
               route:
               (lib.imap0 (
-                hostIdx: { hostName, hostCfg }:
+                hostIdx:
+                { hostName, hostCfg }:
                 let
                   host = alloy.hosts.${hostName};
                   hostNet = host.nets.${hostCfg.net};

@@ -21,7 +21,10 @@
           passwd = {
             source = lib.mkOption {
               default = "secret";
-              type = lib.types.enum [ "value" "secret" ];
+              type = lib.types.enum [
+                "value"
+                "secret"
+              ];
             };
             value = lib.mkOption {
               type = lib.types.str;
@@ -41,7 +44,7 @@
       };
       mkUser = host: userId: user: {
         secrets = lib.mkIf (user.passwd.source == "secret") {
-          ${user.passwd.secret.secret} = {};
+          ${user.passwd.secret.secret} = { };
         };
 
         nixosModule = {
@@ -53,7 +56,9 @@
             group = userId;
             extraGroups = lib.optional user.isAdmin "wheel";
             password = lib.mkIf (user.passwd.source == "value") user.passwd.value;
-            hashedPasswordFile = lib.mkIf (user.passwd.source == "secret") host.secrets.${user.passwd.secret.secret}.path;
+            hashedPasswordFile = lib.mkIf (
+              user.passwd.source == "secret"
+            ) host.secrets.${user.passwd.secret.secret}.path;
           };
           users.groups.${userId} = {
             name = user.name;
@@ -92,15 +97,34 @@
       };
 
       config.generators.instances = lib.pipe alloy.hosts [
-        (lib.mapAttrsToList (hostName: host: lib.mapAttrsToList (userName: user: { inherit hostName host userName user; }) host.users))
+        (lib.mapAttrsToList (
+          hostName: host:
+          lib.mapAttrsToList (userName: user: {
+            inherit
+              hostName
+              host
+              userName
+              user
+              ;
+          }) host.users
+        ))
         lib.flatten
-        (lib.filter ({ user, ...}: user.passwd.source == "secret"))
+        (lib.filter ({ user, ... }: user.passwd.source == "secret"))
         (lib.map (
-          { hostName, host, userName, user }:
+          {
+            hostName,
+            host,
+            userName,
+            user,
+          }:
           lib.nameValuePair user.passwd.secret.generator {
             imports = [ alloy.generators.templates."users/hashed-passwd" ];
             secret = user.passwd.secret.secret;
-            tags = [ "users" "users/${userName}" ] ++ host.tags;
+            tags = [
+              "users"
+              "users/${userName}"
+            ]
+            ++ host.tags;
           }
         ))
         builtins.listToAttrs

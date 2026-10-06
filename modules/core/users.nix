@@ -18,20 +18,31 @@
             default = false;
             type = lib.types.bool;
           };
-          hashedPasswd = {
-            secret = lib.mkOption {
-              type = lib.types.str;
-              default = "users/${name}/hashed-passwd";
+          passwd = {
+            source = lib.mkOption {
+              default = "secret";
+              type = lib.types.enum [ "value" "secret" ];
             };
-            generator = lib.mkOption {
+            value = lib.mkOption {
               type = lib.types.str;
-              default = "users/${name}/hashed-passwd";
+            };
+            secret = {
+              secret = lib.mkOption {
+                type = lib.types.str;
+                default = "users/${name}/hashed-passwd";
+              };
+              generator = lib.mkOption {
+                type = lib.types.str;
+                default = "users/${name}/hashed-passwd";
+              };
             };
           };
         };
       };
       mkUser = host: userId: user: {
-        secrets.${user.hashedPasswd.secret} = { };
+        secrets = lib.mkIf (user.passwd.source == "secret") {
+          ${user.passwd.secret.secret} = {};
+        };
 
         nixosModule = {
           users.users.${userId} = {
@@ -41,8 +52,8 @@
             home = "/home/${user.name}";
             group = userId;
             extraGroups = lib.optional user.isAdmin "wheel";
-            password = "123";
-            # hashedPasswordFile = host.secrets.${user.hashedPasswd.secret}.path;
+            password = lib.mkIf (user.passwd.source == "value") user.passwd.value;
+            hashedPasswordFile = lib.mkIf (user.passwd.source == "secret") host.secrets.${user.passwd.secret.secret}.path;
           };
           users.groups.${userId} = {
             name = user.name;
@@ -83,11 +94,12 @@
       config.generators.instances = lib.pipe alloy.hosts [
         (lib.mapAttrsToList (hostName: host: lib.mapAttrsToList (userName: user: { inherit hostName host userName user; }) host.users))
         lib.flatten
+        (lib.filter ({ user, ...}: user.passwd.source == "secret"))
         (lib.map (
           { hostName, host, userName, user }:
-          lib.nameValuePair user.hashedPasswd.generator {
+          lib.nameValuePair user.passwd.secret.generator {
             imports = [ alloy.generators.templates."users/hashed-passwd" ];
-            secret = user.hashedPasswd.secret;
+            secret = user.passwd.secret.secret;
             tags = [ "users" "users/${userName}" ] ++ host.tags;
           }
         ))
@@ -97,7 +109,8 @@
       config.secrets = lib.pipe alloy.hosts [
         (lib.mapAttrsToList (_: host: lib.mapAttrsToList (_: user: user) host.users))
         lib.flatten
-        (lib.map (user: lib.nameValuePair user.hashedPasswd.secret { }))
+        (lib.filter (user: user.passwd.source == "secret"))
+        (lib.map (user: lib.nameValuePair user.passwd.secret.secret { }))
         builtins.listToAttrs
       ];
 
@@ -108,7 +121,6 @@
           };
         };
         config = {
-          tags = [ "user" ];
           secrets.${config.secret} = { };
           package =
             { pkgs, ... }:

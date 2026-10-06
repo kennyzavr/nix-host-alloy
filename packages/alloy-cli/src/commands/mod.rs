@@ -13,8 +13,8 @@ mod secrets;
 #[derive(clap::Parser, Debug)]
 #[command(name = "alloy-cli", styles = TermUi::CLAP_STYLES)]
 pub struct Args {
-    #[arg(long = "workspace-root", env = Env::WORKSPACE_ROOT, default_value = ".")]
-    workspace_root: PathBuf,
+    #[arg(long = "workspace-root", env = Env::WORKSPACE_ROOT)]
+    workspace_root: Option<PathBuf>,
 
     #[arg(long = "state-source", env = Env::STATE_SOURCE)]
     state_source: Option<EnvStateSource>,
@@ -90,6 +90,11 @@ pub fn handle_args(args: Args) {
         }
     }
 
+    let workspace_root = args
+        .workspace_root
+        .clone()
+        .unwrap_or(std::env::current_dir().unwrap());
+
     log::info!("Starting alloy-cli");
     log::debug!("Parsed Arguments: {:#?}", args);
     let alloy_envs: Vec<_> = std::env::vars()
@@ -99,7 +104,7 @@ pub fn handle_args(args: Args) {
 
     let env = Env {
         state_source: args.state_source,
-        workspace_root: args.workspace_root,
+        workspace_root,
         flake_url: args.flake_url,
         module_source: args.module_source,
         depth: args.depth,

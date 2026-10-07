@@ -9,16 +9,6 @@
     let
       alloy = config;
 
-      serverToString =
-        server:
-        if server ? endpoint then
-          let
-            endpoint = alloy.endpoints.${server.endpoint};
-          in
-          "${endpoint.domain}:${toString endpoint.port}"
-        else
-          server.address;
-
       mkAttrsOpt =
         opts:
         lib.mkOption {
@@ -241,37 +231,43 @@
           config = {
             domain = "${nodeName}.${type}.${alloy.dns.internalDomain}";
             nixosModule = {
-              services.resolved.enable = false;
+              services.resolved = {
+                enable = true;
+              };
+
+              networking.nameservers = lib.pipe alloy.dns.resolvers [
+                (lib.map (
+                  r:
+                  if r ? endpoint then
+                    lib.map (t: t.ip.v6 or t.ip.v4) alloy.endpoints.${r.endpoint}.targets
+                  else
+                    [ r.address ]
+                ))
+                lib.flatten
+                lib.mkBefore
+              ];
+
+              systemd.network.networks."10-coredns" = {
+                matchConfig.Name = "coredns0";
+                networkConfig = {
+                  Address = "10.254.254.254/32";
+                  DNS = "127.0.0.1:53533";
+                  Domains = [ "~${alloy.dns.internalDomain}" ];
+                };
+              };
+
+              systemd.network.netdevs."10-coredns" = {
+                netdevConfig = {
+                  Name = "coredns0";
+                  Kind = "dummy";
+                };
+              };
+
               services.coredns = {
                 enable = true;
                 config = ''
-                  . {
-                    bind 127.0.0.1 ::1
-                    forward . ${
-                      lib.pipe alloy.dns.resolvers [
-                        (lib.map (
-                          r:
-                          if r ? endpoint then
-                            let
-                              endpoint = alloy.endpoints.${r.endpoint};
-                              targets = lib.map (t: t.ip.v6 or t.ip.v4) (
-                                lib.filter (t: t.overlay == null || builtins.hasAttr t.overlay node.overlays) endpoint.targets
-                              );
-                            in
-                            targets
-                          else
-                            [ r.address ]
-                        ))
-                        lib.flatten
-                        (lib.concatStringsSep " ")
-                      ]
-                    } {
-                      policy sequential
-                    }
-                    cache
-                  }
-                  ${alloy.dns.internalDomain} {
-                    bind 127.0.0.1 ::1
+                  ${alloy.dns.internalDomain}:53533 {
+                    bind 127.0.0.1
                     hosts {
                       ${lib.concatStringsSep "\n" (
                         let
@@ -299,15 +295,10 @@
                         in
                         allHostRecords ++ allJailRecords ++ allEndpointRecords
                       )}
-                      fallthrough
                     }
                   }
                 '';
               };
-              networking.nameservers = [
-                "127.0.0.1"
-                "::1"
-              ];
             };
           };
         };

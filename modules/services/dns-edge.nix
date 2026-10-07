@@ -241,10 +241,10 @@
 
                   services.dnsdist = {
                     enable = true;
-                    listenAddress = "127.0.0.2";
-                    listenPort = 5353;
+                    listenAddress = "127.0.0.1";
+                    listenPort = 53535;
                     extraConfig = ''
-                      addLocal('[::1]:5353')
+                      addLocal('[::1]:53535')
                       addLocal('${jail.uplink.ipv4}:53')
                       addLocal('[${jail.uplink.ipv6}]:53')
                       ${lib.concatMapStringsSep "\n" (overlayName: ''

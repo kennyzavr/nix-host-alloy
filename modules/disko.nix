@@ -44,7 +44,7 @@
               (lib.nixosSystem {
                 inherit (config) system;
                 modules = [
-                  config.nixosModule
+                  host.nixosModule
                   ({ config, pkgs, ... }: {
                     virtualisation.vmVariantWithDisko = {
                       imports = [ host.qemu.nixosModule ];

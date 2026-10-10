@@ -200,7 +200,7 @@ impl VdeSwitchProc {
         let is_expected_signal = {
             use std::os::unix::process::ExitStatusExt;
             if let Some(sig) = status.signal()
-                && (sig == 2 || sig == 15)
+                && (sig == 2 || sig == 15 || sig == 9)
             {
                 true
             } else {

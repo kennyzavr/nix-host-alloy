@@ -310,15 +310,8 @@
           default = "alloy.internal";
         };
         resolvers = lib.mkOption {
+          default = [ ];
           type = lib.types.listOf alib.types.serverEndpoint;
-          default = [
-            {
-              address = "8.8.8.8";
-            }
-            {
-              address = "1.1.1.1";
-            }
-          ];
         };
         records = lib.mkOption {
           default = [ ];
@@ -405,6 +398,14 @@
       };
 
       config = {
+        dns.resolvers = [
+          {
+            address = "8.8.8.8";
+          }
+          {
+            address = "1.1.1.1";
+          }
+        ];
         generators.templates."dns/tsig-key" = { config, ... }: {
           options = {
             keySecret = lib.mkOption { type = lib.types.str; };

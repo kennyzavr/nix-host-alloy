@@ -170,6 +170,9 @@
             rname = lib.mkOption {
               type = alib.types.dns.name;
             };
+            email = lib.mkOption {
+              type = lib.types.str;
+            };
             ttl = lib.mkOption {
               default = 3600;
               type = lib.types.int;

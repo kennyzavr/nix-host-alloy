@@ -101,6 +101,10 @@
               type = lib.types.listOf (lib.types.submodule fpSubmodule);
               description = "Ports to forward from hypervisor localhost into the VM guest via QEMU user-mode networking.";
             };
+            extraPreScript = lib.mkOption {
+              type = lib.types.functionTo lib.types.lines;
+              default = { ... }: "";
+            };
             nixosModule = lib.mkOption {
               type = lib.types.deferredModule;
               default = { };
@@ -161,7 +165,7 @@
           };
 
           config.variants."direct-boot".package =
-            { ... }:
+            { pkgs, ... }:
             (lib.nixosSystem {
               inherit (host) system;
               modules = [
@@ -171,16 +175,16 @@
             }).config.system.build.vm;
 
           config.variants."full-boot".package =
-            { ... }:
+            { pkgs, ... }:
             (lib.nixosSystem {
               inherit (host) system;
               modules = [
                 host.nixosModule
                 config.nixosModule
                 ({ config, ... }: {
-                  virtualisation.useBootLoader = true;
+                  virtualisation.useBootLoader = lib.mkDefault true;
                   virtualisation.useEFIBoot =
-                    config.boot.loader.systemd-boot.enable || config.boot.loader.efi.canTouchEfiVariables;
+                    lib.mkDefault (config.boot.loader.systemd-boot.enable || config.boot.loader.efi.canTouchEfiVariables);
                 })
               ];
             }).config.system.build.vm;
@@ -283,42 +287,17 @@
             hostName: host:
             lib.optionalString (mode == "full" && host.qemu.variant != null) ''
               mkdir -p $(dirname "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}")
-              ln -s ${
-                pkgs.lib.getExe (host.qemu.variants.${host.qemu.variant}.package { inherit pkgs; })
-              } "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}"
+              ln -s ${lib.getExe (
+                pkgs.writeShellScriptBin "run-qemu-variant" ''
+                  set -e
+
+                  ${host.qemu.extraPreScript { inherit pkgs; }}
+
+                  ${pkgs.lib.getExe (host.qemu.variants.${host.qemu.variant}.package { inherit pkgs; })}
+                ''
+              )} "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}"
             ''
           ) alloy.hosts;
-
-        # _internal.state =
-        #   { pkgs, ... }:
-        #   {
-        #     qemuNets = lib.mapAttrsToList (name: net: {
-        #       inherit name;
-        #       idx = net.idx;
-        #     }) alloy.qemu.nets;
-        #     qemuGuests = lib.pipe alloy.hosts [
-        #       (lib.filterAttrs (_: host: host.qemu.variant != null))
-        #       (lib.mapAttrsToList (
-        #         hostName: host: {
-        #           host = hostName;
-        #           variant = host.qemu.variant;
-        #           path = lib.getExe (host.qemu.variants.${host.qemu.variant}.package { inherit pkgs; });
-        #           nets = lib.mapAttrsToList (netName: netHost: {
-        #             name = netName;
-        #             idx = alloy.qemu.nets.${netName}.idx;
-        #             iface = netHost.iface;
-        #             mac = netHost.mac;
-        #           }) host.qemu.nets;
-        #           forwardPorts = lib.map (fp: {
-        #             proto = fp.proto;
-        #             hypervisorPort = fp.hypervisor;
-        #             guestPort = fp.guest;
-        #             name = fp.name;
-        #           }) host.qemu.forwardPorts;
-        #         }
-        #       ))
-        #     ];
-        #   };
       };
     };
 }

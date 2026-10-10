@@ -9,7 +9,6 @@
     ./tls-edge.nix
     ./postbox.nix
     ./ca.nix
-    ./xhttp-proxy.nix
   ];
 
   flake.alloyModules.services = { };

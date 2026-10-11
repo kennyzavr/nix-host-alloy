@@ -39,6 +39,7 @@
           ./lib
           ./modules
           ./packages
+          ./examples/simple-cluster
         ];
 
         flake.flakeModules = {

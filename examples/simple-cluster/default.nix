@@ -20,7 +20,7 @@
 
       name = "simple-cluster";
 
-      workspace.root = toString self;
+      workspace.root = self + "/examples/simple-cluster";
 
       workspace.secrets = {
         age.keyPairs = [

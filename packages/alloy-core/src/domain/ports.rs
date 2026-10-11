@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::domain::{
     DynError,
     env::{Env, EnvModuleSource},
@@ -49,10 +51,29 @@ impl<'a> From<&'a Env> for NixCtx<'a> {
     }
 }
 
-pub trait Nix {
-    fn trigger_assertions(&self, ctx: NixCtx<'_>) -> Result<(), DynError>;
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct NixBuildSpec {
+    pub generators: NixBuildGensSpec,
+    pub qemu: NixBuildQemuSpec,
+}
 
-    fn eval_state(&self, full: bool, ctx: NixCtx<'_>) -> Result<PathBuf, DynError>;
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct NixBuildGensSpec {
+    #[serde(rename = "buildScripts")]
+    pub build_scripts: bool,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct NixBuildQemuSpec {
+    pub build: bool,
+    #[serde(rename = "buildScripts")]
+    pub build_scripts: Option<Vec<String>>,
+}
+
+pub trait Nix {
+    fn trigger_assertions(&self, spec: &NixBuildSpec, ctx: NixCtx<'_>) -> Result<(), DynError>;
+
+    fn build(&self, spec: &NixBuildSpec, ctx: NixCtx<'_>) -> Result<PathBuf, DynError>;
 }
 
 pub trait Fs {

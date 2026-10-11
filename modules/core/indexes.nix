@@ -144,30 +144,10 @@
 
         facts = lib.mapAttrs' (_: index: lib.nameValuePair index.factName { }) alloy.indexes;
 
-        # _internal.state = { ... }: {
-        #   indexes = lib.mapAttrs (_: index: {
-        #     inherit (index)
-        #       keys
-        #       minValue
-        #       maxValue
-        #       factName
-        #       ;
-        #   }) alloy.indexes;
-        # };
-
-        _internal.state = { ... }: {
+        build.state = { ... }: {
           indexes = lib.mapAttrs (
             _: index:
             let
-              # value = {
-              #   inherit (index)
-              #     keys
-              #     minValue
-              #     maxValue
-              #     factName
-              #     ;
-              # };
-              # evalResult = builtins.tryEval (builtins.deepSeq value value);
               evalResult = builtins.tryEval (builtins.deepSeq index.keys index.keys);
             in
             {
@@ -175,16 +155,6 @@
               evaluated = evalResult.success;
               keys = if evalResult.success then evalResult.value else null;
             }
-            # if evalResult.success then
-            #   evalResult.value // { evaluated = true; }
-            # else
-            #   {
-            #     evaluated = false;
-            #     keys = [];
-            #     minValue = 0;
-            #     maxValue = 0;
-            #     factName = "";
-            #   }
           ) alloy.indexes;
         };
       };

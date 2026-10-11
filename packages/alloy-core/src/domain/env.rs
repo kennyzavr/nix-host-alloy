@@ -1,8 +1,8 @@
-use std::{
-    fmt::Display,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::{fmt::Display, path::PathBuf, str::FromStr};
+
+use serde::{Deserialize, Serialize};
+
+use crate::domain::ports::NixBuildSpec;
 
 #[derive(Debug, Clone)]
 pub struct Env {
@@ -80,51 +80,28 @@ impl Env {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum EnvStateSource {
-    Full(PathBuf),
-    Base(PathBuf),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvStateSource {
+    pub spec: NixBuildSpec,
+    pub dir_path: PathBuf,
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error(
-    r#"Failed to parse state source value, expected format: "{}=path" or "{}=path""#,
-    EnvStateSource::FULL,
-    EnvStateSource::BASE
-)]
-pub struct EnvStateSourceError;
+#[error("Failed to parse state source value")]
+pub struct EnvStateSourceError(#[from] serde_json::Error);
 
 impl FromStr for EnvStateSource {
     type Err = EnvStateSourceError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.split_once('=') {
-            Some((Self::FULL, path)) => Ok(Self::Full(PathBuf::from(path))),
-            Some((Self::BASE, path)) => Ok(Self::Base(PathBuf::from(path))),
-            Some((_, _)) => Err(EnvStateSourceError),
-            None => Ok(Self::Full(PathBuf::from(s))),
-        }
+        let val = serde_json::from_str(s)?;
+        Ok(val)
     }
 }
 
 impl Display for EnvStateSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Full(path) => write!(f, "{}={}", Self::FULL, path.display()),
-            Self::Base(path) => write!(f, "{}={}", Self::BASE, path.display()),
-        }
-    }
-}
-
-impl EnvStateSource {
-    pub const FULL: &'static str = "full";
-    pub const BASE: &'static str = "base";
-
-    pub fn dir(&self) -> &Path {
-        match self {
-            Self::Full(path) => path.as_path(),
-            Self::Base(path) => path.as_path(),
-        }
+        write!(f, "{}", serde_json::to_string(self).unwrap())
     }
 }
 

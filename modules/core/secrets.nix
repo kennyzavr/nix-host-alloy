@@ -462,7 +462,7 @@
           ++ (lib.flatten (lib.map (s: s.assertions) hostSecretsList))
           ++ (lib.flatten (lib.map (s: s.assertions) jailSecretsList));
 
-        _internal.state =
+        build.state =
           { pkgs, ... }:
           let
             isPathLike = v: builtins.isPath v || (builtins.isString v && lib.hasPrefix "/" v);

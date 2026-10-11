@@ -8,7 +8,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::path::Path;
 
-use crate::domain::{DynError, NameMarker, models, state::reset_state};
+use crate::domain::{
+    DynError, NameMarker, models,
+    ports::{NixBuildGensSpec, NixBuildSpec},
+    state::reset_state,
+};
 use crate::domain::{
     ports::{Ctx, Reporter},
     state::{LoadStateError, load_state},
@@ -145,7 +149,7 @@ impl<'s> Gen<'s> {
             return Ok(false);
         }
 
-        let script_path = state_source.dir().join(script_path);
+        let script_path = state_source.dir_path.join(script_path);
         let force = force.or(ctx.env().force).unwrap_or(false);
         let add_to_git = add_to_git.or(ctx.env().add_to_git).unwrap_or(false);
 
@@ -205,12 +209,20 @@ pub fn exec_gens<C: Ctx>(
     let mut cache = HashSet::new();
 
     'l: loop {
-        let state = load_state(false, ctx)
-            .map_err(ExecGensError::Load)
-            .map_err(|err| {
-                reporter.report(ctx, ExecGensEvent::Error(&err));
-                vec![err]
-            })?;
+        let state = load_state(
+            NixBuildSpec {
+                generators: NixBuildGensSpec {
+                    build_scripts: true,
+                },
+                ..Default::default()
+            },
+            ctx,
+        )
+        .map_err(ExecGensError::Load)
+        .map_err(|err| {
+            reporter.report(ctx, ExecGensEvent::Error(&err));
+            vec![err]
+        })?;
 
         let plan = match build_exec_plan(gen_names, tags, &state) {
             Ok(plan) => plan,
@@ -233,7 +245,15 @@ pub fn exec_gens<C: Ctx>(
                     gen_name: r#gen.name.to_string(),
                     source: ExecGenError::NoScript,
                 };
-                let _ = ctx.nix().trigger_assertions(ctx.env().into());
+                let _ = ctx.nix().trigger_assertions(
+                    &NixBuildSpec {
+                        generators: NixBuildGensSpec {
+                            build_scripts: true,
+                        },
+                        ..Default::default()
+                    },
+                    ctx.env().into(),
+                );
                 reporter.report(ctx, ExecGensEvent::Error(&error));
                 return Err(vec![error]);
             }
@@ -414,7 +434,7 @@ pub fn show_gen<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, ShowGenEvent<'s>>,
 ) -> Result<(), ShowGenError> {
-    let state = load_state(false, ctx)
+    let state = load_state(Default::default(), ctx)
         .map_err(ShowGenError::Load)
         .map_err(|err| {
             reporter.report(ctx, ShowGenEvent::Error(&err));
@@ -461,7 +481,7 @@ pub fn list_gens<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, ListGensEvent<'s>>,
 ) -> Result<(), Vec<ListGensError>> {
-    let state = load_state(false, ctx)
+    let state = load_state(Default::default(), ctx)
         .map_err(ListGensError::Load)
         .map_err(|err| {
             reporter.report(ctx, ListGensEvent::Error(&err));

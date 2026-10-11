@@ -395,7 +395,7 @@
           maxValue = 999;
         };
 
-        _internal.state = { ... }: {
+        build.state = { ... }: {
           jails = lib.mapAttrs (_: jail: {
             inherit (jail) host tags;
           }) alloy.jails;

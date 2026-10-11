@@ -183,8 +183,9 @@
                 config.nixosModule
                 ({ config, ... }: {
                   virtualisation.useBootLoader = lib.mkDefault true;
-                  virtualisation.useEFIBoot =
-                    lib.mkDefault (config.boot.loader.systemd-boot.enable || config.boot.loader.efi.canTouchEfiVariables);
+                  virtualisation.useEFIBoot = lib.mkDefault (
+                    config.boot.loader.systemd-boot.enable || config.boot.loader.efi.canTouchEfiVariables
+                  );
                 })
               ];
             }).config.system.build.vm;
@@ -233,60 +234,103 @@
         type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
       };
 
-      config = {
-        assertions = [
-          {
-            assertion = lib.allUnique (lib.map (p: "${p.proto}:${toString p.hypervisorPort}") allPortKeys);
-            message = "[Alloy] VM port conflict: multiple VMs forward the same hypervisor port.";
-          }
-          {
-            assertion = lib.allUnique (lib.mapAttrsToList (_: n: n.idx) alloy.qemu.nets);
-            message = "[Alloy] qemu.nets: idx values must be globally unique.";
-          }
-        ];
+      config.assertions = [
+        {
+          assertion = lib.allUnique (lib.map (p: "${p.proto}:${toString p.hypervisorPort}") allPortKeys);
+          message = "[Alloy] VM port conflict: multiple VMs forward the same hypervisor port.";
+        }
+        {
+          assertion = lib.allUnique (lib.mapAttrsToList (_: n: n.idx) alloy.qemu.nets);
+          message = "[Alloy] qemu.nets: idx values must be globally unique.";
+        }
+      ];
 
-        indexes."qemu-nets" = {
-          minValue = 1;
-          maxValue = 99;
-          keys = builtins.attrNames alloy.qemu.nets;
+      config.indexes."qemu-nets" = {
+        minValue = 1;
+        maxValue = 99;
+        keys = builtins.attrNames alloy.qemu.nets;
+      };
+
+      options.build.spec = lib.mkOption {
+        type = lib.types.submodule {
+          options.qemu = {
+            build = lib.mkOption {
+              default = false;
+              type = lib.types.bool;
+            };
+            buildScripts = lib.mkOption {
+              default = null;
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            };
+          };
         };
+      };
 
-        _internal.state = { pkgs, mode, ... }: {
-          qemu = if mode == "full" then { nets = lib.mapAttrs (_: net: { }) alloy.qemu.nets; } else null;
+      config.build.state = { pkgs, ... }: {
+        qemu =
+          if alloy.build.spec.qemu.build then
+            {
+              nets = lib.mapAttrs (_: net: { }) alloy.qemu.nets;
+            }
+          else
+            null;
 
-          hosts = lib.mapAttrs (hostName: host: {
-            qemu =
-              if mode == "full" then
-                {
-                  nets = lib.mapAttrs (_: net: {
-                    inherit (net) iface mac;
-                  }) host.qemu.nets;
+        hosts = lib.mapAttrs (hostName: host: {
+          qemu =
+            if alloy.build.spec.qemu.build then
+              {
+                nets = lib.mapAttrs (_: net: {
+                  inherit (net) iface mac;
+                }) host.qemu.nets;
 
-                  portForwards = lib.map (fp: {
-                    inherit (fp)
-                      proto
-                      hypervisor
-                      guest
-                      name
-                      ;
-                  }) host.qemu.forwardPorts;
+                portForwards = lib.map (fp: {
+                  inherit (fp)
+                    proto
+                    hypervisor
+                    guest
+                    name
+                    ;
+                }) host.qemu.forwardPorts;
 
-                  variants = lib.mapAttrs (variantName: _: {
-                    scriptPath = "bin/hosts/${hostName}/qemu/${variantName}";
-                  }) host.qemu.variants;
-                  variant = host.qemu.variant;
-                }
-              else
-                null;
-          }) alloy.hosts;
-        };
+                variants = lib.mapAttrsToList (variantName: _: variantName) host.qemu.variants;
+                variant = lib.optionalAttrs (host.qemu.variant != null) {
+                  name = host.qemu.variant;
+                  scriptPath =
+                    if
+                      alloy.build.spec.qemu.buildScripts != null
+                      && (
+                        alloy.build.spec.qemu.buildScripts == [ ]
+                        || builtins.elem hostName alloy.build.spec.qemu.buildScripts
+                      )
+                    then
+                      "bin/hosts/${hostName}/qemu/${host.qemu.variant}"
+                    else
+                      null;
+                };
+              }
+            else
+              null;
+        }) alloy.hosts;
+      };
 
-        _internal.stateScript =
-          { pkgs, mode, ... }:
-          lib.concatMapAttrsStringSep "\n" (
-            hostName: host:
-            lib.optionalString (mode == "full" && host.qemu.variant != null) ''
-              mkdir -p $(dirname "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}")
+      config.build.script =
+        { pkgs, ... }:
+        lib.concatMapAttrsStringSep "\n" (
+          hostName: host:
+          lib.optionalString
+            (
+              alloy.build.spec.qemu.build
+              && host.qemu.variant != null
+              && (
+                alloy.build.spec.qemu.buildScripts != null
+                && (
+                  alloy.build.spec.qemu.buildScripts == [ ]
+                  || builtins.elem hostName alloy.build.spec.qemu.buildScripts
+                )
+              )
+            )
+            ''
+              mkdir -p "$(dirname "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}")"
               ln -s ${lib.getExe (
                 pkgs.writeShellScriptBin "run-qemu-variant" ''
                   set -e
@@ -297,7 +341,6 @@
                 ''
               )} "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}"
             ''
-          ) alloy.hosts;
-      };
+        ) alloy.hosts;
     };
 }

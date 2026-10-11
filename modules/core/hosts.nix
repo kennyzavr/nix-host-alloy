@@ -75,7 +75,7 @@
           maxValue = 99;
         };
 
-        _internal.state = { ... }: {
+        build.state = { ... }: {
           hosts = lib.mapAttrs (_: host: {
             inherit (host) tags;
           }) alloy.hosts;

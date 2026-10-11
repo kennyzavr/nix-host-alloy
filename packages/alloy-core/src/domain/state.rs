@@ -1,4 +1,9 @@
-use crate::domain::{DynError, env::EnvStateSource, models, ports::Ctx};
+use crate::domain::{
+    DynError,
+    env::EnvStateSource,
+    models,
+    ports::{Ctx, NixBuildSpec},
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum LoadStateError {
@@ -12,29 +17,27 @@ pub enum LoadStateError {
     Parse(#[from] serde_json::Error),
 }
 
-pub fn load_state(full: bool, ctx: &mut dyn Ctx) -> Result<models::State, LoadStateError> {
+pub fn load_state(spec: NixBuildSpec, ctx: &mut dyn Ctx) -> Result<models::State, LoadStateError> {
     let env = ctx.env();
 
-    let path = match &ctx.env().state_source {
-        Some(EnvStateSource::Full(path)) if full => path.clone(),
-        Some(EnvStateSource::Base(path)) if !full => path.clone(),
+    let dir_path = match &ctx.env().state_source {
+        Some(EnvStateSource {
+            spec: curr_spec,
+            dir_path,
+        }) if spec == NixBuildSpec::default() || &spec == curr_spec => dir_path.clone(),
         _ => ctx
             .nix()
-            .eval_state(full, env.into())
+            .build(&spec, env.into())
             .map_err(LoadStateError::Nix)?,
     };
 
-    let data = ctx
+    let state = ctx
         .fs()
-        .read(&path.join("state.json"))
+        .read(&dir_path.join("state.json"))
         .map_err(LoadStateError::FsRead)?;
-    let state = serde_json::from_slice(&data)?;
+    let state = serde_json::from_slice(&state)?;
 
-    ctx.env_mut().state_source = Some(if full {
-        EnvStateSource::Full(path)
-    } else {
-        EnvStateSource::Base(path)
-    });
+    ctx.env_mut().state_source = Some(EnvStateSource { spec, dir_path });
 
     Ok(state)
 }

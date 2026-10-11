@@ -117,7 +117,7 @@ pub fn get_fact_value<C: Ctx>(
     mut reporter: impl for<'a> Reporter<C, GetFactValueEvent<'a>>,
 ) -> Result<String, GetFactValueError> {
     ((|| -> Result<_, _> {
-        let state = load_state(false, ctx)?;
+        let state = load_state(Default::default(), ctx)?;
         let fact = Fact::find(name, &state)?;
         let data = fact.read(&*ctx)?;
         reporter.report(ctx, GetFactValueEvent::ValueRead(&fact));
@@ -156,7 +156,7 @@ pub fn set_fact_value<C: Ctx>(
     mut reporter: impl for<'a> Reporter<C, SetFactValueEvent<'a>>,
 ) -> Result<(), SetFactValueError> {
     ((|| -> Result<_, _> {
-        let state = load_state(false, ctx)?;
+        let state = load_state(Default::default(), ctx)?;
         let fact = Fact::find(name, &state)?;
         fact.write(data, force, add_to_git, &*ctx)?;
         reporter.report(ctx, SetFactValueEvent::ValueWritten(&fact));
@@ -191,7 +191,7 @@ pub fn show_fact<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'a> Reporter<C, ShowFactEvent<'a>>,
 ) -> Result<(), ShowFactError> {
-    let state = load_state(false, ctx)?;
+    let state = load_state(Default::default(), ctx)?;
 
     match Fact::find(fact_name, &state).map_err(|source| ShowFactError::FindFact {
         fact_name: fact_name.to_string(),
@@ -243,7 +243,7 @@ pub fn list_facts<C: Ctx>(
 ) -> Result<(), Vec<ListFactsError>> {
     let mut errors = Vec::new();
 
-    let state = load_state(false, ctx)
+    let state = load_state(Default::default(), ctx)
         .map_err(ListFactsError::Load)
         .map_err(|err| {
             reporter.report(ctx, ListFactsEvent::Error(&err));

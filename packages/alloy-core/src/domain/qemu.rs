@@ -7,6 +7,8 @@ use itertools::Itertools;
 use crate::domain::DynError;
 use crate::domain::hosts::FindHostError;
 use crate::domain::ports::Ctx;
+use crate::domain::ports::NixBuildQemuSpec;
+use crate::domain::ports::NixBuildSpec;
 use crate::domain::ports::Reporter;
 use crate::domain::state::LoadStateError;
 use crate::domain::state::load_state;
@@ -78,7 +80,6 @@ pub struct QemuGuest<'s> {
     pub host: &'s Host<'s>,
     pub data: &'s models::QemuGuest,
     pub variant: &'s models::QemuVariant,
-    pub _variant_name: &'s str,
     _priv: (),
 }
 
@@ -87,11 +88,8 @@ pub enum FindQemuGuestError {
     #[error("Not found")]
     NotFound,
 
-    #[error("Primary qemu guest variant is not configured for the host")]
-    VariantNotSet,
-
-    #[error("Primary qemu guest variant {name} is not specified for the host")]
-    VariantNotConfigured { name: String },
+    #[error("Primary qemu guest variant is not specified for the host")]
+    NoPrimaryVariant,
 
     #[error("Networks {} of the qemu guest are not defined in global qemu options", nets.join(", "))]
     NoNets { nets: Vec<String> },
@@ -103,21 +101,14 @@ impl<'s> QemuGuest<'s> {
             return Err(FindQemuGuestError::NotFound);
         };
 
-        let Some(variant_name) = &data.variant else {
-            return Err(FindQemuGuestError::VariantNotSet);
-        };
-
-        let Some(variant) = data.variants.get(variant_name) else {
-            return Err(FindQemuGuestError::VariantNotConfigured {
-                name: variant_name.clone(),
-            });
+        let Some(variant) = &data.variant else {
+            return Err(FindQemuGuestError::NoPrimaryVariant);
         };
 
         Ok(QemuGuest {
             opts,
             host,
             data,
-            _variant_name: variant_name,
             variant,
             _priv: (),
         })
@@ -197,12 +188,27 @@ pub fn launch_qemu_guests<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, LaunchQemuGuestsEvent<'s>>,
 ) -> Result<(), Vec<LaunchQemuGuestsError>> {
-    let state = load_state(true, ctx)
-        .map_err(LaunchQemuGuestsError::Load)
-        .map_err(|err| {
-            reporter.report(ctx, LaunchQemuGuestsEvent::Error(&err));
-            vec![err]
-        })?;
+    let state = load_state(
+        NixBuildSpec {
+            qemu: NixBuildQemuSpec {
+                build: true,
+                build_scripts: Some(
+                    host_names
+                        .iter()
+                        .map(AsRef::as_ref)
+                        .map(ToString::to_string)
+                        .collect(),
+                ),
+            },
+            ..Default::default()
+        },
+        ctx,
+    )
+    .map_err(LaunchQemuGuestsError::Load)
+    .map_err(|err| {
+        reporter.report(ctx, LaunchQemuGuestsEvent::Error(&err));
+        vec![err]
+    })?;
     let mut errors = Vec::new();
 
     let opts = match QemuOpts::find(&state, ctx) {
@@ -320,7 +326,9 @@ pub fn launch_qemu_guests<C: Ctx>(
         match ctx.qemu_runner().launch_guest(
             guest.host.name,
             &cache_dir,
-            &state_source.dir().join(&guest.variant.script_path),
+            &state_source
+                .dir_path
+                .join(guest.variant.script_path.as_ref().unwrap()),
             &mut vde_switches.iter().map(|s| s.1.as_ref()),
         ) {
             Ok(proc) => {
@@ -405,12 +413,21 @@ pub fn show_qemu_guest<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, ShowQemuGuestEvent<'s>>,
 ) -> Result<(), ShowQemuGuestError> {
-    let state = load_state(true, ctx)
-        .map_err(ShowQemuGuestError::Load)
-        .map_err(|err| {
-            reporter.report(ctx, ShowQemuGuestEvent::Error(&err));
-            err
-        })?;
+    let state = load_state(
+        NixBuildSpec {
+            qemu: NixBuildQemuSpec {
+                build: true,
+                build_scripts: None,
+            },
+            ..Default::default()
+        },
+        ctx,
+    )
+    .map_err(ShowQemuGuestError::Load)
+    .map_err(|err| {
+        reporter.report(ctx, ShowQemuGuestEvent::Error(&err));
+        err
+    })?;
 
     let opts = match QemuOpts::find(&state, ctx) {
         Ok(opts) => opts,
@@ -485,12 +502,21 @@ pub fn list_qemu_guests<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, ListQemuGuestsEvent<'s>>,
 ) -> Result<(), Vec<ListQemuGuestsError>> {
-    let state = load_state(true, ctx)
-        .map_err(ListQemuGuestsError::Load)
-        .map_err(|err| {
-            reporter.report(ctx, ListQemuGuestsEvent::Error(&err));
-            vec![err]
-        })?;
+    let state = load_state(
+        NixBuildSpec {
+            qemu: NixBuildQemuSpec {
+                build: true,
+                build_scripts: None,
+            },
+            ..Default::default()
+        },
+        ctx,
+    )
+    .map_err(ListQemuGuestsError::Load)
+    .map_err(|err| {
+        reporter.report(ctx, ListQemuGuestsEvent::Error(&err));
+        vec![err]
+    })?;
     let mut errors = Vec::new();
 
     let opts = match QemuOpts::find(&state, ctx) {

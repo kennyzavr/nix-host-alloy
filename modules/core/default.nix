@@ -11,7 +11,7 @@
     ./dns.nix
     ./mtls.nix
     ./endpoints.nix
-    ./state.nix
+    ./build.nix
     ./volumes.nix
     ./users.nix
     ./nets.nix
@@ -47,7 +47,7 @@
         default = [ ];
       };
 
-      config._internal.state = { ... }: {
+      config.build.state = { ... }: {
         name = config.name;
       };
     };

@@ -91,8 +91,8 @@ pub struct QemuGuest {
     pub nets: HashMap<String, QemuNetRef>,
     #[serde(rename = "portForwards")]
     pub port_forwards: Vec<QemuPortForward>,
-    pub variants: HashMap<String, QemuVariant>,
-    pub variant: Option<String>,
+    pub variants: Vec<String>,
+    pub variant: Option<QemuVariant>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -111,8 +111,9 @@ pub struct QemuPortForward {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct QemuVariant {
+    pub name: String,
     #[serde(rename = "scriptPath")]
-    pub script_path: PathBuf,
+    pub script_path: Option<PathBuf>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

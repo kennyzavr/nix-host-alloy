@@ -290,7 +290,7 @@ pub fn get_secret_value<C: Ctx>(
     mut reporter: impl for<'a> Reporter<C, GetSecretValueEvent<'a>>,
 ) -> Result<Vec<u8>, GetSecretValueError> {
     ((|| -> Result<_, _> {
-        let state = load_state(false, ctx)?;
+        let state = load_state(Default::default(), ctx)?;
         let secret = Secret::find(name, &state)?;
         let data = secret.read(&*ctx)?;
         reporter.report(ctx, GetSecretValueEvent::ValueRead(&secret));
@@ -329,7 +329,7 @@ pub fn set_secret_value<C: Ctx>(
     mut reporter: impl for<'a> Reporter<C, SetSecretValueEvent<'a>>,
 ) -> Result<(), SetSecretValueError> {
     ((|| -> Result<_, _> {
-        let state = load_state(false, ctx)?;
+        let state = load_state(Default::default(), ctx)?;
         let secret = Secret::find(name, &state)?;
         secret.write(data, force, add_to_git, &*ctx)?;
         reporter.report(ctx, SetSecretValueEvent::ValueWritten(&secret));
@@ -375,7 +375,7 @@ pub fn show_secret<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'a> Reporter<C, ShowSecretEvent<'a>>,
 ) -> Result<(), ShowSecretError> {
-    let state = load_state(false, ctx)
+    let state = load_state(Default::default(), ctx)
         .map_err(ShowSecretError::Load)
         .map_err(|err| {
             reporter.report(ctx, ShowSecretEvent::Error(&err));
@@ -469,7 +469,7 @@ pub fn list_secrets<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'a> Reporter<C, ListSecretsEvent<'a>>,
 ) -> Result<(), Vec<ListSecretsError>> {
-    let state = load_state(false, ctx)
+    let state = load_state(Default::default(), ctx)
         .map_err(ListSecretsError::Load)
         .map_err(|err| {
             reporter.report(ctx, ListSecretsEvent::Error(&err));
@@ -577,7 +577,7 @@ pub fn list_secret_refs<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'a> Reporter<C, ListSecretRefsEvent<'a>>,
 ) -> Result<(), Vec<ListSecretRefsError>> {
-    let state = load_state(false, ctx)
+    let state = load_state(Default::default(), ctx)
         .map_err(ListSecretRefsError::Load)
         .map_err(|err| {
             reporter.report(ctx, ListSecretRefsEvent::Error(&err));

@@ -147,7 +147,7 @@
       config = {
         assertions = lib.flatten (lib.mapAttrsToList (name: f: f.assertions) alloy.facts);
 
-        _internal.state = { ... }: {
+        build.state = { ... }: {
           facts = lib.mapAttrs (_: fact: {
             inherit (fact) file tags;
           }) alloy.facts;

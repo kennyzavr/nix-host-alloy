@@ -127,7 +127,7 @@ fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: TermUi) {
             let tags = guest.host.data.tags.join(", ");
             rows.push(vec![
                 guest.host.name.to_string(),
-                guest._variant_name.to_string(),
+                guest.variant.name.to_string(),
                 tags,
             ]);
         }
@@ -158,7 +158,7 @@ fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: TermUi) {
                 let mut rows = Vec::new();
 
                 rows.push(vec!["Host".to_string(), guest.host.name.to_string()]);
-                rows.push(vec!["Variant".to_string(), guest._variant_name.to_string()]);
+                rows.push(vec!["Variant".to_string(), guest.variant.name.to_string()]);
 
                 let mut pf_strs = Vec::new();
                 for pf in &guest.data.port_forwards {

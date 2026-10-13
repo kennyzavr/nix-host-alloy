@@ -18,6 +18,10 @@
             default = false;
             type = lib.types.bool;
           };
+          dir = lib.mkOption {
+            default = "/home/${config.name}";
+            type = lib.types.str;
+          };
           passwd = {
             source = lib.mkOption {
               default = "secret";
@@ -52,7 +56,7 @@
             inherit (user) name;
             isNormalUser = true;
             createHome = true;
-            home = "/home/${user.name}";
+            home = user.dir;
             group = userId;
             extraGroups = lib.optional user.isAdmin "wheel";
             password = lib.mkIf (user.passwd.source == "value") user.passwd.value;

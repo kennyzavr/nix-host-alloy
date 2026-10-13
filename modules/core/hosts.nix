@@ -18,13 +18,21 @@
           system = lib.mkOption {
             type = lib.types.str;
           };
+          stateVersion = lib.mkOption {
+            type = lib.types.str;
+          };
           nixosModule = lib.mkOption {
             type = lib.types.deferredModule;
             default = { };
             apply = module: {
               _class = "nixos";
               _file = "hosts.${lib.strings.escapeNixIdentifier name}.nixosModule";
-              imports = [ module ];
+              imports = [
+                module
+                {
+                  system.stateVersion = lib.mkDefault config.stateVersion;
+                }
+              ];
             };
           };
           nixosConfiguration = lib.mkOption {

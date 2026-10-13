@@ -98,13 +98,22 @@
                 readOnly = true;
               };
             };
+            stateVersion = lib.mkOption {
+              type = lib.types.str;
+              default = alloy.hosts.${config.host}.stateVersion;
+            };
             nixosModule = lib.mkOption {
               type = lib.types.deferredModule;
               default = { };
               apply = module: {
                 _class = "nixos";
                 _file = "jails.${lib.strings.escapeNixIdentifier name}.nixosModule";
-                imports = [ module ];
+                imports = [
+                  module
+                  {
+                    system.stateVersion = lib.mkDefault config.stateVersion;
+                  }
+                ];
               };
             };
             assertions = lib.mkOption {

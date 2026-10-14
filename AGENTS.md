@@ -14,44 +14,67 @@ Alloy is a Nix-based framework for declaring multi-host infrastructure as code. 
 
 ---
 
+## Current Since 4e08d7e
+
+Major project changes after commit `4e08d7e`:
+- Flake integration moved from `parts.nix` to `flakeModule.nix`. `parts.nix` was removed.
+- CLI wrappers are now declared with `flake.alloyCli.instances`; wrappers export `ALLOY_FLAKE_URL`, `ALLOY_MODULE_ATTR`, and `ALLOY_INPUT_ATTR`.
+- `_internal.{state,stateScript,statePackage}` was replaced by `build.{spec,state,script,package}` in `modules/core/build.nix`.
+- State loading now uses a JSON `NixBuildSpec`, not the old `full`/`base` mode string. Expensive artifacts are gated by `build.spec.generators.buildScripts` and `build.spec.qemu.{build,buildScripts}`.
+- CLI module evaluation now goes through the user's flake (`flake.<moduleAttr>`) and the configured Alloy input (`flake.<inputAttr>.lib`), not separate `--module-source`, `--alloy-url`, and `--nixpkgs-url` flags.
+- `modules/home-manager.nix` was added as an explicit `self.alloyModules.home-manager` extension.
+- `modules/services/xhttp-proxy.nix` was removed; service modules now total 9.
+- Host users changed from `hashedPasswd` to `passwd.{source,value,secret.{secret,generator}}`; user `dir` and `name` are explicit options.
+- Hosts gained `stateVersion`, which is fed into `system.stateVersion` by default.
+- QEMU state now records `variants` as a list of variant names and `variant = { name, scriptPath? }` for the selected variant.
+- The example cluster was folded into the main flake as `examples/simple-cluster/default.nix`; its separate `flake.nix` and `flake.lock` were removed.
+
+---
+
 ## Data Flow
 
 ```
 User's flake.nix
-  -> imports alloy.flakeModules.default (from parts.nix)
+  -> imports alloy.flakeModules.default (from flakeModule.nix)
   -> defines flake.alloyModules.<name> = { alib, lib, config, ... }: { options = ...; config = ...; }
+  -> optionally defines flake.alloyCli.instances.<name> for configured CLI wrapper packages
   -> alloy.lib.evalModules evaluates all modules into a single config
-  -> config._internal.statePackage { inherit pkgs; mode = "full"|"base"; }
+  -> config.build.package { inherit system; }
      builds a derivation containing:
-       - state.json          (serialized _internal.state)
-       - bin/hosts/<h>/qemu/<variant>  (symlinks to QEMU launch scripts, "full" mode only)
+       - state.json          (serialized build.state)
+       - bin/generators/<name>          (when build.spec.generators.buildScripts = true)
+       - bin/hosts/<h>/qemu/<variant>   (when build.spec.qemu.buildScripts includes the host or is [])
   -> alloy-cli reads state.json, operates on the workspace (the Git repo)
 ```
 
 Key: Nix side is purely declarative. CLI side is purely imperative. They communicate through `state.json` inside the built package.
 
-State is built in two modes:
-- **`base`** — secrets, facts, generators, indexes only. No QEMU scripts. Fast for most CLI operations.
-- **`full`** — includes QEMU guest variants and all script symlinks. Required for `alloy qemu run`.
+State is built from a JSON `NixBuildSpec`:
+- `generators.buildScripts = true` — include generator script symlinks and `scriptPath` values.
+- `qemu.build = true` — include global QEMU options and per-host QEMU state.
+- `qemu.buildScripts = null` — include QEMU metadata only; no launch script paths.
+- `qemu.buildScripts = []` — build launch scripts for all selected-default QEMU guests.
+- `qemu.buildScripts = [ "host-a" ... ]` — build launch scripts only for listed hosts.
 
 ---
 
 ## Project Structure
 
 ```
-flake.nix                     # Inputs: nixpkgs, flake-parts, agenix, disko. Imports parts.nix, lib/, modules/
-parts.nix                     # Defines flake.alloyModules option (lazyAttrsOf deferredModule)
+flake.nix                     # Inputs: nixpkgs, flake-parts, agenix, disko, home-manager. Imports flakeModule.nix, lib/, modules/, packages/, examples/simple-cluster
+flakeModule.nix               # Defines flake.alloyModules and flake.alloyCli.instances options
 lib/
-  default.nix                 # evalModules, evalModule, resolveZoneNode, mkArpaIpv6, types
+  default.nix                 # evalModules, evalModule, mkCli, resolveZoneNode, extendZoneNode, mkArpaIpv6, types
   types.nix                   # Parallel type definitions (ageKeyPair, assertion, permissions, dns.*, ip.*, zoneNode, netMatchOpts)
 modules/
   core/
     default.nix               # Imports all core modules, defines workspace + name + assertions options
-    hosts.nix                 # Host entity: idx, system, nixosModule, nixosConfiguration, tags
+    build.nix                 # build.{spec,state,script,package}; writes state.json and optional script symlinks
+    hosts.nix                 # Host entity: idx, system, stateVersion, nixosModule, nixosConfiguration, tags
     jails.nix                 # Jail entity: idx, host, uplink, nixosModule, tags. Bridge networking, NAT, containers
     overlays.nix              # WireGuard mesh: links, ipv6Prefix. Babeld routing, GRE tunnels
     endpoints.nix             # Service endpoints: targets (ipv6+overlay), loadBalancing, port
-    dns.nix                   # Zones, records (all BIND types), CoreDNS per-node, internalDomain, resolveNode
+    dns.nix                   # Zones, records (all BIND types), systemd-resolved + CoreDNS per-node, internalDomain, resolveNode
     tls/
       default.nix             # Cert/CA options, cert lifecycle (wait/reload services), indexes
       acme.nix                # ACME cert source (DNS-01 challenge via dnsupdate)
@@ -63,14 +86,13 @@ modules/
     indexes.nix               # Unique integer allocation backed by fact files. Range-checked, gap-filled
     mtls.nix                  # Auto mTLS: root CA + per-node leaf certs. SAN from overlays/endpoints/domains
     volumes.nix               # Persistent jail storage: directory driver, bind-mounts, tmpfiles permissions
-    users.nix                 # Per-host users: isAdmin, hashedPasswd (secret+generator). Immutable users
+    users.nix                 # Per-host users: name, dir, isAdmin, passwd source/value/secret+generator. Immutable users
     nets.nix                  # Host network interfaces: static systemd-networkd config, primary/default net
     ssh.nix                   # SSH server config: listen on specific nets, per-user authorized keys from facts
     boot.nix                  # Boot options: initrd facts (secrets embedded into initrd via boot.initrd.secrets)
-    qemu.nix                  # QEMU VM testing: nets, variants (direct-boot, full-boot), forwardPorts, vde_switch
-    state.nix                 # _internal.{state,stateScript,statePackage} options
+    qemu.nix                  # QEMU VM testing: nets, variants (direct-boot, full-boot), extraPreScript, forwardPorts, vde_switch
   services/
-    default.nix               # Imports all 10 service modules
+    default.nix               # Imports all 9 service modules
     ca.nix                    # Certificate Authority (step-ca + nginx)
     dns-auth.nix              # Authoritative DNS (Knot)
     dns-acme.nix              # ACME DNS challenge server (Knot + TSIG)
@@ -80,9 +102,9 @@ modules/
     tls-edge.nix              # TCP/TLS L4 proxy (HAProxy)
     smtp-edge.nix             # SMTP relay (Postfix + rspamd + ClamAV)
     postbox.nix               # Mailbox server (Postfix + Dovecot + nginx)
-    xhttp-proxy.nix           # Xray VLESS-over-XHTTP tunnel (censorship circumvention)
-  disko.nix                   # Optional disko module: hosts.<name>.disko.{enable,settings}, adds "disko-boot" QEMU variant
-  default.nix                 # Assembles alloyModules.default = core + services (disko is opt-in)
+  disko.nix                   # Explicit extension module: hosts.<name>.disko.{enable,settings}, adds "disko-boot" QEMU variant
+  home-manager.nix            # Explicit extension module: hosts.<name>.home + users.<name>.home wrappers
+  default.nix                 # Defines alloyModules.default = core + services; exports disko/home-manager as separate modules
 packages/
   alloy-cli/                  # Presentation layer (Rust binary)
     src/
@@ -92,22 +114,22 @@ packages/
       editor.rs               # $EDITOR integration for secret editing
       error.rs                # Error rendering: chain display with source indentation
       commands/
-        mod.rs                # Args (Clap): workspace-root, state-source, module-source, alloy-url, nixpkgs-url, flake-url, depth, force, add-to-git, show-nix-trace, cache-dir
+        mod.rs                # Args (Clap): workspace-root, state-source, flake-url, flake-attr/module attr, input attr, depth, force, add-to-git, show-nix-trace, cache-dir
         facts.rs              # alloy facts {list,get,set,edit,delete}
         gens.rs               # alloy gens {list,run}
         indexes.rs            # alloy indexes {list,show}
         secrets.rs            # alloy secrets {list,show,get,set,edit,rekey,refs}
-        qemu.rs               # alloy qemu {run,list,show}
+        qemu.rs               # alloy qemu {launch,list,show}
     Cargo.toml                # deps: clap, serde, color-eyre, owo-colors, comfy-table, age, petgraph, alloy-core
   alloy-core/                 # Domain + infrastructure (Rust library)
     src/
       lib.rs                  # pub mod domain; pub mod infra;
       domain/
         mod.rs                # NameMarker, PathMarker, DynError; re-exports submodules
-        env.rs                # Env struct + env var constants; EnvStateSource (full|base=path); EnvModuleSource (file|flake-attr)
+        env.rs                # Env struct + env var constants; EnvStateSource JSON {spec,dir_path}
         models.rs             # Serde-deserialized State, Host, Jail, Secret, Fact, Gen, Index, Qemu, QemuGuest, AgeKeyPair, ...
-        ports.rs              # Traits: Ctx, Nix, Fs, Git, Age, GenRunner, QemuRunner, VdeSwitchProc, QemuGuestProc, Reporter
-        state.rs              # load_state(full, ctx) -> State; reset_state
+        ports.rs              # Traits: Ctx, Nix, Fs, Git, Age, GenRunner, QemuRunner, VdeSwitchProc, QemuGuestProc, Reporter; NixBuildSpec
+        state.rs              # load_state(spec, ctx) -> State; reset_state
         facts.rs              # domain logic: list/get/set/delete facts
         gens.rs               # domain logic: list/run generators (DAG via petgraph)
         hosts.rs              # Host<'s> wrapper + FindHostError
@@ -117,15 +139,18 @@ packages/
         qemu.rs               # QemuOpts, QemuGuest: find; launch_qemu_guests, list_qemu_guests, show_qemu_guest
       infra/
         mod.rs                # pub struct System {}; ExecError; pub use nix::*; pub use qemu::*
-        nix.rs                # System impl Nix: trigger_assertions, eval_state (nix build --impure --expr)
+        nix.rs                # System impl Nix: trigger_assertions, build (nix build --impure --expr)
         qemu.rs               # System impl QemuRunner: launch_guest (vde socket env injection), launch_vde (vde_switch process)
         age.rs                # System impl Age: encrypt/decrypt via age crate
         fs.rs                 # System impl Fs: exists, mk_parent_dirs, read, write (force flag)
         git.rs                # System impl Git: check (is tracked), add (git add)
         gens.rs               # System impl GenRunner: exec_gen (subprocess, env injection)
     Cargo.toml                # deps: serde, petgraph, itertools, either, chrono, tempfile, thiserror, log
-  rust.nix                    # Nix package build for both crates (used by flake)
+  default.nix                 # Nix package build for both crates (used by flake), Rust 1.98.1 via crane/rust-overlay
 Cargo.toml                    # Workspace: members = [packages/alloy-cli, packages/alloy-core], edition=2024
+examples/simple-cluster/
+  default.nix                 # Example flake-parts module defining alloyModules.simpleCluster and nixosConfigurations
+test.nix                      # Manual Nix expression that builds config.build.package for the simple cluster
 ```
 
 ---
@@ -134,7 +159,7 @@ Cargo.toml                    # Workspace: members = [packages/alloy-cli, packag
 
 | Entity | Option Path | Index Range | Key Fields |
 |--------|------------|-------------|------------|
-| Host | `hosts.<name>` | 1-99 | `system`, `nixosModule`, `tags`, `idx` (auto) |
+| Host | `hosts.<name>` | 1-99 | `system`, `stateVersion`, `nixosModule`, `tags`, `idx` (auto) |
 | Jail | `jails.<name>` | 1-999 | `host`, `nixosModule`, `tags`, `uplink.{allowEgress,forwards}` |
 | Overlay | `overlays.<name>` | 1-99 | `links[].{a.host, b.host}`, `ipv6Prefix` (auto) |
 | Endpoint | `endpoints.<name>` | -- | `port`, `targets[].{ipv6, overlay}`, `loadBalancing.policy` |
@@ -143,12 +168,12 @@ Cargo.toml                    # Workspace: members = [packages/alloy-cli, packag
 | TLS CA | `tls.ca.<name>` | -- | `certFact` |
 | Secret (master) | `secrets.<name>` | -- | `file`, `tags`, `exists` (readOnly) |
 | Fact | `facts.<name>` | -- | `file`, `value`, `tags` |
-| Generator | `generators.instances.<name>` | -- | `package`, `wants`, `wantedBy`, `before`, `after`, `facts`, `secrets` |
+| Generator | `generators.instances.<name>` | -- | `enable`, `package`, `wants`, `after`, `facts`, `secrets`, `tags` |
 | Index | `indexes.<name>` | -- | `keys`, `minValue`, `maxValue`, `factName` |
 | Volume | `jails.<name>.volumes.<name>` | -- | `path`, `driver.directory`, `permissions` |
-| User | `hosts.<name>.users.<name>` | -- | `isAdmin`, `hashedPasswd` |
+| User | `hosts.<name>.users.<name>` | -- | `name`, `dir`, `isAdmin`, `passwd.{source,value,secret}` |
 | QEMU nets | `qemu.nets.<name>` | 1-99 | `idx` (auto via `qemu-nets` index) |
-| QEMU guest | `hosts.<name>.qemu` | -- | `memory`, `cores`, `graphics`, `nets`, `forwardPorts`, `variants`, `variant`, `nixosModule` |
+| QEMU guest | `hosts.<name>.qemu` | -- | `memory`, `cores`, `graphics`, `nets`, `forwardPorts`, `extraPreScript`, `variants`, `variant`, `nixosModule` |
 
 ### Cross-module extensions
 
@@ -156,7 +181,7 @@ The complete option tree for a host (contributions from all modules):
 
 ```
 hosts.<name>.{
-  idx, system, nixosModule, nixosConfiguration, tags, assertions,
+  idx, system, stateVersion, nixosModule, nixosConfiguration, tags, assertions,
   # From secrets.nix:
   secrets.<name>.{ file, path, permissions, placeholder },
   secretTemplates.<name>.{ template, path, permissions },
@@ -168,7 +193,7 @@ hosts.<name>.{
   nets.<iface>.{ static, primary, default, iface, v4, v6 },
   primaryNet,  # readOnly
   # From users.nix:
-  users.<name>.{ isAdmin, hashedPasswd.{secret, generator} },
+  users.<name>.{ name, dir, isAdmin, passwd.{ source, value, secret.{ secret, generator } } },
   # From ssh.nix:
   ssh.{ enable, listen[].{net, port} },
   users.<name>.ssh.{ allowPasswdAuth, authKeyFacts },
@@ -181,9 +206,12 @@ hosts.<name>.{
   # From boot.nix:
   boot.{ facts.<name>.path, factsBasePath },
   # From qemu.nix:
-  qemu.{ memory, cores, graphics, nets.<name>.{mac,iface}, forwardPorts[], nixosModule, variants.<name>.package, variant },
-  # From disko.nix (opt-in, not in alloyModules.default):
+  qemu.{ memory, cores, graphics, nets.<name>.{mac,iface}, forwardPorts[], extraPreScript, nixosModule, variants.<name>.package, variant },
+  # From disko.nix (explicit extension, not in alloyModules.default):
   disko.{ enable, settings },
+  # From home-manager.nix (explicit extension, not in alloyModules.default):
+  home.{ enable, sharedModule },
+  users.<name>.home.{ enable, stateVersion, module },
 }
 ```
 
@@ -197,9 +225,9 @@ Global workspace options:
 
 ---
 
-## alloy-state.json Keys (models.rs State struct)
+## state.json Keys (models.rs State struct)
 
-Modules contribute to `_internal.state` which becomes the JSON the CLI reads. The Rust `State` struct in `alloy-core/src/domain/models.rs` defines the deserialization schema:
+Modules contribute to `build.state`, which becomes the JSON the CLI reads. The Rust `State` struct in `alloy-core/src/domain/models.rs` defines the deserialization schema:
 
 | JSON key | Rust field | Contributed by | Notes |
 |----------|-----------|----------------|-------|
@@ -210,14 +238,14 @@ Modules contribute to `_internal.state` which becomes the JSON the CLI reads. Th
 | `hosts.<h>.tags` | `Host.tags` | `hosts.nix` | |
 | `hosts.<h>.secrets` | `Host.secrets: HashMap<String, SecretRef>` | `secrets.nix` | `{file, path}` per secret |
 | `hosts.<h>.secretsAgeKeyPairs` | `Host.secrets_age_key_pairs` | `secrets.nix` | Host-specific age key pairs |
-| `hosts.<h>.qemu` | `Host.qemu: Option<QemuGuest>` | `qemu.nix` | Null in base mode |
+| `hosts.<h>.qemu` | `Host.qemu: Option<QemuGuest>` | `qemu.nix` | Null unless `build.spec.qemu.build = true` |
 | `jails` | `State.jails: HashMap<String, Jail>` | `jails.nix`, `secrets.nix` | `{host, tags, secrets}` |
 | `facts` | `State.facts: HashMap<String, Fact>` | `facts.nix` | `{file, tags}` |
-| `generators` | `State.gens: HashMap<String, Gen>` | `generators.nix` | `{wants, after, tags, secrets, facts, scriptPath}` |
-| `indexes` | `State.indexes: HashMap<String, Index>` | `indexes.nix` | `{keys, minValue, maxValue, factName}` |
-| `qemu` | `State.qemu: Option<Qemu>` | `qemu.nix` | Global QEMU nets; null in base mode |
+| `generators` | `State.gens: HashMap<String, Gen>` | `generators.nix` | `{wants, after, tags, secrets, facts, scriptPath?}` |
+| `indexes` | `State.indexes: HashMap<String, Index>` | `indexes.nix` | `{keys?, evaluated, minValue, maxValue, factName}` (`models.rs` currently consumes `keys`, `minValue`, `maxValue`, `factName`) |
+| `qemu` | `State.qemu: Option<Qemu>` | `qemu.nix` | Global QEMU nets; null unless `build.spec.qemu.build = true` |
 
-`QemuGuest` fields: `nets: HashMap<name, QemuNetRef{iface, mac}>`, `portForwards: Vec<QemuPortForward{name, proto, hypervisor, guest}>`, `variants: HashMap<name, QemuVariant{scriptPath}>`, `variant: Option<String>`.
+`QemuGuest` fields: `nets: HashMap<name, QemuNetRef{iface, mac}>`, `portForwards: Vec<QemuPortForward{name, proto, hypervisor, guest}>`, `variants: Vec<String>`, `variant: Option<QemuVariant{name, scriptPath?}>`.
 
 ---
 
@@ -230,14 +258,14 @@ The Alloy CLI is written in Rust and split into two crates:
 Pure domain logic and infrastructure adapters. No terminal I/O.
 
 - **`domain/`** — business logic, typed errors, no side effects except through `ports::Ctx`
-  - `env.rs` — `Env` struct (all CLI configuration), env var name constants, `EnvStateSource`, `EnvModuleSource`
+  - `env.rs` — `Env` struct (all CLI configuration), env var name constants, `EnvStateSource` as JSON `{spec,dir_path}`
   - `models.rs` — Serde structs deserializing `state.json`
-  - `ports.rs` — Traits: `Ctx` (aggregates all port traits), `Nix`, `Fs`, `Git`, `Age`, `GenRunner`, `QemuRunner`, `VdeSwitchProc`, `QemuGuestProc`, `Reporter<C, T>`
-  - `state.rs` — `load_state(full, ctx)` → `State`; `reset_state`
+  - `ports.rs` — Traits: `Ctx`, `Nix`, `Fs`, `Git`, `Age`, `GenRunner`, `QemuRunner`, `VdeSwitchProc`, `QemuGuestProc`, `Reporter<C, T>`; `NixBuildSpec` structs
+  - `state.rs` — `load_state(spec, ctx)` → `State`; `reset_state`
   - `hosts.rs`, `jails.rs`, `secrets.rs`, `facts.rs`, `gens.rs`, `indexes.rs`, `qemu.rs` — domain operations
 
 - **`infra/`** — concrete implementations of port traits, all behind `System` struct
-  - `nix.rs` — `System impl Nix`: calls `nix build --impure --expr` to build state package, `nix eval` to trigger assertions
+  - `nix.rs` — `System impl Nix`: builds eval expression from `flake_url`, `input_attr`, `module_attr`, and `NixBuildSpec`; calls `nix build --impure --expr`, `nix eval` for assertions
   - `qemu.rs` — `System impl QemuRunner`: spawns `vde_switch` (using `tempfile::TempDir` for socket), spawns QEMU script
   - `age.rs` — `System impl Age`: encrypt/decrypt via `age` crate
   - `fs.rs`, `git.rs`, `gens.rs` — filesystem, git, generator runner
@@ -251,50 +279,59 @@ Thin presentation layer. Parses args, calls domain functions, formats output.
 - `term_ui.rs` — `TermUi`: `print_ok/skip/info/error/step/table/data/raw_data`; colorizes `` `name` `` and `'path'` markers in messages
 - `error.rs` — renders full error chain with source indentation
 - `editor.rs` — opens `$EDITOR` on a tempfile, returns edited bytes
-- `commands/mod.rs` — top-level `Args` (Clap): `--workspace-root`, `--state-source`, `--module-source`, `--alloy-url`, `--nixpkgs-url`, `--flake-url`, `--depth`, `--force`, `--add-to-git`, `--cache-dir`, `--show-nix-trace`; subcommands: `Facts`, `Gens`, `Indexes`, `Secrets`, `Qemu`
+- `commands/mod.rs` — top-level `Args` (Clap): `--workspace-root`, `--state-source`, `--flake-url`, `--flake-attr`/module attr, input attr, `--depth`, `--force`, `--add-to-git`, `--cache-dir`, `--show-nix-trace`; subcommands: `Facts`, `Gens`, `Indexes`, `Secrets`, `Qemu`
 
-**State loading**: CLI calls `load_state(full=false, ctx)` for most operations (fast), and `load_state(full=true, ctx)` for `qemu run` (builds full package with scripts). The path is cached in `ctx.env().state_source` after first load.
+**State loading**: CLI calls `load_state(spec, ctx)`, where `spec` is `NixBuildSpec`. A default spec builds ordinary metadata. Generator execution sets `generators.buildScripts = true`. QEMU list/show set `qemu.build = true` and no scripts. QEMU launch sets `qemu.build = true` and `qemu.buildScripts = Some(hosts)`. The built directory and spec are cached in `ctx.env().state_source` after first load.
 
 **Nix eval expression** (from `infra/nix.rs`): dynamically builds a Nix expression that:
 ```nix
 let
-  pkgs = (builtins.getFlake "<nixpkgs-url>").legacyPackages.${builtins.currentSystem};
-  alloyLib = (builtins.getFlake "<alloy-url>").lib;
-  alloyModule = <module-source>;
-  res = alloyLib.evalModules { modules = [alloyModule]; checkAssertions = <bool>; };
+  system = builtins.currentSystem;
+  flake = builtins.getFlake "<flake-url>";
+  alloyLib = flake.<input-attr>.lib;
+  alloyModule = flake.<module-attr>;
+  res = alloyLib.evalModules {
+    modules = [
+      alloyModule
+      { build.spec = builtins.fromJSON ''<serialized NixBuildSpec>''; }
+    ];
+    checkAssertions = <bool>;
+  };
 in
   <inner-expr>
 ```
-where `<inner-expr>` is `res.config._internal.statePackage { inherit pkgs; mode = "full"|"base"; }` for state build.
+where `<inner-expr>` is `res.config.build.package { inherit system; }` for state builds and `res.config.name` for assertion checks.
 
 ---
 
-## `_internal.state` and `_internal.statePackage`
+## `build.state` and `build.package`
 
-Defined in `modules/core/state.nix`:
+Defined in `modules/core/build.nix`:
 
 ```nix
-options._internal = {
-  state       = lib.mkOption { type = functionTo (attrsOf anything); };   # args -> attrset merged from all modules
-  stateScript = lib.mkOption { type = functionTo lines; };                # args -> shell script (symlinks, etc.)
-  statePackage = lib.mkOption { type = functionTo package; readOnly = true; };  # args -> derivation
+options.build = {
+  spec = lib.mkOption { type = submodule {}; };
+  state = lib.mkOption { type = functionTo (attrsOf anything); };
+  script = lib.mkOption { type = functionTo lines; };
+  package = lib.mkOption { type = functionTo package; readOnly = true; };
 };
 
-config._internal.statePackage = { pkgs, ... }@args:
-  pkgs.runCommand "alloy-state" {} ''
+config.build.package = { system, ... }:
+  let pkgs = inputs.nixpkgs.legacyPackages.${system};
+  in pkgs.runCommand "alloy-${alloy.name}-state" {} ''
     mkdir -p $out/bin
     cat > $out/state.json <<'EOF'
-    ${builtins.toJSON (alloy._internal.state args)}
+    ${builtins.toJSON (alloy.build.state { inherit pkgs; })}
     EOF
-    ${alloy._internal.stateScript args}
+    ${alloy.build.script { inherit pkgs; }}
   '';
 ```
 
-Each module that contributes to state does so by merging into `_internal.state`:
+Each module that contributes to state does so by merging into `build.state`:
 ```nix
-config._internal.state = { pkgs, mode, ... }: { ... };
+config.build.state = { pkgs, ... }: { ... };
 ```
-And optionally into `_internal.stateScript` for binary artifacts (QEMU scripts).
+And optionally into `build.script` for binary artifacts (generator scripts, QEMU scripts). Use `build.spec` to avoid evaluating/building expensive artifacts unless the CLI requested them.
 
 ---
 
@@ -304,7 +341,7 @@ QEMU-based testing without root privileges. Inter-VM networking via `vde_switch`
 
 **Nix side** (`modules/core/qemu.nix`):
 - `qemu.nets.<name>` — global network definitions; `idx` is auto-allocated via `qemu-nets` index (range 1-99)
-- `hosts.<name>.qemu.{memory, cores, graphics, forwardPorts[], nixosModule, variants, variant}`
+- `hosts.<name>.qemu.{memory, cores, graphics, forwardPorts[], extraPreScript, nixosModule, variants, variant}`
 - `hosts.<name>.qemu.nets.<name>` — per-host net attachment; `mac` and `iface` are `readOnly` computed options
   - `mac = "52:54:00:00:<hIdx>:<nIdx>"` (host idx + net idx, hex)
   - `iface = "eth<net.idx>"`
@@ -314,21 +351,27 @@ QEMU-based testing without root privileges. Inter-VM networking via `vde_switch`
 - Optional variant (contributed by `modules/disko.nix`):
   - `"disko-boot"` — `vmWithDisko` (requires `hosts.<name>.disko.enable = true`)
 - `variant = null` means no default; set to e.g. `"direct-boot"` to make it the CLI default
+- `extraPreScript = { pkgs, ... }: "...";` is inserted before the selected QEMU variant executable in the generated launch wrapper
 - VDE socket env: `ALLOY_VDE_SOCKET_<idx>` injected per net before launching the script
 - Disk image: `$NIX_DISK_IMAGE` env var, stored at `<cache-dir>/<alloy-name>/qemu/<host-name>.qcow2`
 - QEMU logs: `<cache-dir>/<alloy-name>/qemu/<host-name>_log_<timestamp>.log`
 
 **CLI side** (`alloy qemu`):
-- `qemu run [hosts...] [--tags ...] [--variant <name>]` — builds full state, creates VDE switches for all referenced nets, launches QEMU guest processes, waits for all to exit
-- `qemu list [hosts...] [--tags ...]` — lists configured QEMU guests
+- `qemu launch [hosts...] [--tags ...]` — builds QEMU state plus launch scripts for selected hosts, creates VDE switches for referenced nets, launches QEMU guest processes, waits for all to exit
+- `qemu list [--tags ...]` — lists configured QEMU guests
 - `qemu show <host>` — shows QEMU config for a specific host
 - VDE switch socket lives in a `TempDir` (auto-cleaned when `VdeSwitchProc` is dropped)
 - VM runtime: cache dir at `<workspace-root>/.alloy/<alloy-name>/qemu/`
 
 **`disko.nix`** (`modules/disko.nix`):
-- Opt-in module, NOT included in `alloyModules.default`; user imports `self.alloyModules.disko` separately
+- Explicit extension module, NOT included in `alloyModules.default`; user imports `self.alloyModules.disko` separately
 - Extends `hosts.<name>` with `disko.{enable, settings}` options
 - When `enable = true`: merges disko NixOS module into `host.nixosModule` and registers `"disko-boot"` variant
+
+**`home-manager.nix`** (`modules/home-manager.nix`):
+- Explicit extension module, NOT included in `alloyModules.default`; user imports `self.alloyModules.home-manager` separately
+- Extends hosts with `home.{enable,sharedModule}` and users with `home.{enable,stateVersion,module}`
+- When `hosts.<name>.home.enable = true`: imports `inputs.home-manager.nixosModules.home-manager` into the host NixOS module and wires enabled users into `home-manager.users`
 
 ---
 
@@ -390,7 +433,9 @@ Only reach for a shared `lib`/`alib` function when the logic is a genuine multi-
 
 This produces infinite recursion. Fix: keep submodule option declarations free of self-references to the enclosing module. If a value needs outer context, assign it via an **unconditional** `config.qemu.xxx = ...;` in the enclosing module. Only wrap the *leaf value* -- not the surrounding attrset -- in `lib.mkIf` when needed.
 
-**`_internal.state` merge semantics**: each module uses `config._internal.state = { pkgs, mode, ... }: { ... };`. Because `state` is `functionTo (attrsOf anything)`, multiple modules' contributions are deep-merged via `lib.mkMerge` (applied to the function results). Use `mode == "full"` checks inside the function body to gate expensive/full content.
+**`build.state` merge semantics**: each module uses `config.build.state = { pkgs, ... }: { ... };`. Because `state` is `functionTo (attrsOf anything)`, multiple modules' contributions are deep-merged via `lib.mkMerge` (applied to the function results). Use `build.spec` checks inside the function body to gate expensive/full content.
+
+**`build.script` for artifacts**: generator and QEMU launch script symlinks are emitted from `config.build.script = { pkgs, ... }: "...";`. Keep build-time paths relative to `$out` in `state.json` and join them with `state_source.dir_path` on the CLI side.
 
 ---
 
@@ -404,8 +449,10 @@ This produces infinite recursion. Fix: keep submodule option declarations free o
 6. **Jail secrets use `config.secrets.<name>.path`**, never `config.age.secrets`
 7. **ALWAYS define assertions** for cross-entity references
 8. **ALWAYS check entity existence** with `builtins.hasAttr` before referencing
-9. **`_internal.state` is the bridge** from Nix to CLI -- add keys here for new CLI features; update `models.rs` correspondingly
+9. **`build.state` is the bridge** from Nix to CLI -- add keys here for new CLI features; update `models.rs` correspondingly
 10. **Formatter: `nixfmt`** (nixfmt-tree). All Nix code must be formatted.
 11. **`config` is aliased as `alloy`** in module let-bindings for readability
 12. **CLI crates**: 2 crates only -- `alloy-cli` (presentation) and `alloy-core` (domain + infra). There is no separate `alloy-infra` crate; infra code lives in `alloy-core::infra`.
-13. **`disko.nix`** is an opt-in extension at `modules/disko.nix`, NOT part of `alloyModules.default`. Users must explicitly import `self.alloyModules.disko` to use it.
+13. **`disko.nix`** is an explicit extension at `modules/disko.nix`, NOT part of `alloyModules.default`. Users must explicitly import `self.alloyModules.disko` to use it.
+14. **`home-manager.nix`** is an explicit extension at `modules/home-manager.nix`, NOT part of `alloyModules.default`. Users must explicitly import `self.alloyModules.home-manager` to use it.
+15. **Do not resurrect `xhttp-proxy`** unless intentionally reintroducing the service; it was removed from `modules/services/default.nix`.

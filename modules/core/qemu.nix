@@ -1,4 +1,4 @@
-{
+{ withSystem, ... }: {
   flake.alloyModules.core =
     {
       alib,
@@ -165,7 +165,7 @@
           };
 
           config.variants."direct-boot".package =
-            { pkgs, ... }:
+            { ... }:
             (lib.nixosSystem {
               inherit (host) system;
               modules = [
@@ -175,7 +175,7 @@
             }).config.system.build.vm;
 
           config.variants."full-boot".package =
-            { pkgs, ... }:
+            { ... }:
             (lib.nixosSystem {
               inherit (host) system;
               modules = [
@@ -266,7 +266,7 @@
         };
       };
 
-      config.build.state = { pkgs, ... }: {
+      config.build.state = { ... }: {
         qemu =
           if alloy.build.spec.qemu.build then
             {
@@ -314,7 +314,10 @@
       };
 
       config.build.script =
-        { pkgs, ... }:
+        { system, ... }:
+        let
+          pkgs = withSystem system ({ pkgs, ... }: pkgs);
+        in
         lib.concatMapAttrsStringSep "\n" (
           hostName: host:
           lib.optionalString
@@ -335,9 +338,9 @@
                 pkgs.writeShellScriptBin "run-qemu-variant" ''
                   set -e
 
-                  ${host.qemu.extraPreScript { inherit pkgs; }}
+                  ${host.qemu.extraPreScript { inherit system; }}
 
-                  ${pkgs.lib.getExe (host.qemu.variants.${host.qemu.variant}.package { inherit pkgs; })}
+                  ${lib.getExe (host.qemu.variants.${host.qemu.variant}.package { inherit system; })}
                 ''
               )} "$out/bin/hosts/${hostName}/qemu/${host.qemu.variant}"
             ''

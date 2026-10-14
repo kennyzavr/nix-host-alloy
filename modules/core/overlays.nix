@@ -1,4 +1,4 @@
-{
+{ withSystem, ... }: {
   flake.alloyModules.core =
     {
       alib,
@@ -255,7 +255,10 @@
               ];
               secrets.${pskSecret} = { };
               package =
-                { pkgs, ... }:
+                { system, ... }:
+                let
+                  pkgs = withSystem system ({ pkgs, ... }: pkgs);
+                in
                 pkgs.writeShellApplication {
                   name = "wg-psk-generator";
                   runtimeInputs = [ pkgs.wireguard-tools ];
@@ -289,7 +292,10 @@
                 secrets.${privKeySecret} = { };
                 facts.${pubKeyFact} = { };
                 package =
-                  { pkgs, ... }:
+                  { system, ... }:
+                  let
+                    pkgs = withSystem system ({ pkgs, ... }: pkgs);
+                  in
                   pkgs.writeShellApplication {
                     name = "wg-keypair-generator";
                     runtimeInputs = [ pkgs.wireguard-tools ];

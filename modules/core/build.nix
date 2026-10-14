@@ -1,4 +1,4 @@
-{ inputs, ... }: {
+{ inputs, withSystem, ... }: {
   flake.alloyModules.core =
     {
       lib,
@@ -29,16 +29,16 @@
       config.build.package =
         { system, ... }:
         let
-          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          pkgs = withSystem system ({ pkgs, ... }: pkgs);
         in
         pkgs.runCommand "alloy-${alloy.name}-state" { } ''
           mkdir -p $out/bin
 
           cat > $out/state.json <<'EOF'
-          ${builtins.toJSON (alloy.build.state { inherit pkgs; })}
+          ${builtins.toJSON (alloy.build.state { inherit system; })}
           EOF
 
-          ${alloy.build.script { inherit pkgs; }}
+          ${alloy.build.script { inherit system; }}
         '';
     };
 }

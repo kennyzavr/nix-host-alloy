@@ -105,7 +105,7 @@
         };
       };
 
-      config.build.state = { pkgs, ... }: {
+      config.build.state = { system, ... }: {
         generators = lib.mapAttrs (generatorName: generator: {
           inherit (generator)
             wants
@@ -118,7 +118,7 @@
             let
               scriptPath =
                 let
-                  drv = generator.package { inherit pkgs; };
+                  drv = generator.package { inherit system; };
                 in
                 (builtins.tryEval (builtins.seq drv.outPath "bin/generators/${generatorName}"));
             in
@@ -127,16 +127,16 @@
       };
 
       config.build.script =
-        { pkgs, ... }:
+        { system, ... }:
         lib.concatMapAttrsStringSep "\n" (
           genName: gen:
           let
-            drv = gen.package { inherit pkgs; };
+            drv = gen.package { inherit system; };
             scriptPath = (builtins.tryEval (builtins.seq drv.outPath "bin/generators/${genName}"));
           in
           lib.optionalString (alloy.build.spec.generators.buildScripts && scriptPath.success) ''
             mkdir -p "$(dirname "$out/${scriptPath.value}")"
-            ln -s ${pkgs.lib.getExe drv} "$out/${scriptPath.value}"
+            ln -s ${lib.getExe drv} "$out/${scriptPath.value}"
           ''
         ) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
     };

@@ -1,4 +1,4 @@
-{
+{ withSystem, ... }: {
   flake.alloyModules.core =
     {
       config,
@@ -151,7 +151,10 @@
         config = {
           secrets.${config.secret} = { };
           package =
-            { pkgs, ... }:
+            { system, ... }:
+            let
+              pkgs = withSystem system ({ pkgs, ... }: pkgs);
+            in
             pkgs.writeShellScriptBin "alloy-user-gen-hashed-passwd" ''
               read -r -s -p "Enter password: " pass
               echo

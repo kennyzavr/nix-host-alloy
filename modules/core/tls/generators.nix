@@ -1,4 +1,4 @@
-{
+{ withSystem, ... }: {
   flake.alloyModules.core = { alib, lib, ... }: {
     generators.templates."tls/x509-cert/ca" = { config, ... }: {
       options = {
@@ -50,7 +50,10 @@
         "tls/x509-cert"
       ];
       config.package =
-        { pkgs, ... }:
+        { system, ... }:
+        let
+          pkgs = withSystem system ({ pkgs, ... }: pkgs);
+        in
         pkgs.writers.writePython3Bin "tls-ca-cert-generator"
           {
             libraries = [ pkgs.python3Packages.cryptography ];
@@ -304,7 +307,10 @@
         "tls/x509-leaf"
       ];
       config.package =
-        { pkgs, ... }:
+        { system, ... }:
+        let
+          pkgs = withSystem system ({ pkgs, ... }: pkgs);
+        in
         pkgs.writers.writePython3Bin "tls-leaf-cert-generator"
           {
             libraries = [ pkgs.python3Packages.cryptography ];

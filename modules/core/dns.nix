@@ -1,4 +1,4 @@
-{
+{ withSystem, ... }: {
   flake.alloyModules.core =
     {
       alib,
@@ -419,7 +419,10 @@
             "dns/tsig-key"
           ];
           config.package =
-            { pkgs, ... }:
+            { system, ... }:
+            let
+              pkgs = withSystem system ({ pkgs, ... }: pkgs);
+            in
             pkgs.writeShellScriptBin "dns-tsig-key-gen" ''
               TSIG_KEY=$(${pkgs.openssl}/bin/openssl rand -base64 32)
               "$ALLOY_BIN" secrets set "${config.keySecret}" <<< "$TSIG_KEY"

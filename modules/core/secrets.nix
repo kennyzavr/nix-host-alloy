@@ -1,4 +1,4 @@
-{ inputs, ... }: {
+{ inputs, withSystem, ... }: {
   flake.alloyModules.core =
     {
       alib,
@@ -463,8 +463,9 @@
           ++ (lib.flatten (lib.map (s: s.assertions) jailSecretsList));
 
         build.state =
-          { pkgs, ... }:
+          { system, ... }:
           let
+            pkgs = withSystem system ({ pkgs, ... }: pkgs);
             isPathLike = v: builtins.isPath v || (builtins.isString v && lib.hasPrefix "/" v);
           in
           {

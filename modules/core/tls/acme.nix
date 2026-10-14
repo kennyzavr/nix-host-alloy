@@ -113,8 +113,6 @@
                   acmeDnsUpdate = lib.mkIf (opts.challenge ? dns && opts.challenge.dns ? dnsupdate) (
                     let
                       dnsOpts = opts.challenge.dns.dnsupdate;
-                      zones = lib.map (d: alloy.dns.zones.${d.zone}) req.gCert.domains;
-                      primaryZone = builtins.head zones;
                     in
                     {
                       secrets.${dnsOpts.tsigKey.secret} = {
@@ -155,7 +153,7 @@
                         gid = req.lCert.gid;
                       };
                       systemd.services."acme-order-renew-tls-acme-${req.certName}" = {
-                        serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString (req.host.idx * 120)}";
+                        serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString ((req.host.idx) * 10)}";
                       };
                       security.acme.acceptTerms = true;
                       security.acme.certs."tls-acme-${req.certName}" = {

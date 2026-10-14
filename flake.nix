@@ -32,6 +32,9 @@
 
   outputs =
     inputs:
+    let
+      flakeModule = (import ./flakeModule.nix) { alloySelf = inputs.self; };
+    in
     inputs.flake-parts.lib.mkFlake
       {
         inherit inputs;
@@ -39,16 +42,14 @@
       {
         imports = [
           inputs.devshell.flakeModule
-          ./flakeModule.nix
+          flakeModule
           ./lib
           ./modules
           ./packages
           ./examples/simple-cluster
         ];
 
-        flake.flakeModules = {
-          default = ./flakeModule.nix;
-        };
+        flake.flakeModules.default = flakeModule;
 
         perSystem =
           {

@@ -1,6 +1,8 @@
 {
+  inputs,
   self,
   lib,
+  withSystem,
   ...
 }:
 let
@@ -33,12 +35,28 @@ in
     evalModule = module: alib.evalModules { modules = lib.toList module; };
 
     mkCli =
-      { pkgs, module }:
-      (alib.evalModules {
-        checkAssertions = false;
-        modules = [ module ];
-      }).config.cli.package
-        { inherit pkgs; };
+      {
+        flakeUrl,
+        moduleAttr,
+        alloyInputAttr,
+        system,
+        runtimeInputs ? [ ],
+        ...
+      }:
+      withSystem system (
+        { self', inputs', pkgs, ... }:
+        pkgs.writeShellApplication {
+          name = "alloy-cli";
+          inherit runtimeInputs;
+          text = ''
+            export ALLOY_FLAKE_URL="${flakeUrl}"
+            export ALLOY_MODULE_ATTR="${moduleAttr}"
+            export ALLOY_INPUT_ATTR="${alloyInputAttr}"
+
+            exec "${lib.getExe self'.packages.alloy-cli}" "$@"
+          '';
+        }
+      );
 
     types.ageKeyPair = lib.types.submodule {
       options = {

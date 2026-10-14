@@ -234,6 +234,7 @@ pub fn exec_gens<C: Ctx>(
             }
         };
 
+        let mut errors = vec![];
         let mut exec_triggered = false;
         for r#gen in plan {
             if cache.contains(r#gen.name) {
@@ -245,17 +246,13 @@ pub fn exec_gens<C: Ctx>(
                     gen_name: r#gen.name.to_string(),
                     source: ExecGenError::NoScript,
                 };
-                let _ = ctx.nix().trigger_assertions(
-                    &NixBuildSpec {
-                        generators: NixBuildGensSpec {
-                            build_scripts: true,
-                        },
-                        ..Default::default()
-                    },
-                    ctx.env().into(),
-                );
+
                 reporter.report(ctx, ExecGensEvent::Error(&error));
-                return Err(vec![error]);
+                errors.push(error);
+
+                let _ = ctx.nix().build_gen_package(r#gen.name, ctx.env().into());
+
+                continue;
             }
 
             if r#gen.data.script_path.is_none() {
@@ -282,6 +279,10 @@ pub fn exec_gens<C: Ctx>(
 
             exec_triggered = true;
             cache.insert(r#gen.name.to_string());
+        }
+
+        if !errors.is_empty() {
+            return Err(errors);
         }
 
         break;

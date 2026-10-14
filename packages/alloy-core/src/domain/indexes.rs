@@ -287,10 +287,6 @@ pub fn alloc_indexes<C: Ctx>(
 
     for index in indexes {
         if index.data.keys.is_none() {
-            let _ = ctx
-                .nix()
-                .trigger_assertions(&Default::default(), ctx.env().into());
-
             let err = AllocIndexesError::Alloc {
                 index_name: index.name.to_string(),
                 source: AllocIndexError::NoKeys,
@@ -298,6 +294,8 @@ pub fn alloc_indexes<C: Ctx>(
 
             reporter.report(ctx, AllocIndexesEvent::Error(&err));
             errors.push(err);
+
+            let _ = ctx.nix().eval_index_keys(index.name, ctx.env().into());
             continue;
         }
 

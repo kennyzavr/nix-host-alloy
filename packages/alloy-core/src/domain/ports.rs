@@ -65,7 +65,9 @@ pub struct NixBuildQemuSpec {
 }
 
 pub trait Nix {
-    fn trigger_assertions(&self, spec: &NixBuildSpec, ctx: NixCtx<'_>) -> Result<(), DynError>;
+    fn eval_index_keys(&self, index_name: &str, ctx: NixCtx<'_>) -> Result<(), DynError>;
+
+    fn build_gen_package(&self, gen_name: &str, ctx: NixCtx<'_>) -> Result<(), DynError>;
 
     fn build(&self, spec: &NixBuildSpec, ctx: NixCtx<'_>) -> Result<PathBuf, DynError>;
 }
@@ -113,7 +115,6 @@ pub trait GenRunner {
 pub trait QemuRunner {
     fn launch_guest(
         &self,
-        // alloy_name: &str,
         guest_name: &str,
         cache_dir: &Path,
         script_path: &Path,

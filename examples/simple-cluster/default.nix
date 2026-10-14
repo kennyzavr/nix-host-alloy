@@ -8,6 +8,10 @@
     _: host: host.nixosConfiguration
   ) (self.lib.evalModule self.alloyModules.simpleCluster).config.hosts;
 
+  flake.alloyCli.instances.simpleCluster = {
+    alloyInputAttr = "";
+  };
+
   flake.alloyModules.simpleCluster =
     { alib, config, ... }:
     let
@@ -51,6 +55,7 @@
 
       hosts.iridium = { config, ... }: {
         system = "x86_64-linux";
+        stateVersion = "26.11";
 
         facts."test_ssh_key" = {
           permissions.mode = "0600";
@@ -175,7 +180,8 @@
         qemu.nets."main" = { };
         qemu.variant = "direct-boot";
 
-        nixosModule = {
+        nixosModule = {pkgs,...}:{
+          environment.systemPackages = [pkgs.dig];
           boot.loader.systemd-boot.enable = true;
           boot.loader.efi.canTouchEfiVariables = true;
 
@@ -194,6 +200,7 @@
 
       hosts.gallium = { config, ... }: {
         system = "x86_64-linux";
+        stateVersion = "26.11";
 
         workspace.secrets = {
           age.keyPairs = [
@@ -261,7 +268,8 @@
           wg.endpoint = "192.168.100.${toString config.idx}";
         };
 
-        nixosModule = {
+        nixosModule = {pkgs,...}:{
+          environment.systemPackages = [pkgs.dig];
           boot.loader.systemd-boot.enable = true;
           boot.loader.efi.canTouchEfiVariables = true;
 

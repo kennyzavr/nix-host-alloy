@@ -1,11 +1,11 @@
 {
-  "http-edge-public-iridium": 9,
-  "ca-main": 1,
-  "dns-resolver-main-gallium": 7,
-  "dns-auth-main-iridium": 4,
-  "dns-auth-main-gallium": 3,
-  "http-edge-public-gallium": 8,
-  "dns-acme-main-iridium": 2,
   "dns-edge-gallium": 5,
-  "dns-edge-iridium": 6
+  "dns-auth-main-iridium": 4,
+  "dns-resolver-main-gallium": 7,
+  "dns-auth-main-gallium": 3,
+  "ca-main": 1,
+  "dns-edge-iridium": 6,
+  "dns-acme-main-iridium": 2,
+  "http-edge-public-gallium": 8,
+  "http-edge-public-iridium": 9
 }

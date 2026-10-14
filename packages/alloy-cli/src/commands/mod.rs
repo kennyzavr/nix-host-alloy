@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use alloy_core::domain::env::{Env, EnvModuleSource, EnvStateSource};
+use alloy_core::domain::env::{Env, EnvStateSource};
 
 use crate::{ctx::Ctx, term_ui::TermUi};
 
@@ -19,17 +19,14 @@ pub struct Args {
     #[arg(long = "state-source", env = Env::STATE_SOURCE)]
     state_source: Option<EnvStateSource>,
 
-    #[arg(long = "module-source", env = Env::MODULE_SOURCE, default_value = Env::DEFAULT_MODULE_SOURCE)]
-    module_source: EnvModuleSource,
-
-    #[arg(long = "alloy-url", env = Env::ALLOY_URL, default_value = Env::DEFAULT_ALLOY_URL)]
-    alloy_url: String,
-
-    #[arg(long = "nixpkgs-url", env = Env::NIXPKGS_URL, default_value = Env::DEFAULT_NIXPKGS_URL)]
-    nixpkgs_url: String,
-
     #[arg(long = "flake-url", env = Env::FLAKE_URL)]
-    flake_url: Option<String>,
+    flake_url: String,
+
+    #[arg(long = "flake-attr", env = Env::MODULE_ATTR)]
+    module_attr: String,
+
+    #[arg(long = "flake-attr", env = Env::INPUT_ATTR)]
+    input_attr: String,
 
     #[arg(long = "depth", env = Env::DEPTH, default_value = Env::DEFAULT_DEPTH)]
     depth: u64,
@@ -110,10 +107,9 @@ pub fn handle_args(args: Args) {
         state_source: args.state_source,
         workspace_root,
         flake_url: args.flake_url,
-        module_source: args.module_source,
+        module_attr: args.module_attr,
+        input_attr: args.input_attr,
         depth: args.depth,
-        alloy_url: args.alloy_url,
-        nixpkgs_url: args.nixpkgs_url,
         cache_dir,
         force: args.force,
         add_to_git: args.add_to_git,

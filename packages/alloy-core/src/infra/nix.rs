@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use crate::domain::env::EnvModuleSource;
 use crate::domain::ports::{Nix, NixBuildSpec, NixCtx};
 
 use super::System;
@@ -63,7 +62,7 @@ impl System {
     }
 
     fn build(&self, spec: &NixBuildSpec, ctx: NixCtx<'_>) -> Result<PathBuf, NixError> {
-        let expr = format!("res.config.build.package {{ inherit pkgs; }}",);
+        let expr = format!("res.config.build.package {{ inherit system; }}",);
 
         log::debug!("Evaluating state spec={:?}: {}", spec, expr);
         let expr = self.build_nix_expr(spec, &expr, false, ctx)?;
@@ -105,21 +104,13 @@ impl System {
         check_assertions: bool,
         ctx: NixCtx<'_>,
     ) -> Result<String, NixError> {
-        let module_source_expr = match ctx.module_source {
-            EnvModuleSource::File(path) => {
-                format!("import {}", path.to_str().unwrap())
-            }
-            EnvModuleSource::FlakeAttr(attr) => {
-                format!(r#"(builtins.getFlake "{}").{}"#, ctx.flake_url, attr)
-            }
-        };
-
         Ok(format!(
             r#"
             let
-                pkgs = (builtins.getFlake "{}").legacyPackages.${{builtins.currentSystem}};
-                alloyLib = (builtins.getFlake "{}").lib;
-                alloyModule = {};
+                system = builtins.currentSystem;
+                flake = builtins.getFlake "{}";
+                alloyLib = flake.{}.lib;
+                alloyModule = flake.{};
                 res = alloyLib.evalModules {{
                     modules = [
                         alloyModule
@@ -132,9 +123,9 @@ impl System {
             in
                 {}
             "#,
-            ctx.nixpkgs_url,
-            ctx.alloy_url,
-            module_source_expr,
+            ctx.flake_url,
+            ctx.input_attr,
+            ctx.module_attr,
             serde_json::to_string(spec).unwrap(),
             if check_assertions { "true" } else { "false" },
             inner_expr

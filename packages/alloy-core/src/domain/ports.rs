@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{
     DynError,
-    env::{Env, EnvModuleSource},
+    env::Env,
     models::{AgeIdentity, AgeRecipient},
 };
 
@@ -28,24 +28,18 @@ pub trait Ctx {
 
 #[derive(Debug, Clone, Copy)]
 pub struct NixCtx<'a> {
-    pub module_source: &'a EnvModuleSource,
-    pub nixpkgs_url: &'a str,
-    pub alloy_url: &'a str,
     pub flake_url: &'a str,
+    pub input_attr: &'a str,
+    pub module_attr: &'a str,
     pub show_nix_trace: bool,
 }
 
 impl<'a> From<&'a Env> for NixCtx<'a> {
     fn from(env: &'a Env) -> Self {
         Self {
-            module_source: &env.module_source,
-            nixpkgs_url: &env.nixpkgs_url,
-            alloy_url: &env.alloy_url,
-            flake_url: &env
-                .flake_url
-                .as_ref()
-                .map(String::as_str)
-                .unwrap_or(env.workspace_root.to_str().unwrap()),
+            flake_url: &env.flake_url,
+            module_attr: env.module_attr.as_str(),
+            input_attr: &env.input_attr.as_str(),
             show_nix_trace: env.show_nix_trace.unwrap_or(false),
         }
     }

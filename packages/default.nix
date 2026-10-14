@@ -49,6 +49,7 @@
                 ]
               }
           '';
+          meta.mainProgram = "alloy-cli";
         }
         // commonArgs
       );

@@ -152,7 +152,6 @@
             in
             {
               inherit (index) minValue maxValue factName;
-              evaluated = evalResult.success;
               keys = if evalResult.success then evalResult.value else null;
             }
           ) alloy.indexes;

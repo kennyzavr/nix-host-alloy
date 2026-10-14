@@ -21,6 +21,8 @@ pub enum Cmd {
 pub struct ExecArgs {
     #[arg(short = 'f', long = "force")]
     pub force: bool,
+    #[arg(short = 's', long = "force-stale")]
+    pub force_stale: bool,
     #[arg(short = 'a', long = "add-to-git")]
     pub add_to_git: bool,
     #[arg(short = 't', long = "tag")]
@@ -54,21 +56,34 @@ pub fn handle(args: Args, ctx: &mut Ctx, ui: TermUi) {
 fn handle_exec(args: ExecArgs, ctx: &mut Ctx, ui: TermUi) {
     log::info!("Executing generators");
 
+    let mut first = true;
     let _ = exec_gens(
         &args.generators,
         &args.tags,
         args.force.then_some(true),
+        args.force_stale.then_some(true),
         args.add_to_git.then_some(true),
         ctx,
         |_ctx: &mut Ctx, event: ExecGensEvent<'_>| match event {
             ExecGensEvent::GenExec { r#gen } => {
+                if first {
+                    first = false;
+                } else {
+                    ui.print_newline();
+                }
+
                 ui.print_step(&format!(
                     "Generator {}",
                     alloy_core::domain::NameMarker(r#gen.name)
                 ));
             }
-            ExecGensEvent::GenSkip { .. } => {
-                ui.print_skip(&format!("The generator is up to date\n"));
+            ExecGensEvent::GenSkip { r#gen: _, is_stale } => {
+                if is_stale {
+                    ui.print_info(&format!(
+                        "The generator is stale, you can use --force-stale flag"
+                    ));
+                }
+                ui.print_skip(&format!("The generator is up to date"));
             }
             ExecGensEvent::Error(err) => {
                 ui.print_error(err);
@@ -79,14 +94,22 @@ fn handle_exec(args: ExecArgs, ctx: &mut Ctx, ui: TermUi) {
 
 fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: TermUi) {
     let headers = if args.verbose {
-        vec!["Generator", "Wants", "After", "Secrets", "Facts", "Tags"]
+        vec![
+            "Generator",
+            "Wants",
+            "After",
+            "Secrets",
+            "Facts",
+            "Tags",
+            "IsStale",
+        ]
     } else {
-        vec!["Generator", "Tags"]
+        vec!["Generator", "Tags", "IsStale"]
     };
     let mut rows = Vec::new();
 
     let reporter = |_ctx: &mut Ctx, event: ListGensEvent<'_>| match event {
-        ListGensEvent::Gen(r#gen) => {
+        ListGensEvent::Gen { r#gen, is_stale } => {
             let tags = r#gen.data.tags.join(", ");
             if args.verbose {
                 let wants = r#gen.data.wants.join(", ");
@@ -115,9 +138,10 @@ fn handle_list(args: ListArgs, ctx: &mut Ctx, ui: TermUi) {
                     secrets,
                     facts,
                     tags,
+                    is_stale.to_string(),
                 ]);
             } else {
-                rows.push(vec![r#gen.name.to_string(), tags]);
+                rows.push(vec![r#gen.name.to_string(), tags, is_stale.to_string()]);
             }
         }
         ListGensEvent::Error(err) => {
@@ -142,7 +166,7 @@ fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: TermUi) {
         &args.generator,
         ctx,
         |_: &mut Ctx, event: ShowGenEvent<'_>| match event {
-            ShowGenEvent::Gen(r#gen) => {
+            ShowGenEvent::Gen { r#gen, is_stale } => {
                 let headers = vec!["Property", "Value"];
                 let mut rows = Vec::new();
 
@@ -150,6 +174,7 @@ fn handle_show(args: ShowArgs, ctx: &mut Ctx, ui: TermUi) {
                 rows.push(vec!["Tags".to_string(), r#gen.data.tags.join(", ")]);
                 rows.push(vec!["Wants".to_string(), r#gen.data.wants.join(", ")]);
                 rows.push(vec!["After".to_string(), r#gen.data.after.join(", ")]);
+                rows.push(vec!["IsStale".to_string(), is_stale.to_string()]);
 
                 let mut secrets: Vec<_> = r#gen.data.secrets.iter().collect();
                 secrets.sort();

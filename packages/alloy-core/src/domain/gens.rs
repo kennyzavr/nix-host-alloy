@@ -9,7 +9,9 @@ use std::fmt;
 use std::path::Path;
 
 use crate::domain::{
-    DynError, NameMarker, models,
+    DynError, NameMarker,
+    facts::{Fact, FindFactError, ReadFactError, WriteFactError},
+    models,
     ports::{NixBuildGensSpec, NixBuildSpec},
     state::reset_state,
 };
@@ -57,14 +59,32 @@ pub enum FindGenError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExecGenError {
-    #[error(transparent)]
-    Load(#[from] LoadStateError),
-
     #[error("Generator has no evaluated script")]
     NoScript,
 
     #[error("Failed to run generator script in the local env")]
     Runner(#[from] DynError),
+
+    #[error("Generator has no evaluated fingerprint")]
+    NoFingerprint,
+
+    #[error("Generator fingerprint fact not found")]
+    FindFingerprintFact(#[from] FindFactError),
+
+    #[error("Failed to write generator fingerprint fact")]
+    WriteFingerprintFact(#[from] WriteFactError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum IsStaleError {
+    #[error("Generator has no evaluated fingerprint")]
+    NoFingerprint,
+
+    #[error("Generator fingerprint fact not found")]
+    FindFingerprintFact(#[from] FindFactError),
+
+    #[error("Generator fingerprint fact has no value")]
+    ReadFingerprintFact(#[from] ReadFactError),
 }
 
 impl<'s> Gen<'s> {
@@ -120,12 +140,17 @@ impl<'s> Gen<'s> {
 
     pub fn exec(
         &self,
+        state: &models::State,
         force: Option<bool>,
         add_to_git: Option<bool>,
         ctx: &mut dyn Ctx,
     ) -> Result<bool, ExecGenError> {
         let Some(script_path) = &self.data.script_path else {
             return Err(ExecGenError::NoScript);
+        };
+
+        let Some(fingerprint) = &self.data.fingerprint else {
+            return Err(ExecGenError::NoFingerprint);
         };
 
         let state_source = ctx
@@ -157,7 +182,35 @@ impl<'s> Gen<'s> {
             .exec_gen(&script_path, force, add_to_git, ctx.env())
             .map_err(ExecGenError::Runner)?;
 
+        Fact::find(&self.data.fingerprint_fact, state)?.write(
+            fingerprint,
+            Some(true),
+            Some(add_to_git),
+            ctx,
+        )?;
+
         Ok(true)
+    }
+
+    pub fn is_stale(
+        &self,
+        state: &'s models::State,
+        ctx: &mut dyn Ctx,
+    ) -> Result<bool, IsStaleError> {
+        let fingerprint = self
+            .data
+            .fingerprint
+            .as_ref()
+            .ok_or(IsStaleError::NoFingerprint)?;
+
+        let fingerprint_fact = Fact::find(&self.data.fingerprint_fact, state)?;
+        if !fingerprint_fact.exists(ctx) {
+            return Ok(true);
+        }
+
+        let prev_fingerprint = fingerprint_fact.read(ctx)?;
+
+        Ok(fingerprint != &prev_fingerprint)
     }
 }
 
@@ -182,12 +235,19 @@ pub enum ExecGensError {
         #[source]
         source: ExecGenError,
     },
+
+    #[error("Failed to check is generator {} stale", NameMarker(&gen_name))]
+    IsStale {
+        gen_name: String,
+        #[source]
+        source: IsStaleError,
+    },
 }
 
 pub enum ExecGensEvent<'s> {
     GenExec { r#gen: &'s Gen<'s> },
 
-    GenSkip { r#gen: &'s Gen<'s> },
+    GenSkip { r#gen: &'s Gen<'s>, is_stale: bool },
 
     Error(&'s ExecGensError),
 }
@@ -202,6 +262,7 @@ pub fn exec_gens<C: Ctx>(
     gen_names: &[impl AsRef<str>],
     tags: &[impl AsRef<str>],
     force: Option<bool>,
+    force_stale: Option<bool>,
     add_to_git: Option<bool>,
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, ExecGensEvent<'s>>,
@@ -213,6 +274,7 @@ pub fn exec_gens<C: Ctx>(
             NixBuildSpec {
                 generators: NixBuildGensSpec {
                     build_scripts: true,
+                    calc_fingerprint: true,
                 },
                 ..Default::default()
             },
@@ -260,12 +322,34 @@ pub fn exec_gens<C: Ctx>(
                 continue 'l;
             }
 
-            reporter.report(ctx, ExecGensEvent::GenExec { r#gen: &r#gen });
+            let is_stale = match r#gen.is_stale(&state, ctx) {
+                Ok(v) => v,
+                Err(source) => {
+                    let err = ExecGensError::IsStale {
+                        gen_name: r#gen.name.to_string(),
+                        source,
+                    };
+                    reporter.report(ctx, ExecGensEvent::Error(&err));
+                    return Err(vec![err]);
+                }
+            };
 
-            match r#gen.exec(force, add_to_git, ctx) {
+            reporter.report(ctx, ExecGensEvent::GenExec { r#gen: &r#gen });
+            match r#gen.exec(
+                &state,
+                force.or(is_stale.then_some(force_stale).flatten()),
+                add_to_git,
+                ctx,
+            ) {
                 Ok(true) => {}
                 Ok(false) => {
-                    reporter.report(ctx, ExecGensEvent::GenSkip { r#gen: &r#gen });
+                    reporter.report(
+                        ctx,
+                        ExecGensEvent::GenSkip {
+                            r#gen: &r#gen,
+                            is_stale,
+                        },
+                    );
                 }
                 Err(error) => {
                     let error = ExecGensError::Exec {
@@ -423,10 +507,20 @@ pub enum ShowGenError {
         #[source]
         source: FindGenError,
     },
+
+    #[error("Failed to check is generator {} is stale", NameMarker(&gen_name))]
+    IsGenStale {
+        gen_name: String,
+        #[source]
+        source: IsStaleError,
+    },
+
+    #[error("Generator {} has no evaluated script", NameMarker(&gen_name))]
+    NoScript { gen_name: String },
 }
 
 pub enum ShowGenEvent<'s> {
-    Gen(&'s Gen<'s>),
+    Gen { r#gen: &'s Gen<'s>, is_stale: bool },
     Error(&'s ShowGenError),
 }
 
@@ -435,26 +529,59 @@ pub fn show_gen<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, ShowGenEvent<'s>>,
 ) -> Result<(), ShowGenError> {
-    let state = load_state(Default::default(), ctx)
-        .map_err(ShowGenError::Load)
-        .map_err(|err| {
+    let state = load_state(
+        NixBuildSpec {
+            generators: NixBuildGensSpec {
+                build_scripts: true,
+                calc_fingerprint: true,
+            },
+            ..Default::default()
+        },
+        ctx,
+    )
+    .map_err(ShowGenError::Load)
+    .map_err(|err| {
+        reporter.report(ctx, ShowGenEvent::Error(&err));
+        err
+    })?;
+
+    let r#gen = Gen::find(gen_name, &state)
+        .map_err(|source| ShowGenError::FindGen {
+            gen_name: gen_name.to_string(),
+            source,
+        })
+        .inspect_err(|err| {
             reporter.report(ctx, ShowGenEvent::Error(&err));
-            err
         })?;
 
-    match Gen::find(gen_name, &state).map_err(|source| ShowGenError::FindGen {
-        gen_name: gen_name.to_string(),
-        source,
-    }) {
-        Ok(r#gen) => {
-            reporter.report(ctx, ShowGenEvent::Gen(&r#gen));
-            Ok(())
-        }
-        Err(err) => {
-            reporter.report(ctx, ShowGenEvent::Error(&err));
-            Err(err)
-        }
+    if r#gen.data.script_path.is_none() {
+        let error = ShowGenError::NoScript {
+            gen_name: r#gen.name.to_string(),
+        };
+
+        reporter.report(ctx, ShowGenEvent::Error(&error));
+        let _ = ctx.nix().build_gen_package(r#gen.name, ctx.env().into());
+
+        return Err(error);
     }
+
+    let is_stale = r#gen.is_stale(&state, ctx).map_err(|source| {
+        let err = ShowGenError::IsGenStale {
+            gen_name: r#gen.name.to_string(),
+            source,
+        };
+        reporter.report(ctx, ShowGenEvent::Error(&err));
+        err
+    })?;
+
+    reporter.report(
+        ctx,
+        ShowGenEvent::Gen {
+            r#gen: &r#gen,
+            is_stale,
+        },
+    );
+    Ok(())
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -468,10 +595,20 @@ pub enum ListGensError {
         #[source]
         source: FindGenError,
     },
+
+    #[error("Failed to check is generator {} is stale", NameMarker(&gen_name))]
+    IsGenStale {
+        gen_name: String,
+        #[source]
+        source: IsStaleError,
+    },
+
+    #[error("Generator {} has no evaluated script", NameMarker(&gen_name))]
+    NoScript { gen_name: String },
 }
 
 pub enum ListGensEvent<'s> {
-    Gen(&'s Gen<'s>),
+    Gen { r#gen: &'s Gen<'s>, is_stale: bool },
     Error(&'s ListGensError),
     NoMatchingGens,
 }
@@ -482,12 +619,21 @@ pub fn list_gens<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, ListGensEvent<'s>>,
 ) -> Result<(), Vec<ListGensError>> {
-    let state = load_state(Default::default(), ctx)
-        .map_err(ListGensError::Load)
-        .map_err(|err| {
-            reporter.report(ctx, ListGensEvent::Error(&err));
-            vec![err]
-        })?;
+    let state = load_state(
+        NixBuildSpec {
+            generators: NixBuildGensSpec {
+                build_scripts: true,
+                calc_fingerprint: true,
+            },
+            ..Default::default()
+        },
+        ctx,
+    )
+    .map_err(ListGensError::Load)
+    .map_err(|err| {
+        reporter.report(ctx, ListGensEvent::Error(&err));
+        vec![err]
+    })?;
     let mut errors = Vec::new();
 
     let gens: Vec<_> = if gen_names.is_empty() {
@@ -519,7 +665,43 @@ pub fn list_gens<C: Ctx>(
     }
 
     for r#gen in gens {
-        reporter.report(ctx, ListGensEvent::Gen(&r#gen));
+        if r#gen.data.script_path.is_none() {
+            let error = ListGensError::NoScript {
+                gen_name: r#gen.name.to_string(),
+            };
+
+            reporter.report(ctx, ListGensEvent::Error(&error));
+            let _ = ctx.nix().build_gen_package(r#gen.name, ctx.env().into());
+
+            continue;
+        }
+
+        let Some(is_stale) = r#gen
+            .is_stale(&state, ctx)
+            .map_err(|source| {
+                let err = ListGensError::IsGenStale {
+                    gen_name: r#gen.name.to_string(),
+                    source,
+                };
+                reporter.report(ctx, ListGensEvent::Error(&err));
+                errors.push(err);
+            })
+            .ok()
+        else {
+            continue;
+        };
+
+        reporter.report(
+            ctx,
+            ListGensEvent::Gen {
+                r#gen: &r#gen,
+                is_stale,
+            },
+        );
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
     }
 
     Ok(())

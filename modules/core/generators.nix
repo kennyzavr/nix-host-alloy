@@ -9,7 +9,7 @@
     let
       alloy = config;
 
-      generatorCore = { config, name, ... }: {
+      generatorSubmodule = { config, name, ... }: {
         options = {
           enable = lib.mkOption {
             type = lib.types.bool;
@@ -18,6 +18,11 @@
           description = lib.mkOption {
             default = "";
             type = lib.types.str;
+          };
+          fingerprintFact = lib.mkOption {
+            default = "generators/${name}/fingerprint";
+            type = lib.types.str;
+            readOnly = true;
           };
           wants = lib.mkOption {
             default = [ ];
@@ -61,7 +66,7 @@
           type = lib.types.attrsOf (
             lib.types.submoduleWith {
               modules = [
-                generatorCore
+                generatorSubmodule
               ];
             }
           );
@@ -76,9 +81,12 @@
         (lib.filterAttrs (_: g: g.enable))
         (lib.mapAttrsToList (
           _: g:
-          lib.mapAttrs (_: f: {
+          {
+            ${g.fingerprintFact} = { };
+          }
+          // (lib.mapAttrs (_: f: {
             inherit (g) tags;
-          }) g.facts
+          }) g.facts)
         ))
         lib.mkMerge
       ];
@@ -101,29 +109,42 @@
               default = false;
               type = lib.types.bool;
             };
+            calcFingerprint = lib.mkOption {
+              default = false;
+              type = lib.types.bool;
+            };
           };
         };
       };
 
       config.build.state = { system, ... }: {
-        generators = lib.mapAttrs (generatorName: generator: {
-          inherit (generator)
-            wants
-            after
-            tags
-            ;
-          secrets = builtins.attrNames generator.secrets;
-          facts = builtins.attrNames generator.facts;
-          scriptPath =
-            let
-              scriptPath =
-                let
-                  drv = generator.package { inherit system; };
-                in
-                (builtins.tryEval (builtins.seq drv.outPath "bin/generators/${generatorName}"));
-            in
-            if alloy.build.spec.generators.buildScripts && scriptPath.success then scriptPath.value else null;
-        }) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
+        generators = lib.mapAttrs (
+          generatorName: generator:
+          let
+            packagePath =
+              let
+                drv = generator.package { inherit system; };
+              in
+              (builtins.tryEval (builtins.seq drv.outPath drv.outPath));
+          in
+          {
+            inherit (generator)
+              wants
+              after
+              tags
+              fingerprintFact
+              ;
+            secrets = builtins.attrNames generator.secrets;
+            facts = builtins.attrNames generator.facts;
+            fingerprint =
+              if alloy.build.spec.generators.calcFingerprint && packagePath.success then packagePath.value else null;
+            scriptPath =
+              if alloy.build.spec.generators.buildScripts && packagePath.success then
+                "bin/generators/${generatorName}"
+              else
+                null;
+          }
+        ) (lib.filterAttrs (_: g: g.enable) alloy.generators.instances);
       };
 
       config.build.script =

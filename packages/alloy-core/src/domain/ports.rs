@@ -55,6 +55,8 @@ pub struct NixBuildSpec {
 pub struct NixBuildGensSpec {
     #[serde(rename = "buildScripts")]
     pub build_scripts: bool,
+    #[serde(rename = "calcFingerprint")]
+    pub calc_fingerprint: bool,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]

@@ -65,6 +65,9 @@ pub struct Gen {
     pub facts: HashSet<String>,
     #[serde(rename = "scriptPath")]
     pub script_path: Option<PathBuf>,
+    #[serde(rename = "fingerprintFact")]
+    pub fingerprint_fact: String,
+    pub fingerprint: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]

@@ -48,7 +48,7 @@ impl Nix for System {
 
 impl System {
     pub fn eval_index_keys(&self, index_name: &str, ctx: NixCtx<'_>) -> Result<(), NixError> {
-        let expr = format!("res.config.indexes.{}.keys", index_name);
+        let expr = format!(r#"res.config.indexes."{}".keys"#, index_name);
         let expr = self.build_nix_expr(None, &expr, false, ctx)?;
 
         let mut cmd = std::process::Command::new("nix");
@@ -73,7 +73,7 @@ impl System {
 
     fn build_gen_package(&self, gen_name: &str, ctx: NixCtx<'_>) -> Result<(), NixError> {
         let expr = format!(
-            "res.config.generators.instances.{}.package {{ inherit system; }}",
+            r#"res.config.generators.instances."{}".package {{ inherit system; }}"#,
             gen_name
         );
         let expr = self.build_nix_expr(None, &expr, false, ctx)?;

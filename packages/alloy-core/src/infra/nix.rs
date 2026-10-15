@@ -39,9 +39,10 @@ impl Nix for System {
     fn build(
         &self,
         spec: &NixBuildSpec,
+        check_assertions: bool,
         ctx: NixCtx<'_>,
     ) -> Result<PathBuf, crate::domain::DynError> {
-        let path = self.build(spec, ctx)?;
+        let path = self.build(spec, check_assertions, ctx)?;
         Ok(path)
     }
 }
@@ -109,11 +110,16 @@ impl System {
         Ok(())
     }
 
-    fn build(&self, spec: &NixBuildSpec, ctx: NixCtx<'_>) -> Result<PathBuf, NixError> {
+    fn build(
+        &self,
+        spec: &NixBuildSpec,
+        check_assertions: bool,
+        ctx: NixCtx<'_>,
+    ) -> Result<PathBuf, NixError> {
         let expr = format!("res.config.build.package {{ inherit system; }}",);
 
         log::debug!("Evaluating state spec={:?}: {}", spec, expr);
-        let expr = self.build_nix_expr(Some(spec), &expr, false, ctx)?;
+        let expr = self.build_nix_expr(Some(spec), &expr, check_assertions, ctx)?;
 
         let output = std::process::Command::new("nix")
             .args([

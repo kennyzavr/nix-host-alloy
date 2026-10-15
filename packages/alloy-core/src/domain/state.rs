@@ -17,7 +17,11 @@ pub enum LoadStateError {
     Parse(#[from] serde_json::Error),
 }
 
-pub fn load_state(spec: NixBuildSpec, ctx: &mut dyn Ctx) -> Result<models::State, LoadStateError> {
+pub fn load_state(
+    spec: NixBuildSpec,
+    check_assertions: bool,
+    ctx: &mut dyn Ctx,
+) -> Result<models::State, LoadStateError> {
     let env = ctx.env();
 
     let dir_path = match &ctx.env().state_source {
@@ -27,7 +31,7 @@ pub fn load_state(spec: NixBuildSpec, ctx: &mut dyn Ctx) -> Result<models::State
         }) if spec == NixBuildSpec::default() || &spec == curr_spec => dir_path.clone(),
         _ => ctx
             .nix()
-            .build(&spec, env.into())
+            .build(&spec, check_assertions, env.into())
             .map_err(LoadStateError::Nix)?,
     };
 

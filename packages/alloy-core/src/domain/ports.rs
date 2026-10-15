@@ -71,7 +71,12 @@ pub trait Nix {
 
     fn build_gen_package(&self, gen_name: &str, ctx: NixCtx<'_>) -> Result<(), DynError>;
 
-    fn build(&self, spec: &NixBuildSpec, ctx: NixCtx<'_>) -> Result<PathBuf, DynError>;
+    fn build(
+        &self,
+        spec: &NixBuildSpec,
+        check_assertions: bool,
+        ctx: NixCtx<'_>,
+    ) -> Result<PathBuf, DynError>;
 }
 
 pub trait Fs {

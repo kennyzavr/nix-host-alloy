@@ -254,7 +254,7 @@ pub fn alloc_indexes<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'a> Reporter<C, AllocIndexesEvent<'a>>,
 ) -> Result<(), Vec<AllocIndexesError>> {
-    let state = load_state(Default::default(), ctx)
+    let state = load_state(Default::default(), false, ctx)
         .map_err(AllocIndexesError::Load)
         .map_err(|err| {
             reporter.report(ctx, AllocIndexesEvent::Error(&err));
@@ -359,7 +359,7 @@ pub fn show_index<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'a> Reporter<C, ShowIndexEvent<'a>>,
 ) -> Result<(), ShowIndexError> {
-    let state = load_state(Default::default(), ctx)
+    let state = load_state(Default::default(), false, ctx)
         .map_err(ShowIndexError::Load)
         .map_err(|err| {
             reporter.report(ctx, ShowIndexEvent::Error(&err));
@@ -407,7 +407,7 @@ pub fn list_indexes<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'a> Reporter<C, ListIndexesEvent<'a>>,
 ) -> Result<(), Vec<ListIndexesError>> {
-    let state = load_state(Default::default(), ctx)
+    let state = load_state(Default::default(), false, ctx)
         .map_err(ListIndexesError::Load)
         .map_err(|err| {
             reporter.report(ctx, ListIndexesEvent::Error(&err));
@@ -479,7 +479,7 @@ pub fn get_index_value<C: Ctx>(
     mut reporter: impl for<'a> Reporter<C, GetIndexValueEvent<'a>>,
 ) -> Result<HashMap<String, u64>, GetIndexValueError> {
     ((|| -> Result<_, _> {
-        let state = load_state(Default::default(), ctx)
+        let state = load_state(Default::default(), false, ctx)
             .map_err(GetIndexValueError::Load)
             .map_err(|err| {
                 reporter.report(ctx, GetIndexValueEvent::Error(&err));

@@ -278,6 +278,7 @@ pub fn exec_gens<C: Ctx>(
                 },
                 ..Default::default()
             },
+            false,
             ctx,
         )
         .map_err(ExecGensError::Load)
@@ -537,6 +538,7 @@ pub fn show_gen<C: Ctx>(
             },
             ..Default::default()
         },
+        false,
         ctx,
     )
     .map_err(ShowGenError::Load)
@@ -627,6 +629,7 @@ pub fn list_gens<C: Ctx>(
             },
             ..Default::default()
         },
+        false,
         ctx,
     )
     .map_err(ListGensError::Load)

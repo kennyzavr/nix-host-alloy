@@ -188,7 +188,6 @@ pub fn launch_qemu_guests<C: Ctx>(
     ctx: &mut C,
     mut reporter: impl for<'s> Reporter<C, LaunchQemuGuestsEvent<'s>>,
 ) -> Result<(), Vec<LaunchQemuGuestsError>> {
-    // TODO: load and check assertions
     let state = load_state(
         NixBuildSpec {
             qemu: NixBuildQemuSpec {
@@ -203,6 +202,7 @@ pub fn launch_qemu_guests<C: Ctx>(
             },
             ..Default::default()
         },
+        true,
         ctx,
     )
     .map_err(LaunchQemuGuestsError::Load)
@@ -422,6 +422,7 @@ pub fn show_qemu_guest<C: Ctx>(
             },
             ..Default::default()
         },
+        false,
         ctx,
     )
     .map_err(ShowQemuGuestError::Load)
@@ -511,6 +512,7 @@ pub fn list_qemu_guests<C: Ctx>(
             },
             ..Default::default()
         },
+        false,
         ctx,
     )
     .map_err(ListQemuGuestsError::Load)

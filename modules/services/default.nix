@@ -7,7 +7,6 @@
     ./http-edge.nix
     ./smtp-edge.nix
     ./tls-edge.nix
-    ./postbox.nix
     ./ca.nix
   ];
 

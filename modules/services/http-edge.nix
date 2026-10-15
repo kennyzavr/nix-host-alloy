@@ -272,7 +272,7 @@
                         endpoint = alloy.endpoints.${route.upstream.endpoint};
                       in
                       {
-                        serverName = alloy.dns.resolveNode route.domain;
+                        serverName = lib.removeSuffix "." (alloy.dns.resolveNode route.domain);
                         addSSL = route.downstream.tls.mode == "add";
                         onlySSL = route.downstream.tls.mode == "only";
                         forceSSL = route.downstream.tls.mode == "force";

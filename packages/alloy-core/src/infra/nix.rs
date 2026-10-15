@@ -173,7 +173,7 @@ impl System {
             if ctx.input_attr.is_empty() {
                 "".to_string()
             } else {
-                format!("{}.", ctx.input_attr)
+                format!(".{}", ctx.input_attr)
             },
             ctx.module_attr,
             if let Some(spec) = spec {

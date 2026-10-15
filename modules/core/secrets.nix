@@ -255,7 +255,7 @@
             };
           };
           mkTemplate = template: { pkgs, ... }: {
-            systemd.services."alloy-secret-templates-setup" = {
+            systemd.services."alloy-secrets-and-templates-setup" = {
               script = ''
                 mkdir -p "$(dirname "${template.path}")"
                 jq -rRs ${
@@ -288,7 +288,7 @@
               lib.map (kp: toString kp.identity) host.workspace.secrets.age.keyPairs
             );
 
-            systemd.services."alloy-secret-templates-setup" = {
+            systemd.services."alloy-secrets-and-templates-setup" = {
               enable = templates != [ ];
               wantedBy = [ "sysinit.target" ];
               after = [ "agenix-install-secrets.service" ];

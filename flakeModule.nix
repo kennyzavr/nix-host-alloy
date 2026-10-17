@@ -39,7 +39,7 @@
                       type = lib.types.str;
                     };
                     runtimeInputs = lib.mkOption {
-                      default = {...}: [];
+                      default = { ... }: [ ];
                       type = lib.types.functionTo (lib.types.listOf lib.types.unspecified);
                     };
                     packageName = lib.mkOption {

@@ -30,7 +30,7 @@ in
           Alloy '${res.config.name}': Failed assertions:
           ${lib.concatMapStringsSep "\n" (x: "- ${x.message}") failedAssertions}
         ''
-      else if (evalArgs.checkAssertions or true) && failedWarnings != [] then
+      else if (evalArgs.checkAssertions or true) && failedWarnings != [ ] then
         builtins.warn ''
           Alloy '${res.config.name}': Warnings:
           ${lib.concatMapStringsSep "\n" (x: "- ${x.message}") failedWarnings}
@@ -50,7 +50,12 @@ in
         ...
       }:
       withSystem system (
-        { self', inputs', pkgs, ... }:
+        {
+          self',
+          inputs',
+          pkgs,
+          ...
+        }:
         pkgs.writeShellApplication {
           name = "alloy-cli";
           inherit runtimeInputs;

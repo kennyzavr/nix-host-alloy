@@ -137,7 +137,10 @@
             secrets = builtins.attrNames generator.secrets;
             facts = builtins.attrNames generator.facts;
             fingerprint =
-              if alloy.build.spec.generators.calcFingerprint && packagePath.success then packagePath.value else null;
+              if alloy.build.spec.generators.calcFingerprint && packagePath.success then
+                packagePath.value
+              else
+                null;
             scriptPath =
               if alloy.build.spec.generators.buildScripts && packagePath.success then
                 "bin/generators/${generatorName}"

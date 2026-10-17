@@ -45,7 +45,7 @@
               type = lib.types.attrTag { };
             };
             assertions = lib.mkOption {
-              type = lib.types.listOf alib.types.unspecified;
+              type = lib.types.listOf lib.types.unspecified;
             };
           };
           config = lib.mkIf (config.src ? acme) {

@@ -180,8 +180,8 @@
         qemu.nets."main" = { };
         qemu.variant = "direct-boot";
 
-        nixosModule = {pkgs,...}:{
-          environment.systemPackages = [pkgs.dig];
+        nixosModule = { pkgs, ... }: {
+          environment.systemPackages = [ pkgs.dig ];
           boot.loader.systemd-boot.enable = true;
           boot.loader.efi.canTouchEfiVariables = true;
 
@@ -268,8 +268,8 @@
           wg.endpoint = "192.168.100.${toString config.idx}";
         };
 
-        nixosModule = {pkgs,...}:{
-          environment.systemPackages = [pkgs.dig];
+        nixosModule = { pkgs, ... }: {
+          environment.systemPackages = [ pkgs.dig ];
           boot.loader.systemd-boot.enable = true;
           boot.loader.efi.canTouchEfiVariables = true;
 

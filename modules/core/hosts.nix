@@ -39,8 +39,12 @@
             readOnly = true;
             type = lib.types.unspecified;
           };
+          warnings = lib.mkOption {
+            type = lib.types.listOf alib.types.warning;
+            default = [ ];
+          };
           assertions = lib.mkOption {
-            type = lib.types.listOf lib.types.unspecified;
+            type = lib.types.listOf alib.types.assertion;
             default = [ ];
           };
           tags = lib.mkOption {
@@ -75,6 +79,7 @@
       };
 
       config = {
+        warnings = lib.flatten (lib.mapAttrsToList (_: host: host.warnings) alloy.hosts);
         assertions = lib.flatten (lib.mapAttrsToList (_: host: host.assertions) alloy.hosts);
 
         indexes."hosts" = {

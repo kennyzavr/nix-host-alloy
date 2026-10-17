@@ -47,6 +47,11 @@
         default = [ ];
       };
 
+      options.warnings = lib.mkOption {
+        type = lib.types.listOf alib.types.warning;
+        default = [ ];
+      };
+
       config.build.state = { ... }: {
         name = config.name;
       };

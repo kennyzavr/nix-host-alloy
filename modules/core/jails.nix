@@ -120,6 +120,10 @@
               type = lib.types.listOf alib.types.assertion;
               default = [ ];
             };
+            warnings = lib.mkOption {
+              type = lib.types.listOf alib.types.warning;
+              default = [ ];
+            };
             tags = lib.mkOption {
               default = [ ];
               type = lib.types.listOf lib.types.str;
@@ -385,6 +389,8 @@
       };
 
       config = {
+        warnings = lib.flatten (lib.mapAttrsToList (_: jail: jail.warnings) alloy.jails);
+
         assertions =
           lib.flatten (lib.mapAttrsToList (_: jail: jail.assertions) alloy.jails)
           ++ (lib.flatten (

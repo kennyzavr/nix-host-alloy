@@ -23,12 +23,18 @@ in
           };
         };
         failedAssertions = lib.filter (a: !a.assertion) res.config.assertions;
+        failedWarnings = lib.filter (w: !w.condition) res.config.warnings;
       in
       if (evalArgs.checkAssertions or true) && failedAssertions != [ ] then
         builtins.throw ''
-          Failed assertions:
+          Alloy '${res.config.name}': Failed assertions:
           ${lib.concatMapStringsSep "\n" (x: "- ${x.message}") failedAssertions}
         ''
+      else if (evalArgs.checkAssertions or true) && failedWarnings != [] then
+        builtins.warn ''
+          Alloy '${res.config.name}': Warnings:
+          ${lib.concatMapStringsSep "\n" (x: "- ${x.message}") failedWarnings}
+        '' res
       else
         res;
 
@@ -78,6 +84,17 @@ in
     types.assertion = lib.types.submodule {
       options = {
         assertion = lib.mkOption {
+          type = lib.types.bool;
+        };
+        message = lib.mkOption {
+          type = lib.types.str;
+        };
+      };
+    };
+
+    types.warning = lib.types.submodule {
+      options = {
+        condition = lib.mkOption {
           type = lib.types.bool;
         };
         message = lib.mkOption {

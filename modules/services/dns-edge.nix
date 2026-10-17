@@ -39,28 +39,6 @@
           allowedOverlays = lib.mkOption {
             default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
-            apply =
-              allowedOverlays:
-              if allowedOverlays != null then
-                lib.pipe config.routes [
-                  (lib.mapAttrsToList (routeName: route: { inherit routeName route; }))
-                  (lib.foldl (
-                    overlays:
-                    { routeName, route }:
-                    alloy.checkEndpointOverlays "Service dns-edge '${name}': route '${routeName}':"
-                      route.upstream.endpoint
-                      overlays
-                  ) allowedOverlays)
-                  lib.unique
-                ]
-              else
-                lib.pipe config.routes [
-                  (lib.mapAttrsToList (
-                    _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
-                  ))
-                  lib.flatten
-                  lib.unique
-                ];
           };
           hosts = lib.mkOption {
             default = { };
@@ -76,6 +54,14 @@
       mkService =
         srvName: srv:
         let
+          overlays = lib.defaultTo (lib.pipe srv.routes [
+            (lib.mapAttrsToList (
+              _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
+            ))
+            lib.flatten
+            lib.unique
+          ]) srv.allowedOverlays;
+
           sortedRoutes = lib.pipe srv.routes [
             (lib.mapAttrsToList (name: route: route // { inherit name; }))
             (lib.imap (idx: route: route // { inherit idx; }))
@@ -87,6 +73,17 @@
           ];
         in
         {
+          warnings = lib.pipe srv.routes [
+            (lib.mapAttrsToList (
+              routeName: route: [
+                (alloy.mkEndpointOverlaysWarn route.upstream.endpoint srv.allowedOverlays
+                  "Service dns-edge '${srvName}': route '${routeName}':"
+                )
+              ]
+            ))
+            lib.flatten
+          ];
+
           assertions = [
             {
               assertion = srv.hosts != { };
@@ -233,7 +230,7 @@
                     }
                   ]);
 
-                overlays = lib.genAttrs srv.allowedOverlays (_: { });
+                overlays = lib.genAttrs overlays (_: { });
 
                 nixosModule = { pkgs, ... }: {
                   networking.firewall.allowedUDPPorts = [ 53 ];
@@ -249,7 +246,7 @@
                       addLocal('[${jail.uplink.ipv6}]:53')
                       ${lib.concatMapStringsSep "\n" (overlayName: ''
                         addLocal('[${jail.overlays.${overlayName}.ipv6}]:53')                        
-                      '') srv.allowedOverlays}
+                      '') overlays}
 
                       setACL({
                         '0.0.0.0/0',
@@ -315,6 +312,7 @@
           ];
         in
         {
+          warnings = lib.mkMerge (lib.map (s: s.warnings) services);
           assertions = lib.mkMerge (lib.map (s: s.assertions) services);
           dns = lib.mkMerge (lib.map (s: s.dns) services);
           jails = lib.mkMerge (lib.map (s: s.jails) services);

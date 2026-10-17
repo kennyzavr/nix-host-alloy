@@ -78,28 +78,6 @@
           allowedOverlays = lib.mkOption {
             default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
-            apply =
-              allowedOverlays:
-              if allowedOverlays != null then
-                lib.pipe config.routes [
-                  (lib.mapAttrsToList (routeName: route: { inherit routeName route; }))
-                  (lib.foldl (
-                    overlays:
-                    { routeName, route }:
-                    alloy.checkEndpointOverlays "Service smtp-edge '${name}': route '${routeName}':"
-                      route.upstream.endpoint
-                      overlays
-                  ) allowedOverlays)
-                  lib.unique
-                ]
-              else
-                lib.pipe config.routes [
-                  (lib.mapAttrsToList (
-                    _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
-                  ))
-                  lib.flatten
-                  lib.unique
-                ];
           };
           dkim = {
             enable = lib.mkOption {
@@ -147,7 +125,28 @@
 
       config =
         let
-          mkService = srvName: srv: {
+          mkService = srvName: srv:
+          let
+            overlays = lib.defaultTo (lib.pipe srv.routes [
+              (lib.mapAttrsToList (
+                _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
+              ))
+              lib.flatten
+              lib.unique
+            ]) srv.allowedOverlays;
+          in
+          {
+            warnings = lib.pipe srv.routes [
+              (lib.mapAttrsToList (
+                routeName: route: [
+                  (alloy.mkEndpointOverlaysWarn route.upstream.endpoint srv.allowedOverlays
+                    "Service tls-edge '${srvName}': route '${routeName}':"
+                  )
+                ]
+              ))
+              lib.flatten
+            ];
+
             assertions = [
               {
                 assertion = alib.types.dns.label.check srvName;
@@ -253,7 +252,7 @@
                   lib.map (overlayName: {
                     ip.v6 = alloy.jails."smtp-edge-${srvName}-${hostName}".overlays.${overlayName}.ipv6;
                     overlay = overlayName;
-                  }) srv.allowedOverlays
+                  }) overlays
                 ) srv.hosts
               );
             };
@@ -324,7 +323,7 @@
                       ip.v6 = hostNet.v6.address;
                     });
 
-                  overlays = lib.genAttrs srv.allowedOverlays (_: _: { });
+                  overlays = lib.genAttrs overlays (_: _: { });
 
                   endpoints.${srv.endpoint} = { };
 
@@ -527,6 +526,7 @@
           ];
         in
         {
+          warnings = lib.mkMerge (lib.map (s: s.warnings) services);
           assertions = lib.mkMerge (lib.map (s: s.assertions) services);
           generators = lib.mkMerge (lib.map (s: s.generators) services);
           secrets = lib.mkMerge (lib.map (s: s.secrets or { }) services);

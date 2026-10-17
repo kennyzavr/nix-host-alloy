@@ -65,28 +65,6 @@
           allowedOverlays = lib.mkOption {
             default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
-            apply =
-              allowedOverlays:
-              if allowedOverlays != null then
-                lib.pipe config.routes [
-                  (lib.mapAttrsToList (routeName: route: { inherit routeName route; }))
-                  (lib.foldl (
-                    overlays:
-                    { routeName, route }:
-                    alloy.checkEndpointOverlays "Service http-edge '${name}': route '${routeName}':"
-                      route.upstream.endpoint
-                      overlays
-                  ) allowedOverlays)
-                  lib.unique
-                ]
-              else
-                lib.pipe config.routes [
-                  (lib.mapAttrsToList (
-                    _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
-                  ))
-                  lib.flatten
-                  lib.unique
-                ];
           };
           hosts = lib.mkOption {
             default = { };
@@ -99,7 +77,28 @@
         };
       };
 
-      mkService = srvName: srv: {
+      mkService = srvName: srv:
+      let
+        overlays = lib.defaultTo (lib.pipe srv.routes [
+          (lib.mapAttrsToList (
+            _: route: builtins.attrNames alloy.endpoints.${route.upstream.endpoint}.overlays
+          ))
+          lib.flatten
+          lib.unique
+        ]) srv.allowedOverlays;
+      in
+      {
+        warnings = lib.pipe srv.routes [
+          (lib.mapAttrsToList (
+            routeName: route: [
+              (alloy.mkEndpointOverlaysWarn route.upstream.endpoint srv.allowedOverlays
+                "Service http-edge '${srvName}': route '${routeName}':"
+              )
+            ]
+          ))
+          lib.flatten
+        ];
+
         assertions = [
           {
             assertion = srv.hosts != { };
@@ -198,7 +197,7 @@
                   }
                 ]);
 
-              overlays = lib.genAttrs srv.allowedOverlays (_: _: { });
+              overlays = lib.genAttrs overlays (_: _: { });
 
               tls.certs = lib.pipe srv.routes [
                 (lib.filterAttrs (_: r: r.downstream.tls.mode != "none" && r.downstream.tls.cert != null))
@@ -319,6 +318,7 @@
           ];
         in
         {
+          warnings = lib.mkMerge (lib.map (s: s.warnings) services);
           assertions = lib.mkMerge (lib.map (s: s.assertions) services);
           jails = lib.mkMerge (lib.map (s: s.jails) services);
           dns = lib.mkMerge (lib.map (s: s.dns) services);

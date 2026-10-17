@@ -220,7 +220,13 @@
           };
         };
         config = {
-          overlays = lib.genAttrs (lib.unique (lib.map (t: t.overlay) config.targets)) (_: { });
+          overlays = lib.pipe config.targets [
+            (lib.filter (target: target.overlay != null))
+            (lib.map (target: target.overlay))
+            lib.unique
+            (lib.map (overlay: lib.nameValuePair overlay { }))
+            builtins.listToAttrs
+          ];
         };
       };
 
@@ -664,7 +670,7 @@
           type = lib.types.attrsOf (lib.types.submodule overlaySubmodule);
         };
 
-        checkEndpointOverlays = lib.mkOption {
+        mkEndpointOverlaysWarn = lib.mkOption {
           readOnly = true;
           type = lib.types.unspecified;
         };
@@ -736,22 +742,28 @@
           );
         in
         {
-          checkEndpointOverlays =
-            contextMessage: endpointName: allowedOverlays:
+          mkEndpointOverlaysWarn =
+            endpointName: allowedOverlays: contextMsg:
             let
               endpoint = alloy.endpoints.${endpointName};
-              invalidTargets = lib.filter (
-                { idx, target }: target.overlay != null && !(builtins.elem target.overlay allowedOverlays)
-              ) (lib.imap0 (idx: target: { inherit idx target; }) endpoint.targets);
+              invalidTargets = lib.pipe endpoint.targets [
+                (lib.imap0 (idx: target: { inherit idx target; }))
+                (lib.filter (
+                  { idx, target }: target.overlay != null && !(builtins.elem target.overlay allowedOverlays)
+                ))
+              ];
             in
-            lib.warnIf (invalidTargets != [ ])
-              "[Alloy] ${contextMessage} Endpoint '${endpointName}' has invalid overlay references, allowed overlays: [ ${lib.concatStringsSep ", " allowedOverlays} ], invalid targets: [ ${
-                lib.concatMapStringsSep ", " (
-                  { idx, target }:
-                  ''${toString idx}: { overlay = "${target.overlay}"; ip = "${target.ip.v6 or target.ip.v4}"; } ''
-                ) invalidTargets
-              } ]"
-              allowedOverlays;
+            {
+              condition = allowedOverlays != null -> invalidTargets != [ ];
+              message =
+                lib.optionalString (allowedOverlays != null)
+                  "[Alloy] ${contextMsg} Endpoint '${endpointName}' has invalid overlay references, allowed overlays: [ ${lib.concatStringsSep ", " allowedOverlays} ], invalid targets: [ ${
+                    lib.concatMapStringsSep ", " (
+                      { idx, target }:
+                      ''${toString idx}: { overlay = "${target.overlay}"; ip = "${target.ip.v6 or target.ip.v4}"; } ''
+                    ) invalidTargets
+                  } ]";
+            };
 
           assertions =
             [ ]

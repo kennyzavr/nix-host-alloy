@@ -65,6 +65,10 @@
         certName:
         lib.types.submodule {
           options = {
+            acceptTerms = lib.mkOption {
+              default = false;
+              type = lib.types.bool;
+            };
             email = lib.mkOption {
               default = "";
               type = lib.types.str;
@@ -150,7 +154,6 @@
             warnings = lib.mkMerge (lib.map (c: c.warnings or [ ]) certConfigs);
             secrets = lib.mkMerge (lib.map (c: c.secrets or { }) certConfigs);
             secretTemplates = lib.mkMerge (lib.map (c: c.secretTemplates or { }) certConfigs);
-            # tls.certs = lib.mkMerge (lib.map (c: c.tls.certs or { }) certConfigs);
             nixosModule = {
               imports = lib.map (c: c.nixosModule) certConfigs;
             };
@@ -188,7 +191,6 @@
           in
           {
             warnings = lib.mkMerge (lib.map (c: c.warnings or [ ]) certConfigs);
-            # tls.certs = lib.mkMerge (lib.map (c: c.tls.certs or { }) certConfigs);
           };
       };
 
@@ -233,12 +235,6 @@
             '';
           };
 
-          # tls.certs.${certName} = {
-          #   certPath = "/var/lib/acme/tls-acme-${certName}/fullchain.pem";
-          #   keyPath = "/var/lib/acme/tls-acme-${certName}/key.pem";
-          #   fullPath = "/var/lib/acme/tls-acme-${certName}/full.pem";
-          # };
-
           nixosModule = { pkgs, ... }: {
             users.groups.${hostCert.group} = {
               gid = hostCert.gid;
@@ -246,7 +242,7 @@
             systemd.services."acme-order-renew-tls-acme-${certName}" = {
               serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString ((host.idx) * 10)}";
             };
-            security.acme.acceptTerms = true;
+            security.acme.acceptTerms = acmeOpts.acceptTerms;
             security.acme.certs."tls-acme-${certName}" = {
               email = acmeOpts.email;
               server = toString ca.acme.url;
@@ -297,12 +293,20 @@
               '';
             };
 
-            nixosModule = {
+            nixosModule = { pkgs, ... }: {
+              users.groups.${jailCert.group} = {
+                gid = jailCert.gid;
+              };
+              systemd.services."acme-order-renew-tls-acme-${certName}" = {
+                serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString ((host.idx) * 10)}";
+              };
+              security.acme.acceptTerms = acmeOpts.acceptTerms;
               security.acme.certs."tls-acme-${certName}" = {
                 email = acmeOpts.email;
                 server = toString ca.acme.url;
                 domain = primaryDomain;
                 extraDomainNames = globalExtraDomains;
+                group = lib.mkDefault jailCert.group;
                 dnsProvider = "dnsupdate";
                 environmentFile = host.secretTemplates."tls/certs/${certName}/acme/dnsupdate/creds".path;
               };
@@ -327,12 +331,6 @@
               alloy.mkEndpointOverlaysWarn ca.acme.url.server.endpoint (builtins.attrNames jail.overlays)
                 "jail '${jailName}': acme dnsupdate cert '${certName}':"
             );
-
-            # tls.certs.${certName} = {
-            #   certPath = "/var/lib/alloy/certs/${certName}/fullchain.pem";
-            #   keyPath = "/var/lib/alloy/certs/${certName}/key.pem";
-            #   fullPath = "/var/lib/alloy/certs/${certName}/full.pem";
-            # };
           };
         };
     in

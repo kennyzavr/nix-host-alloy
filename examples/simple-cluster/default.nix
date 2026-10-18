@@ -307,6 +307,7 @@
         ];
         ca = "main";
         src.acme = {
+          acceptTerms = true;
           email = "admin@simple-cluster.internal";
           challenge.dns.dnsupdate = {
             server.endpoint = alloy.services.dns-acme."main".endpoint;
@@ -323,6 +324,7 @@
         ];
         ca = "main";
         src.acme = {
+          acceptTerms = true;
           email = "me@simple-cluster.internal";
           challenge.dns.dnsupdate = {
             server.endpoint = alloy.services.dns-acme."main".endpoint;

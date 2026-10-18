@@ -263,41 +263,64 @@
                         ''
                       ) srv.routes}
                     '';
-                    virtualHosts = lib.mapAttrs' (
-                      routeName: route:
-                      lib.nameValuePair "route-${routeName}" (
-                        let
-                          isTls = route.downstream.tls.mode != "none";
-                          cert = jail.tls.certs.${route.downstream.tls.cert};
-                          endpoint = alloy.endpoints.${route.upstream.endpoint};
-                        in
-                        {
-                          serverName = lib.removeSuffix "." (alloy.dns.resolveNode route.domain);
-                          addSSL = route.downstream.tls.mode == "add";
-                          onlySSL = route.downstream.tls.mode == "only";
-                          forceSSL = route.downstream.tls.mode == "force";
-                          sslCertificate = lib.mkIf isTls cert.certPath;
-                          sslCertificateKey = lib.mkIf isTls cert.keyPath;
-                          http2 = route.downstream.http2;
-                          http3 = route.downstream.http3;
-                          quic = route.downstream.http3;
-                          locations."/" = {
-                            recommendedProxySettings = true;
-                            proxyPass = "https://route-${routeName}";
-                          };
-                          extraConfig = ''
-                            ${if endpoint.httpBuffering != false then "proxy_buffering on;" else "proxy_buffering off;"}
-                            proxy_ssl_certificate ${jail.mtls.certPath};
-                            proxy_ssl_certificate_key ${jail.mtls.keyPath};
+                    virtualHosts =
+                      (lib.mapAttrs' (
+                        routeName: route:
+                        lib.nameValuePair "route-${routeName}" (
+                          let
+                            isTls = route.downstream.tls.mode != "none";
+                            cert = jail.tls.certs.${route.downstream.tls.cert};
+                            endpoint = alloy.endpoints.${route.upstream.endpoint};
+                          in
+                          {
+                            serverName = lib.removeSuffix "." (alloy.dns.resolveNode route.domain);
+                            addSSL = route.downstream.tls.mode == "add";
+                            onlySSL = route.downstream.tls.mode == "only";
+                            forceSSL = route.downstream.tls.mode == "force";
+                            sslCertificate = lib.mkIf isTls cert.certPath;
+                            sslCertificateKey = lib.mkIf isTls cert.keyPath;
+                            http2 = route.downstream.http2;
+                            http3 = route.downstream.http3;
+                            quic = route.downstream.http3;
+                            locations."/" = {
+                              recommendedProxySettings = true;
+                              proxyPass = "https://route-${routeName}";
+                            };
+                            extraConfig = ''
+                              ${if endpoint.httpBuffering != false then "proxy_buffering on;" else "proxy_buffering off;"}
+                              proxy_ssl_certificate ${jail.mtls.certPath};
+                              proxy_ssl_certificate_key ${jail.mtls.keyPath};
 
-                            proxy_ssl_trusted_certificate ${alloy.mtls.certPath};
-                            proxy_ssl_verify on;
-                            proxy_ssl_verify_depth 1;
-                            proxy_ssl_name ${endpoint.domain};
+                              proxy_ssl_trusted_certificate ${alloy.mtls.certPath};
+                              proxy_ssl_verify on;
+                              proxy_ssl_verify_depth 1;
+                              proxy_ssl_name ${endpoint.domain};
+                            '';
+                          }
+                        )
+                      ) srv.routes)
+                      // {
+                        "reject-unknown" = {
+                          serverName = "_";
+                          default = true;
+                          rejectSSL = true;
+                          listen = [
+                            {
+                              addr = "0.0.0.0";
+                              port = 443;
+                              ssl = true;
+                            }
+                            {
+                              addr = "[::]";
+                              port = 443;
+                              ssl = true;
+                            }
+                          ];
+                          extraConfig = ''
+                            return 444;
                           '';
-                        }
-                      )
-                    ) srv.routes;
+                        };
+                      };
                   };
                 };
               }

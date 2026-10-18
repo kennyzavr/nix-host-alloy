@@ -240,7 +240,7 @@
               gid = hostCert.gid;
             };
             systemd.services."acme-order-renew-tls-acme-${certName}" = {
-              serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString ((host.idx) * 10)}";
+              serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString ((host.idx) * 20)}";
             };
             security.acme.acceptTerms = acmeOpts.acceptTerms;
             security.acme.certs."tls-acme-${certName}" = {
@@ -298,7 +298,7 @@
                 gid = jailCert.gid;
               };
               systemd.services."acme-order-renew-tls-acme-${certName}" = {
-                serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString ((host.idx) * 10)}";
+                serviceConfig.ExecStartPre = "+${pkgs.coreutils}/bin/sleep ${toString ((host.idx) * 20)}";
               };
               security.acme.acceptTerms = acmeOpts.acceptTerms;
               security.acme.certs."tls-acme-${certName}" = {

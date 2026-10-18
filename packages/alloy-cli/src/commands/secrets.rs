@@ -158,6 +158,9 @@ fn handle_edit(args: EditArgs, ctx: &mut Ctx, ui: TermUi) {
         |_ctx: &mut Ctx, _event: GetSecretValueEvent<'_>| {},
     ) {
         Ok(v) => v,
+        Err(alloy_core::domain::secrets::GetSecretValueError::Read(
+            alloy_core::domain::secrets::ReadSecretError::FsRead(_),
+        )) => Vec::new(),
         Err(err) => {
             ui.print_error(&err);
             return;

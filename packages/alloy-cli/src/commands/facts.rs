@@ -132,6 +132,9 @@ fn handle_set(args: SetArgs, ctx: &mut Ctx, ui: TermUi) {
 fn handle_edit(args: EditArgs, ctx: &mut Ctx, ui: TermUi) {
     let data = match get_fact_value(&args.fact, ctx, |_: &mut Ctx, _: GetFactValueEvent<'_>| {}) {
         Ok(data) => data,
+        Err(alloy_core::domain::facts::GetFactValueError::Read(
+            alloy_core::domain::facts::ReadFactError::FsRead(_),
+        )) => String::new(),
         Err(err) => {
             ui.print_error(&err);
             return;

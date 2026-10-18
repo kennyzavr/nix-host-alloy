@@ -1,4 +1,4 @@
-{
+{ withSystem, ... }: {
   flake.alloyModules.services =
     {
       lib,
@@ -267,7 +267,10 @@
                 facts.${srv.dkim.pubKeyFact} = { };
                 secrets.${srv.dkim.privKeySecret} = { };
                 package =
-                  { pkgs, ... }:
+                  { system, ... }:
+                  let
+                    pkgs = withSystem system ({ pkgs, ... }: pkgs);
+                  in
                   pkgs.writeShellApplication {
                     name = "smtp-edge-dkim-generator";
                     runtimeInputs = [

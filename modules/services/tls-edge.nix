@@ -29,10 +29,6 @@
             port = lib.mkOption {
               type = lib.types.port;
             };
-            tls.enable = lib.mkOption {
-              default = false;
-              type = lib.types.bool;
-            };
             tls.cert = lib.mkOption {
               default = null;
               type = lib.types.nullOr lib.types.str;
@@ -123,9 +119,7 @@
                 message = "[Alloy] tls-edge '${srvName}': route '${routeName}' refers to an unknown endpoint '${route.upstream.endpoint}'.";
               }
               {
-                assertion =
-                  route.downstream.tls.enable
-                  -> route.downstream.tls.cert != null && builtins.hasAttr route.downstream.tls.cert alloy.tls.certs;
+                assertion = builtins.hasAttr route.downstream.tls.cert alloy.tls.certs;
                 message = "[Alloy] tls-edge '${srvName}': route '${routeName}': downstream.tls.cert must be valid reference to tls.certs entry.";
               }
             ]) srv.routes
@@ -194,7 +188,6 @@
                 overlays = lib.genAttrs overlays (_: _: { });
 
                 tls.certs = lib.pipe srv.routes [
-                  (lib.filterAttrs (_: route: route.downstream.tls.enable && route.downstream.tls.cert != null))
                   (lib.mapAttrsToList (
                     _: route: {
                       ${route.downstream.tls.cert} = {
@@ -239,14 +232,12 @@
                           let
                             endpoint = alloy.endpoints.${route.upstream.endpoint};
                             policy = endpoint.loadBalancing.policy;
-                            hasCert = route.downstream.tls.enable && route.downstream.tls.cert != null;
-                            certCfg = if hasCert then jail.tls.certs.${route.downstream.tls.cert} else null;
-                            bindParams = if hasCert then "ssl crt ${certCfg.fullPath}" else "";
+                            certCfg = jail.tls.certs.${route.downstream.tls.cert};
                           in
                           ''
                             frontend stream-${routeName}
-                              bind ${jail.uplink.ipv4}:${toString route.downstream.port} ${bindParams}
-                              bind [${jail.uplink.ipv6}]:${toString route.downstream.port} ${bindParams}
+                              bind ${jail.uplink.ipv4}:${toString route.downstream.port} ssl crt ${certCfg.fullPath}
+                              bind [${jail.uplink.ipv6}]:${toString route.downstream.port} ssl crt ${certCfg.fullPath}
                               default_backend backend-${routeName}
 
                             backend backend-${routeName}

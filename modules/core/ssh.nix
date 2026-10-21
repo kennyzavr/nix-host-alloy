@@ -12,7 +12,7 @@
       listenSubmodule = host: {
         options = {
           net = lib.mkOption {
-            type = lib.types.str;
+            type = lib.types.nullOr lib.types.str;
           };
           port = lib.mkOption {
             type = lib.types.port;
@@ -103,15 +103,18 @@
                   (lib.map (
                     listen:
                     let
-                      net = config.nets.${listen.net};
+                      net = if listen.net != null then config.nets.${listen.net} else null;
                     in
                     [ ]
-                    ++ (lib.optional (net.v4 != null) {
-                      addr = net.v4.address;
+                    ++ (lib.optional (net == null) {
                       inherit (listen) port;
                     })
-                    ++ (lib.optional (net.v6 != null) {
-                      addr = net.v6.address;
+                    ++ (lib.optional (net != null && net.v4 != null) {
+                      addr = net.v4.mode.static.address;
+                      inherit (listen) port;
+                    })
+                    ++ (lib.optional (net != null && net.v6 != null) {
+                      addr = net.v6.mode.static.address;
                       inherit (listen) port;
                     })
                   ))

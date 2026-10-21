@@ -605,7 +605,7 @@ pub fn list_secret_refs<C: Ctx>(
     .filter(|secret| tags.is_empty() || has_intersection(tags, &secret.data.tags))
     .collect();
 
-    let hosts: Vec<_> = if host_names.is_empty() {
+    let hosts: Vec<_> = if host_names.is_empty() && jail_names.is_empty() {
         Either::Left(state.hosts.keys().map(String::as_str))
     } else {
         Either::Right(host_names.into_iter().map(AsRef::as_ref))
@@ -624,7 +624,7 @@ pub fn list_secret_refs<C: Ctx>(
     })
     .collect();
 
-    let jails: Vec<_> = if jail_names.is_empty() {
+    let jails: Vec<_> = if jail_names.is_empty() && host_names.is_empty() {
         Either::Left(state.jails.keys().map(String::as_str))
     } else {
         Either::Right(jail_names.into_iter().map(AsRef::as_ref))

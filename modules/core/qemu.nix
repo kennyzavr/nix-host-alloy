@@ -148,7 +148,8 @@
                 # We use file:/dev/stdout instead of stdio so QEMU doesn't try to read from stdin,
                 # which causes it to freeze when run in detached mode (stdin closed).
                 "-serial"
-                "file:/dev/stdout"
+                "unix:$ALLOY_SERIAL_SOCKET,server=on,wait=off"
+                # "file:/dev/stdout"
               ]
               ++ lib.concatLists (
                 lib.mapAttrsToList (
@@ -162,6 +163,9 @@
                   ]
                 ) config.nets
               );
+
+            boot.kernelModules = [ "console=ttyS0,115200n8" ];
+            systemd.services."serial-getty@ttyS0".enable = true;
           };
 
           config.variants."direct-boot".package =

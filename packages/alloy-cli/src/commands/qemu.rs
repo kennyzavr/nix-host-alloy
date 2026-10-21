@@ -4,8 +4,8 @@ use std::sync::{
 };
 
 use alloy_core::domain::qemu::{
-    LaunchQemuGuestsEvent, ListQemuGuestsEvent, ShowQemuGuestEvent, launch_qemu_guests,
-    list_qemu_guests, show_qemu_guest,
+    ConnectToQemuGuestEvent, LaunchQemuGuestsEvent, ListQemuGuestsEvent, ShowQemuGuestEvent,
+    connect_to_qemu_guest, launch_qemu_guests, list_qemu_guests, show_qemu_guest,
 };
 
 use crate::{ctx::Ctx, term_ui::TermUi};
@@ -19,6 +19,7 @@ pub struct Args {
 #[derive(clap::Subcommand, Debug, Clone)]
 pub enum Cmd {
     Launch(LaunchArgs),
+    Console(ConsoleArgs),
     List(ListArgs),
     Show(ShowArgs),
 }
@@ -28,6 +29,11 @@ pub struct LaunchArgs {
     #[arg(short = 't', long = "tag")]
     pub tags: Vec<String>,
     pub hosts: Vec<String>,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct ConsoleArgs {
+    host: String,
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -44,6 +50,7 @@ pub struct ShowArgs {
 pub fn handle(args: Args, ctx: &mut Ctx, ui: TermUi) {
     match args.cmd {
         Cmd::Launch(args) => handle_launch(args, ctx, ui),
+        Cmd::Console(args) => handle_console(args, ctx, ui),
         Cmd::List(args) => handle_list(args, ctx, ui),
         Cmd::Show(args) => handle_show(args, ctx, ui),
     }
@@ -113,6 +120,18 @@ fn handle_launch(args: LaunchArgs, ctx: &mut Ctx, ui: TermUi) {
             }
             LaunchQemuGuestsEvent::Error(e) => {
                 ui.print_error(e);
+            }
+        },
+    );
+}
+
+fn handle_console(args: ConsoleArgs, ctx: &mut Ctx, ui: TermUi) {
+    let _ = connect_to_qemu_guest(
+        &args.host,
+        ctx,
+        |_: &mut Ctx, event: ConnectToQemuGuestEvent<'_>| match event {
+            ConnectToQemuGuestEvent::Error(error) => {
+                ui.print_error(error);
             }
         },
     );

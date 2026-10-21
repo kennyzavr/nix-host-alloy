@@ -470,6 +470,109 @@ pub fn show_qemu_guest<C: Ctx>(
 }
 
 #[derive(thiserror::Error, Debug)]
+pub enum ConnectToQemuGuestError {
+    #[error(transparent)]
+    Load(#[from] LoadStateError),
+
+    #[error("Failed to find host {}", NameMarker(&host_name))]
+    FindHost {
+        host_name: String,
+        #[source]
+        source: FindHostError,
+    },
+
+    #[error(transparent)]
+    FindQemuOpts(#[from] FindQemuOptsError),
+
+    #[error("Failed to find QEMU guest for host {}", NameMarker(&host_name))]
+    FindQemuGuest {
+        host_name: String,
+        #[source]
+        source: FindQemuGuestError,
+    },
+
+    #[error("Failed to connect to qemu guest of host {} through serial socket", NameMarker(&host_name))]
+    Connect {
+        host_name: String,
+        #[source]
+        source: DynError,
+    },
+}
+
+pub enum ConnectToQemuGuestEvent<'s> {
+    Error(&'s ConnectToQemuGuestError),
+}
+
+pub fn connect_to_qemu_guest<C: Ctx>(
+    host_name: &str,
+    ctx: &mut C,
+    mut reporter: impl for<'s> Reporter<C, ConnectToQemuGuestEvent<'s>>,
+) -> Result<(), ConnectToQemuGuestError> {
+    let state = load_state(
+        NixBuildSpec {
+            qemu: NixBuildQemuSpec {
+                build: true,
+                build_scripts: None,
+            },
+            ..Default::default()
+        },
+        false,
+        ctx,
+    )
+    .map_err(ConnectToQemuGuestError::Load)
+    .map_err(|err| {
+        reporter.report(ctx, ConnectToQemuGuestEvent::Error(&err));
+        err
+    })?;
+
+    let opts = match QemuOpts::find(&state, ctx) {
+        Ok(opts) => opts,
+        Err(source) => {
+            let err = ConnectToQemuGuestError::FindQemuOpts(source);
+            reporter.report(ctx, ConnectToQemuGuestEvent::Error(&err));
+            return Err(err);
+        }
+    };
+
+    let host = match Host::find(host_name, &state) {
+        Ok(host) => host,
+        Err(source) => {
+            let err = ConnectToQemuGuestError::FindHost {
+                host_name: host_name.to_string(),
+                source,
+            };
+            reporter.report(ctx, ConnectToQemuGuestEvent::Error(&err));
+            return Err(err);
+        }
+    };
+
+    let guest = match QemuGuest::find(&opts, &host) {
+        Ok(guest) => guest,
+        Err(source) => {
+            let err = ConnectToQemuGuestError::FindQemuGuest {
+                host_name: host_name.to_string(),
+                source,
+            };
+            reporter.report(ctx, ConnectToQemuGuestEvent::Error(&err));
+            return Err(err);
+        }
+    };
+
+    if let Err(err) = ctx
+        .qemu_runner()
+        .connect_to_guest(guest.host.name, &ctx.env().cache_dir.join(&state.name))
+    {
+        let err = ConnectToQemuGuestError::Connect {
+            host_name: guest.host.name.to_string(),
+            source: err,
+        };
+        reporter.report(ctx, ConnectToQemuGuestEvent::Error(&err));
+    }
+
+    Ok(())
+}
+
+#[derive(thiserror::Error, Debug)]
 pub enum ListQemuGuestsError {
     #[error(transparent)]
     Load(#[from] LoadStateError),

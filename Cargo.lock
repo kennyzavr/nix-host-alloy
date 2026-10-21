@@ -152,6 +152,7 @@ dependencies = [
  "either",
  "itertools",
  "log",
+ "nix",
  "petgraph 0.6.5",
  "serde",
  "serde_json",

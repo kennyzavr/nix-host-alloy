@@ -65,7 +65,199 @@ pub enum LaunchError {
     },
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum ConnectError {
+    #[error("Error while operating on qemu serial socket")]
+    Socket(#[source] std::io::Error),
+
+    #[error("Error while copying data from qemu serial socket")]
+    Copy(#[source] std::io::Error),
+
+    #[error("Error while writing data to qemu serial socket")]
+    Write(#[source] std::io::Error),
+
+    #[error("Error while waiting for stdin")]
+    StdinPoll(#[source] std::io::Error),
+
+    #[error("Error while reading data from stdin")]
+    StdinRead(#[source] std::io::Error),
+
+    #[error("Error while writing data to qemu serial socket")]
+    SockWrite(#[source] std::io::Error),
+
+    #[error("Error while trying to shutdown qemu serial socket")]
+    Shutdown(#[source] std::io::Error),
+}
+
 impl System {
+    pub fn connect_to_guest(&self, guest_name: &str, cache_dir: &Path) -> Result<(), ConnectError> {
+        use nix::{
+            errno::Errno,
+            poll::{PollFd, PollFlags, poll},
+            sys::termios::{self, SetArg, Termios},
+            unistd::read,
+        };
+        use std::{
+            io::{self, Read, Write},
+            net::Shutdown,
+            os::{fd::AsFd, unix::net::UnixStream},
+            sync::{
+                Arc,
+                atomic::{AtomicBool, Ordering},
+            },
+            thread,
+        };
+
+        struct TerminalGuard {
+            stdin: io::Stdin,
+            original: Termios,
+        }
+
+        impl Drop for TerminalGuard {
+            fn drop(&mut self) {
+                let _ = termios::tcsetattr(&self.stdin, SetArg::TCSANOW, &self.original);
+            }
+        }
+
+        let sock = UnixStream::connect(
+            cache_dir
+                .join("qemu")
+                .join(format!("{guest_name}-serial.sock")),
+        )
+        .map_err(ConnectError::Socket)?;
+
+        let mut sock_reader = sock.try_clone().map_err(ConnectError::Socket)?;
+        let mut sock_writer = sock;
+
+        let stdin = io::stdin();
+        let original =
+            termios::tcgetattr(&stdin).map_err(|err| ConnectError::StdinRead(err.into()))?;
+
+        let mut raw = original.clone();
+        termios::cfmakeraw(&mut raw);
+
+        let _terminal_guard = TerminalGuard { stdin, original };
+
+        termios::tcsetattr(&_terminal_guard.stdin, SetArg::TCSANOW, &raw)
+            .map_err(|err| ConnectError::StdinRead(err.into()))?;
+
+        let stopped = Arc::new(AtomicBool::new(false));
+        let reader_stopped = Arc::clone(&stopped);
+        let writer_stopped = Arc::clone(&stopped);
+
+        let read_handle = thread::spawn(move || -> Result<(), ConnectError> {
+            let result = (|| -> io::Result<()> {
+                let mut stdout = io::stdout().lock();
+                let mut buffer = [0u8; 4096];
+
+                loop {
+                    let n = match sock_reader.read(&mut buffer) {
+                        Ok(n) => n,
+                        Err(err) if err.kind() == io::ErrorKind::Interrupted => {
+                            continue;
+                        }
+                        Err(err) => return Err(err),
+                    };
+
+                    if n == 0 {
+                        break;
+                    }
+
+                    stdout.write_all(&buffer[..n])?;
+                    stdout.flush()?;
+                }
+
+                Ok(())
+            })();
+
+            reader_stopped.store(true, Ordering::Relaxed);
+            let _ = sock_reader.shutdown(Shutdown::Both);
+
+            result.map_err(ConnectError::Copy)
+        });
+
+        let write_handle = thread::spawn(move || -> Result<(), ConnectError> {
+            let stdin = io::stdin();
+            let mut buffer = [0u8; 4096];
+
+            let result = (|| -> Result<(), ConnectError> {
+                while !writer_stopped.load(Ordering::Relaxed) {
+                    let mut fds = [PollFd::new(stdin.as_fd(), PollFlags::POLLIN)];
+
+                    match poll(&mut fds, 100u16) {
+                        Ok(_) => {}
+                        Err(Errno::EINTR) => continue,
+                        Err(err) => {
+                            return Err(ConnectError::StdinPoll(err.into()));
+                        }
+                    }
+
+                    if writer_stopped.load(Ordering::Relaxed) {
+                        break;
+                    }
+
+                    let events = fds[0].revents().unwrap_or(PollFlags::empty());
+
+                    if events.contains(PollFlags::POLLNVAL) {
+                        return Err(ConnectError::StdinRead(Errno::EBADF.into()));
+                    }
+
+                    if events.contains(PollFlags::POLLERR) {
+                        return Err(ConnectError::StdinRead(io::Error::other(
+                            "poll reported an error on stdin",
+                        )));
+                    }
+
+                    if !events.intersects(PollFlags::POLLIN | PollFlags::POLLHUP) {
+                        continue;
+                    }
+
+                    let n = match read(stdin.as_fd(), &mut buffer) {
+                        Ok(n) => n,
+                        Err(Errno::EINTR) => continue,
+                        Err(err) => {
+                            return Err(ConnectError::StdinRead(err.into()));
+                        }
+                    };
+
+                    if n == 0 {
+                        break;
+                    }
+
+                    let escape = buffer[..n].iter().position(|&b| b == 0x1d);
+                    let end = escape.unwrap_or(n);
+
+                    if end > 0 {
+                        sock_writer
+                            .write_all(&buffer[..end])
+                            .map_err(ConnectError::SockWrite)?;
+                    }
+
+                    if escape.is_some() {
+                        break;
+                    }
+                }
+
+                Ok(())
+            })();
+
+            writer_stopped.store(true, Ordering::Relaxed);
+            let _ = sock_writer.shutdown(Shutdown::Both);
+
+            result
+        });
+
+        let read_result = read_handle.join();
+        let write_result = write_handle.join();
+
+        drop(_terminal_guard);
+
+        write_result.unwrap()?;
+        read_result.unwrap()?;
+
+        Ok(())
+    }
+
     pub fn launch_guest<'v>(
         &self,
         guest_name: &str,
@@ -94,6 +286,11 @@ impl System {
                 switch.socket_path(),
             );
         }
+
+        cmd.env(
+            format!("ALLOY_SERIAL_SOCKET"),
+            cache_dir.join(format!("{}-serial.sock", guest_name)),
+        );
 
         let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
         let log_filename = cache_dir.join(format!("{guest_name}_log_{timestamp}.log"));
@@ -222,6 +419,11 @@ impl VdeSwitchProc {
     }
 }
 impl QemuRunner for System {
+    fn connect_to_guest(&self, guest_name: &str, cache_dir: &Path) -> Result<(), DynError> {
+        self.connect_to_guest(guest_name, cache_dir)?;
+        Ok(())
+    }
+
     fn launch_guest(
         &self,
         guest_name: &str,

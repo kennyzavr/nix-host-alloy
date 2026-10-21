@@ -120,6 +120,8 @@ pub trait GenRunner {
 }
 
 pub trait QemuRunner {
+    fn connect_to_guest(&self, guest_name: &str, cache_dir: &Path) -> Result<(), DynError>;
+
     fn launch_guest(
         &self,
         guest_name: &str,

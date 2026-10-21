@@ -97,13 +97,13 @@
         qemu.forwardPorts = [
           {
             name = "ssh";
-            hypervisor = 2251;
+            hypervisor = 5251;
             guest = 22;
             proto = "tcp";
           }
           {
             name = "initrd ssh";
-            hypervisor = 2250;
+            hypervisor = 5250;
             guest = 2022;
             proto = "tcp";
           }
@@ -111,18 +111,18 @@
 
         nets."slipr" = {
           default = true;
-          static = true;
-          v4.address = "10.0.2.15";
-          v4.prefixLength = 24;
-          v4.gateway = "10.0.2.2";
+          managed = true;
+          v4.mode.static.address = "10.0.2.15";
+          v4.mode.static.prefixLength = 24;
+          v4.mode.static.gateway = "10.0.2.2";
           iface = "eth0";
         };
 
         nets."public" = {
           primary = true;
-          static = true;
+          managed = true;
           iface = config.qemu.nets."main".iface;
-          v4 = {
+          v4.mode.static = {
             address = "192.168.100.${toString config.idx}";
             prefixLength = 24;
           };
@@ -217,9 +217,9 @@
 
         nets."public" = {
           primary = true;
-          static = true;
+          managed = true;
           iface = config.qemu.nets."main".iface;
-          v4 = {
+          v4.mode.static = {
             address = "192.168.100.${toString config.idx}";
             prefixLength = 24;
           };
@@ -227,8 +227,10 @@
 
         nets."slipr" = {
           default = true;
-          v4.address = "10.0.2.15";
-          v4.prefixLength = 24;
+          managed = true;
+          v4.mode.static.address = "10.0.2.15";
+          v4.mode.static.prefixLength = 24;
+          v4.mode.static.gateway = "10.0.2.2";
           iface = "eth0";
         };
 
@@ -248,7 +250,7 @@
         qemu.forwardPorts = [
           {
             name = "ssh";
-            hypervisor = 2261;
+            hypervisor = 5261;
             guest = 22;
             proto = "tcp";
           }
@@ -330,11 +332,6 @@
             server.endpoint = alloy.services.dns-acme."main".endpoint;
           };
         };
-      };
-
-      services.dns-resolver."main" = {
-        host = "gallium";
-        overlays."main" = { };
       };
 
       services.dns-edge."public" = {

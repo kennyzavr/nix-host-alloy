@@ -211,11 +211,11 @@
                     [ ]
                     ++ (lib.optional (hostNet.v4 != null) {
                       domain = srv.hostname;
-                      data.a = hostNet.v4.address;
+                      data.a = hostNet.v4.advertiseAddress;
                     })
                     ++ (lib.optional (hostNet.v6 != null) {
                       domain = srv.hostname;
-                      data.aaaa = hostNet.v6.address;
+                      data.aaaa = hostNet.v6.advertiseAddress;
                     })
                   ) srv.hosts)
                   ++ (lib.mapAttrsToList (

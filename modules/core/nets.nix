@@ -7,10 +7,14 @@
       ...
     }:
     let
-      v4Submodule = {
+      v4Submodule = { config, ... }: {
         options = {
           address = lib.mkOption {
             type = alib.types.ip.v4addr;
+          };
+          advertiseAddress = lib.mkOption {
+            type = alib.types.ip.v4addr;
+            default = config.address;
           };
           gateway = lib.mkOption {
             type = lib.types.nullOr alib.types.ip.v4addr;
@@ -20,10 +24,14 @@
           };
         };
       };
-      v6Submodule = {
+      v6Submodule = { config, ... }: {
         options = {
           address = lib.mkOption {
             type = alib.types.ip.v6addr;
+          };
+          advertiseAddress = lib.mkOption {
+            type = alib.types.ip.v6addr;
+            default = config.address;
           };
           gateway = lib.mkOption {
             type = lib.types.nullOr alib.types.ip.v6addr;

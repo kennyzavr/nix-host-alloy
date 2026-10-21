@@ -137,11 +137,11 @@
                 [ ]
                 ++ (lib.optional (route.addDnsRecords && hostNet.v4 != null) {
                   inherit (route) domain;
-                  data.a = hostNet.v4.address;
+                  data.a = hostNet.v4.advertiseAddress;
                 })
                 ++ (lib.optional (route.addDnsRecords && hostNet.v6 != null) {
                   inherit (route) domain;
-                  data.aaaa = hostNet.v6.address;
+                  data.aaaa = hostNet.v6.advertiseAddress;
                 })
               ) srv.hosts)
             ) srv.routes

@@ -111,8 +111,8 @@
                     hostNet = host.nets.${hostCfg.net};
                   in
                   [ ]
-                  ++ (lib.optional (hostNet.v4 != null) hostNet.v4.address)
-                  ++ (lib.optional (hostNet.v6 != null) hostNet.v6.address)
+                  ++ (lib.optional (hostNet.v4 != null) hostNet.v4.advertiseAddress)
+                  ++ (lib.optional (hostNet.v6 != null) hostNet.v6.advertiseAddress)
                 ) srv.hosts
               );
             }
@@ -154,28 +154,28 @@
                     zone = route.zone;
                     name = nsPrefix;
                   };
-                  data.a = hostNet.v4.address;
+                  data.a = hostNet.v4.advertiseAddress;
                 })
                 ++ (lib.optional (parentZone != null && hostNet.v4 != null) {
                   domain = {
                     zone = parentZone;
                     name = "${nsPrefix}.${subzone}";
                   };
-                  data.a = hostNet.v4.address;
+                  data.a = hostNet.v4.advertiseAddress;
                 })
                 ++ (lib.optional (hostNet.v6 != null) {
                   domain = {
                     zone = route.zone;
                     name = nsPrefix;
                   };
-                  data.aaaa = hostNet.v6.address;
+                  data.aaaa = hostNet.v6.advertiseAddress;
                 })
                 ++ (lib.optional (parentZone != null && hostNet.v6 != null) {
                   domain = {
                     zone = parentZone;
                     name = "${nsPrefix}.${subzone}";
                   };
-                  data.aaaa = hostNet.v6.adress;
+                  data.aaaa = hostNet.v6.advertiseAddress;
                 })
               ) (lib.mapAttrsToList (hostName: hostCfg: { inherit hostName hostCfg; }) srv.hosts))
             ) sortedRoutes

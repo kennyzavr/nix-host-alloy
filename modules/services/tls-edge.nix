@@ -173,13 +173,13 @@
                       proto = "tcp";
                       port = route.downstream.port;
                       inherit (hostNet) iface;
-                      ip.v4 = hostNet.v4.address;
+                      ip.v4 = hostNet.v4.mode.static.address;
                     })
                     ++ (lib.optional (hostNet.v6 != null) {
                       proto = "tcp";
                       port = route.downstream.port;
                       inherit (hostNet) iface;
-                      ip.v6 = hostNet.v6.address;
+                      ip.v6 = hostNet.v6.mode.static.address;
                     })
                   ))
                   lib.flatten

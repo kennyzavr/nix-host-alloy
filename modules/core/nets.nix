@@ -9,41 +9,68 @@
     let
       v4Submodule = { config, ... }: {
         options = {
-          address = lib.mkOption {
-            type = alib.types.ip.v4addr;
+          mode = lib.mkOption {
+            type = lib.types.attrTag {
+              static = lib.mkOption {
+                type = lib.types.submodule {
+                  options = {
+                    address = lib.mkOption {
+                      type = alib.types.ip.v4addr;
+                    };
+                    gateway = lib.mkOption {
+                      type = lib.types.nullOr alib.types.ip.v4addr;
+                    };
+                    prefixLength = lib.mkOption {
+                      type = lib.types.ints.between 0 32;
+                    };
+                  };
+                };
+              };
+              dhcp = lib.mkOption {
+                type = lib.types.submodule { };
+              };
+            };
           };
           advertiseAddress = lib.mkOption {
             type = alib.types.ip.v4addr;
-            default = config.address;
-          };
-          gateway = lib.mkOption {
-            type = lib.types.nullOr alib.types.ip.v4addr;
-          };
-          prefixLength = lib.mkOption {
-            type = lib.types.ints.between 0 32;
+            default = config.mode.static.address;
           };
         };
       };
       v6Submodule = { config, ... }: {
         options = {
-          address = lib.mkOption {
-            type = alib.types.ip.v6addr;
+          mode = lib.mkOption {
+            type = lib.types.attrTag {
+              static = lib.mkOption {
+                type = lib.types.submodule {
+                  options = {
+                    address = lib.mkOption {
+                      type = alib.types.ip.v6addr;
+                    };
+                    gateway = lib.mkOption {
+                      type = lib.types.nullOr alib.types.ip.v6addr;
+                    };
+                    prefixLength = lib.mkOption {
+                      type = lib.types.ints.between 0 128;
+                    };
+                  };
+                };
+              };
+              auto = lib.mkOption {
+                type = lib.types.submodule {
+                };
+              };
+            };
           };
           advertiseAddress = lib.mkOption {
             type = alib.types.ip.v6addr;
-            default = config.address;
-          };
-          gateway = lib.mkOption {
-            type = lib.types.nullOr alib.types.ip.v6addr;
-          };
-          prefixLength = lib.mkOption {
-            type = lib.types.ints.between 0 128;
+            default = config.mode.static.address;
           };
         };
       };
       netSubmodule = { config, name, ... }: {
         options = {
-          static = lib.mkOption {
+          managed = lib.mkOption {
             default = false;
             type = lib.types.bool;
           };
@@ -72,33 +99,45 @@
           netConfig = {
             matchConfig.Name = net.iface;
             addresses =
-              (lib.optional (net.v4 != null) {
-                Address = "${net.v4.address}/${toString net.v4.prefixLength}";
+              (lib.optional (net.v4 != null && net.v4.mode ? static) {
+                Address = "${net.v4.mode.static.address}/${toString net.v4.mode.static.prefixLength}";
               })
-              ++ (lib.optional (net.v6 != null) {
-                Address = "${net.v6.address}/${toString net.v6.prefixLength}";
+              ++ (lib.optional (net.v6 != null && net.v6.mode ? static) {
+                Address = "${net.v6.mode.static.address}/${toString net.v6.mode.static.prefixLength}";
               });
-            # FIXME: add assertion that checks net.v4/v6.gateway != null
+
             routes =
-              (lib.optional (net.v4 != null && net.v4.gateway != null) {
-                Gateway = net.v4.gateway;
+              (lib.optional (net.v4 != null && net.v4.mode ? static && net.v4.mode.static.gateway != null) {
+                Gateway = net.v4.mode.static.gateway;
                 Destination =
-                  if net.default then "0.0.0.0/0" else "${net.v4.gateway}/${toString net.v4.prefixLength}";
-                Source = net.v4.address;
+                  if net.default then
+                    "0.0.0.0/0"
+                  else
+                    "${net.v4.mode.static.gateway}/${toString net.v4.mode.static.prefixLength}";
+                Source = net.v4.mode.static.address;
               })
-              ++ (lib.optional (net.v6 != null && net.v6.gateway != null) {
-                Gateway = net.v6.gateway;
-                Destination = if net.default then "::/0" else "${net.v6.gateway}/${toString net.v6.prefixLength}";
-                Source = net.v6.address;
+              ++ (lib.optional (net.v6 != null && net.v6.mode ? static && net.v6.mode.static.gateway != null) {
+                Gateway = net.v6.mode.static.gateway;
+                Destination =
+                  if net.default then
+                    "::/0"
+                  else
+                    "${net.v6.mode.static.gateway}/${toString net.v6.mode.static.prefixLength}";
+                Source = net.v6.mode.static.address;
               });
+
+            networkConfig = {
+              DHCP = if net.v4 != null && net.v4.mode ? dhcp then "ipv4" else "no";
+              IPv6AcceptRA = net.v6 != null && net.v6.mode ? auto;
+            };
           };
         in
         {
           nixosModule = {
-            systemd.network.networks = lib.optionalAttrs net.static {
+            systemd.network.networks = lib.optionalAttrs net.managed {
               "10-${net.iface}" = netConfig;
             };
-            boot.initrd.systemd.network.networks = lib.optionalAttrs net.static {
+            boot.initrd.systemd.network.networks = lib.optionalAttrs net.managed {
               "10-${net.iface}" = netConfig;
             };
           };
@@ -145,6 +184,7 @@
               (lib.mkMerge (lib.catAttrs "nixosModule" configs))
               {
                 networking.useNetworkd = true;
+                networking.useDHCP = false;
                 systemd.network.enable = true;
                 boot.initrd.systemd.network.enable = true;
 

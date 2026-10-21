@@ -206,13 +206,13 @@
                       proto = "tcp";
                       port = 53;
                       inherit (hostNet) iface;
-                      ip.v4 = hostNet.v4.address;
+                      ip.v4 = hostNet.v4.mode.static.address;
                     }
                     {
                       proto = "udp";
                       port = 53;
                       inherit (hostNet) iface;
-                      ip.v4 = hostNet.v4.address;
+                      ip.v4 = hostNet.v4.mode.static.address;
                     }
                   ])
                   ++ (lib.optionals (hostNet.v6 != null) [
@@ -220,13 +220,13 @@
                       proto = "tcp";
                       port = 53;
                       inherit (hostNet) iface;
-                      ip.v6 = hostNet.v6.address;
+                      ip.v6 = hostNet.v6.mode.static.address;
                     }
                     {
                       proto = "udp";
                       port = 53;
                       inherit (hostNet) iface;
-                      ip.v6 = hostNet.v6.address;
+                      ip.v6 = hostNet.v6.mode.static.address;
                     }
                   ]);
 

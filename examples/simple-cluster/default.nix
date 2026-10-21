@@ -4,9 +4,13 @@
   ...
 }:
 {
-  flake.nixosConfigurations = lib.mapAttrs (
-    _: host: host.nixosConfiguration
-  ) (self.lib.evalModule self.alloyModules.simpleCluster).config.hosts;
+  flake.nixosConfigurations =
+    let
+      hosts = (self.lib.evalModule self.alloyModules.simpleCluster).config.hosts;
+    in
+    lib.mapAttrs' (
+      hostName: host: lib.nameValuePair "simpleCluster-${hostName}" host.nixosConfiguration
+    ) hosts;
 
   flake.alloyCli.instances.simpleCluster = {
     alloyInputAttr = "";
@@ -89,7 +93,9 @@
           ssh = {
             enable = true;
             authKeyFacts = [ "test_ssh_pub_key" ];
-            keyPaths = [ config.boot.facts."test_ssh_key".path ];
+            keyPaths = [
+              config.boot.facts."test_ssh_key".path
+            ];
             port = 2022;
           };
         };
@@ -139,46 +145,8 @@
           ];
         };
 
-        disko = {
-          enable = true;
-          settings = { ... }: {
-            devices.disk.main = {
-              type = "disk";
-              device = "/dev/vda";
-              content = {
-                type = "gpt";
-                partitions = {
-                  ESP = {
-                    size = "512M";
-                    type = "EF00";
-                    content = {
-                      type = "filesystem";
-                      format = "vfat";
-                      mountpoint = "/boot";
-                    };
-                  };
-                  luks = {
-                    size = "100%";
-                    content = {
-                      type = "luks";
-                      name = "cryptroot";
-                      settings = { };
-                      askPassword = true;
-                      content = {
-                        type = "filesystem";
-                        format = "ext4";
-                        mountpoint = "/";
-                      };
-                    };
-                  };
-                };
-              };
-            };
-          };
-        };
-
         qemu.nets."main" = { };
-        qemu.variant = "direct-boot";
+        qemu.variant = "full-boot";
 
         nixosModule = { pkgs, ... }: {
           environment.systemPackages = [ pkgs.dig ];
@@ -195,6 +163,14 @@
             "nix-command"
             "flakes"
           ];
+
+          nix.settings.trusted-users = [
+            "root"
+            "admin"
+          ];
+
+          boot.initrd.systemd.emergencyAccess = true;
+          boot.kernelParams = [ "rd.systemd.break=pre-mount" ];
         };
       };
 
@@ -284,6 +260,11 @@
           nix.settings.experimental-features = [
             "nix-command"
             "flakes"
+          ];
+
+          nix.settings.trusted-users = [
+            "root"
+            "admin"
           ];
         };
       };

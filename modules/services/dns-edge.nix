@@ -111,8 +111,12 @@
                     hostNet = host.nets.${hostCfg.net};
                   in
                   [ ]
-                  ++ (lib.optional (hostNet.v4 != null) hostNet.v4.advertiseAddress)
-                  ++ (lib.optional (hostNet.v6 != null) hostNet.v6.advertiseAddress)
+                  ++ (lib.optional (hostNet.v4 != null) {
+                    address = hostNet.v4.advertiseAddress;
+                  })
+                  ++ (lib.optional (hostNet.v6 != null) {
+                    address = hostNet.v6.advertiseAddress;
+                  })
                 ) srv.hosts
               );
             }

@@ -100,12 +100,19 @@
             }) srv.overlays;
           };
 
-          # dns.zones = lib.genAttrs' srv.zones (
-          #   zone:
-          #   lib.nameValuePair alloy.dns.zones.${zone}.parentZone {
-          #     acme.server.endpoint = srv.endpoint;
-          #   }
-          # );
+          dns.zones = lib.pipe srv.zones [
+            (lib.map (
+              zoneName:
+              lib.nameValuePair zoneName {
+                nameservers = [
+                  {
+                    endpoint = srv.endpoint;
+                  }
+                ];
+              }
+            ))
+            builtins.listToAttrs
+          ];
 
           dns.records =
             (lib.flip lib.map requests (req: {
@@ -280,7 +287,7 @@
 
       config = {
         assertions = lib.mkMerge (lib.map (c: c.assertions) services);
-        # dns.zones = lib.mkMerge (lib.map (c: c.dns.zones) services);
+        dns.zones = lib.mkMerge (lib.map (c: c.dns.zones) services);
         dns.records = lib.mkMerge (lib.map (c: c.dns.records) services);
         endpoints = lib.mkMerge (lib.map (c: c.endpoints) services);
         secrets = lib.mkMerge (lib.map (c: c.secrets) services);

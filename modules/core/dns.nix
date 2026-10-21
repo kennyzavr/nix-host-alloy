@@ -183,7 +183,7 @@
             };
             nameservers = lib.mkOption {
               default = [ ];
-              type = lib.types.listOf lib.types.str;
+              type = lib.types.listOf alib.types.serverEndpoint;
             };
           };
           config.bindConfig = ''
@@ -201,7 +201,6 @@
         { name, config, ... }:
         let
           nodeName = name;
-          node = config;
         in
         {
           options = {
@@ -255,7 +254,10 @@
                 networkConfig = {
                   Address = "10.254.254.254/32";
                   DNS = "127.0.0.1:53533";
-                  Domains = [ "~${alloy.dns.internalDomain}" ];
+                  Domains = [
+                    "~${alloy.dns.internalDomain}"
+                  ]
+                  ++ (lib.map (zone: "~${lib.removeSuffix "." zone.apex}") (builtins.attrValues alloy.dns.zones));
                 };
               };
 
@@ -269,6 +271,27 @@
               services.coredns = {
                 enable = true;
                 config = ''
+                  ${lib.concatMapAttrsStringSep "\n" (zoneName: zone: ''
+                    ${zone.apex}:53533 {
+                      bind 127.0.0.1
+                      forward . ${
+                        lib.concatMapStringsSep " " (
+                          ns:
+                          if ns ? endpoint then
+                            lib.concatMapStringsSep " " (
+                              target:
+                              if target.ip ? v6 then
+                                "[${target.ip.v6}]:${toString alloy.endpoints.${ns.endpoint}.port}"
+                              else
+                                "${target.ip.v4}:${toString alloy.endpoints.${ns.endpoint}.port}"
+                            ) alloy.endpoints.${ns.endpoint}.targets
+                          else
+                            ns.address
+                        ) zone.nameservers
+                      }
+                    }
+                  '') alloy.dns.zones}
+
                   ${alloy.dns.internalDomain}:53533 {
                     bind 127.0.0.1
                     hosts {

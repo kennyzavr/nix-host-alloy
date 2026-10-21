@@ -73,6 +73,20 @@
           );
         };
 
+        dns.zones = lib.pipe srv.zones [
+          (lib.map (
+            zoneName:
+            lib.nameValuePair zoneName {
+              nameservers = [
+                {
+                  endpoint = srv.endpoint;
+                }
+              ];
+            }
+          ))
+          builtins.listToAttrs
+        ];
+
         dns.records = lib.map (z: {
           domain = {
             zone = z;

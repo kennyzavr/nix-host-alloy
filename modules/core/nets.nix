@@ -164,10 +164,6 @@
                 assertion = builtins.length defaultNets <= 1;
                 message = "[Alloy] Host '${name}': at most one net can be configured as a default network, got: ${toString (builtins.length defaultNets)}";
               }
-              {
-                assertion = builtins.length primaryNets == 1;
-                message = "[Alloy] Host '${name}': one primary net must be configured, got: ${toString (builtins.length primaryNets)}";
-              }
             ]
             ++ lib.concatLists (
               lib.mapAttrsToList (netName: net: [

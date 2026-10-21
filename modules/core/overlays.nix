@@ -754,7 +754,7 @@
               ];
             in
             {
-              condition = allowedOverlays != null -> invalidTargets != [ ];
+              condition = allowedOverlays != null -> invalidTargets == [ ];
               message =
                 lib.optionalString (allowedOverlays != null)
                   "[Alloy] ${contextMsg} Endpoint '${endpointName}' has invalid overlay references, allowed overlays: [ ${lib.concatStringsSep ", " allowedOverlays} ], invalid targets: [ ${

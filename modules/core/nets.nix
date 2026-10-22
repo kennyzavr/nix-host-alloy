@@ -20,6 +20,10 @@
                     gateway = lib.mkOption {
                       type = lib.types.nullOr alib.types.ip.v4addr;
                     };
+                    gatewayOnLink = lib.mkOption {
+                      default = false;
+                      type = lib.types.bool;
+                    };
                     prefixLength = lib.mkOption {
                       type = lib.types.ints.between 0 32;
                     };
@@ -49,6 +53,10 @@
                     };
                     gateway = lib.mkOption {
                       type = lib.types.nullOr alib.types.ip.v6addr;
+                    };
+                    gatewayOnLink = lib.mkOption {
+                      default = false;
+                      type = lib.types.bool;
                     };
                     prefixLength = lib.mkOption {
                       type = lib.types.ints.between 0 128;
@@ -114,7 +122,8 @@
                     "0.0.0.0/0"
                   else
                     "${net.v4.mode.static.gateway}/${toString net.v4.mode.static.prefixLength}";
-                Source = net.v4.mode.static.address;
+                PreferredSource = net.v4.mode.static.address;
+                GatewayOnLink = net.v4.mode.static.gatewayOnLink;
               })
               ++ (lib.optional (net.v6 != null && net.v6.mode ? static && net.v6.mode.static.gateway != null) {
                 Gateway = net.v6.mode.static.gateway;
@@ -123,7 +132,8 @@
                     "::/0"
                   else
                     "${net.v6.mode.static.gateway}/${toString net.v6.mode.static.prefixLength}";
-                Source = net.v6.mode.static.address;
+                PreferredSource = net.v6.mode.static.address;
+                GatewayOnLink = net.v6.mode.static.gatewayOnLink;
               });
 
             networkConfig = {

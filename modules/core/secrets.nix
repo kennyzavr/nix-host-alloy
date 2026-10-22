@@ -218,10 +218,6 @@
             ++ (lib.map mkSecret secrets)
             ++ (lib.map mkTemplate templates);
 
-            age.identityPaths = lib.optionals (secrets != [ ]) (
-              lib.map (kp: toString kp.identity) host.workspace.secrets.age.keyPairs
-            );
-
             containers."alloy-jail-${jailName}" = {
               config = { pkgs, ... }: {
                 systemd.services."alloy-secrets-and-templates-setup" = {
@@ -283,10 +279,6 @@
             ]
             ++ (lib.map mkSecret secrets)
             ++ (lib.map mkTemplate templates);
-
-            age.identityPaths = lib.optionals (secrets != [ ]) (
-              lib.map (kp: toString kp.identity) host.workspace.secrets.age.keyPairs
-            );
 
             systemd.services."alloy-secrets-and-templates-setup" = {
               enable = templates != [ ];
@@ -352,7 +344,11 @@
                 message = "[Alloy] host '${name}': the option secrets.age.keyPairs must be set";
               }
             ];
-            nixosModule = lib.mkMerge (lib.catAttrs "nixosModule" configs);
+            nixosModule = {
+              imports = lib.catAttrs "nixosModule" configs;
+
+              age.identityPaths = lib.map (kp: toString kp.identity) config.workspace.secrets.age.keyPairs;
+            };
           };
       };
 

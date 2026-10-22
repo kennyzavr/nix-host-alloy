@@ -218,6 +218,18 @@
                       inherit (hostNet) iface;
                       ip.v4 = hostNet.v4.mode.static.address;
                     }
+                    {
+                      proto = "tcp";
+                      port = 53;
+                      inherit (hostNet) iface;
+                      ip.v4 = hostNet.v4.advertiseAddress;
+                    }
+                    {
+                      proto = "udp";
+                      port = 53;
+                      inherit (hostNet) iface;
+                      ip.v4 = hostNet.v4.advertiseAddress;
+                    }
                   ])
                   ++ (lib.optionals (hostNet.v6 != null) [
                     {
@@ -231,6 +243,18 @@
                       port = 53;
                       inherit (hostNet) iface;
                       ip.v6 = hostNet.v6.mode.static.address;
+                    }
+                    {
+                      proto = "tcp";
+                      port = 53;
+                      inherit (hostNet) iface;
+                      ip.v6 = hostNet.v6.advertiseAddress;
+                    }
+                    {
+                      proto = "udp";
+                      port = 53;
+                      inherit (hostNet) iface;
+                      ip.v6 = hostNet.v6.advertiseAddress;
                     }
                   ]);
 

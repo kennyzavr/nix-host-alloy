@@ -169,18 +169,34 @@
                 uplink.forwards = lib.pipe srv.routes [
                   (lib.mapAttrsToList (
                     _: route:
-                    (lib.optional (hostNet.v4 != null) {
-                      proto = "tcp";
-                      port = route.downstream.port;
-                      inherit (hostNet) iface;
-                      ip.v4 = hostNet.v4.mode.static.address;
-                    })
-                    ++ (lib.optional (hostNet.v6 != null) {
-                      proto = "tcp";
-                      port = route.downstream.port;
-                      inherit (hostNet) iface;
-                      ip.v6 = hostNet.v6.mode.static.address;
-                    })
+                    (lib.optionals (hostNet.v4 != null) [
+                      {
+                        proto = "tcp";
+                        port = route.downstream.port;
+                        inherit (hostNet) iface;
+                        ip.v4 = hostNet.v4.mode.static.address;
+                      }
+                      {
+                        proto = "tcp";
+                        port = route.downstream.port;
+                        inherit (hostNet) iface;
+                        ip.v4 = hostNet.v4.advertiseAddress;
+                      }
+                    ])
+                    ++ (lib.optionals (hostNet.v6 != null) [
+                      {
+                        proto = "tcp";
+                        port = route.downstream.port;
+                        inherit (hostNet) iface;
+                        ip.v6 = hostNet.v6.mode.static.address;
+                      }
+                      {
+                        proto = "tcp";
+                        port = route.downstream.port;
+                        inherit (hostNet) iface;
+                        ip.v6 = hostNet.v6.advertiseAddress;
+                      }
+                    ])
                   ))
                   lib.flatten
                 ];

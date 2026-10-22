@@ -176,6 +176,24 @@
                       inherit (hostNet) iface;
                       ip.v4 = hostNet.v4.mode.static.address;
                     }
+                    {
+                      proto = "tcp";
+                      port = 80;
+                      inherit (hostNet) iface;
+                      ip.v4 = hostNet.v4.advertiseAddress;
+                    }
+                    {
+                      proto = "tcp";
+                      port = 443;
+                      inherit (hostNet) iface;
+                      ip.v4 = hostNet.v4.advertiseAddress;
+                    }
+                    {
+                      proto = "udp";
+                      port = 443;
+                      inherit (hostNet) iface;
+                      ip.v4 = hostNet.v4.advertiseAddress;
+                    }
                   ])
                   ++ (lib.optionals (hostNet.v6 != null) [
                     {
@@ -195,6 +213,24 @@
                       port = 443;
                       inherit (hostNet) iface;
                       ip.v6 = hostNet.v6.mode.static.address;
+                    }
+                    {
+                      proto = "tcp";
+                      port = 80;
+                      inherit (hostNet) iface;
+                      ip.v6 = hostNet.v6.advertiseAddress;
+                    }
+                    {
+                      proto = "tcp";
+                      port = 443;
+                      inherit (hostNet) iface;
+                      ip.v6 = hostNet.v6.advertiseAddress;
+                    }
+                    {
+                      proto = "udp";
+                      port = 443;
+                      inherit (hostNet) iface;
+                      ip.v6 = hostNet.v6.advertiseAddress;
                     }
                   ]);
 

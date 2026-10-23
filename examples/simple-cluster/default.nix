@@ -57,6 +57,8 @@
         file = "test_ssh_key";
       };
 
+      deploy.signingKeys."test" = { };
+
       hosts.iridium = { config, ... }: {
         system = "x86_64-linux";
         stateVersion = "26.11";
@@ -146,7 +148,23 @@
         };
 
         qemu.nets."main" = { };
-        qemu.variant = "full-boot";
+        # qemu.variant = "full-boot";
+        qemu.variant = "direct-boot";
+
+        deploy = {
+          enable = true;
+          activation.policy = "warn";
+          defaultConnection = "localssh";
+          connections."localssh" = {
+            address = "127.0.0.1";
+            port = 5251;
+            user = "admin";
+          };
+          signingKeys = [
+            "test"
+          ];
+          target.qemu.variant = "full-boot";
+        };
 
         nixosModule = { pkgs, ... }: {
           environment.systemPackages = [ pkgs.dig ];
@@ -169,8 +187,8 @@
             "admin"
           ];
 
-          boot.initrd.systemd.emergencyAccess = true;
-          boot.kernelParams = [ "rd.systemd.break=pre-mount" ];
+          # boot.initrd.systemd.emergencyAccess = true;
+          # boot.kernelParams = [ "rd.systemd.break=pre-mount" ];
         };
       };
 

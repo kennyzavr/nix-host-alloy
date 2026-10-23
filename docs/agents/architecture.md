@@ -39,6 +39,7 @@ contract, not against arbitrary shell working directories. See
 | Flake inputs, systems, formatter, development environment | [flake.nix](../../flake.nix), [packages/default.nix](../../packages/default.nix) |
 | Default module composition and optional extensions | [modules/default.nix](../../modules/default.nix), [core/default.nix](../../modules/core/default.nix) |
 | Hosts, NixOS evaluation, aggregate diagnostics | [hosts.nix](../../modules/core/hosts.nix) |
+| Deployment metadata, signing-key generation and trust | [deploy.nix](../../modules/core/deploy.nix) |
 | systemd-nspawn jails, uplinks, forwarding, bind mounts | [jails.nix](../../modules/core/jails.nix), [volumes.nix](../../modules/core/volumes.nix) |
 | Host networks, mesh and routes, service addresses | [nets.nix](../../modules/core/nets.nix), [overlays.nix](../../modules/core/overlays.nix), [endpoints.nix](../../modules/core/endpoints.nix) |
 | Naming and certificate lifecycle | [dns.nix](../../modules/core/dns.nix), [tls/default.nix](../../modules/core/tls/default.nix), [mtls.nix](../../modules/core/mtls.nix) |
@@ -54,9 +55,9 @@ contract, not against arbitrary shell working directories. See
 The module and Rust source trees are the authoritative entity/field inventory.
 Inspect option declarations rather than maintaining a second schema in prose.
 The Rust workspace has two crates, defined in [Cargo.toml](../../Cargo.toml).
-There is currently no checked-in `tests/` directory or explicit flake `checks`
-suite; development commands and verification expectations are in
-[AGENTS.md](../../AGENTS.md).
+Deploy design and behavior are documented in [Deploy](deploy.md).
+There is no explicit flake `checks` suite. See [AGENTS.md](../../AGENTS.md) for development
+commands and verification expectations.
 
 ## Composition boundaries
 

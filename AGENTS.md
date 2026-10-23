@@ -13,6 +13,7 @@ Agent reference documents live in `docs/agents/`.
 | Understand boundaries, data flow, or locate a subsystem | [Architecture](docs/agents/architecture.md) |
 | Add/change core or service modules, networking, DNS, TLS, secrets | [Nix module design](docs/agents/nix-modules.md) |
 | Change CLI behavior, serialization, generators, or state loading | [CLI and state contract](docs/agents/cli-state.md) |
+| Change or use remote deployment | [Deploy](docs/agents/deploy.md) |
 | Work on VM launch, console, disk images, or guest updates | [QEMU](docs/agents/qemu.md) |
 | Work on runtime SSH keys, initrd files, or first installation | [SSH and boot](docs/agents/ssh-boot.md) |
 

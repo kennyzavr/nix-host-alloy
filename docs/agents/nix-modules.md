@@ -109,6 +109,71 @@ systemd-resolved routes those zones and the internal domain through local CoreDN
 [dns-acme](../../modules/services/dns-acme.nix) contribute their endpoints as zone
 nameservers. This is separate from public delegation records managed by DNS edge.
 
+## Deployment configuration
+
+[deploy.nix](../../modules/core/deploy.nix) defines `deploy.signingKeys` and
+`hosts.<name>.deploy`. It provides the Nix API, target public-key trust,
+signing-key generator, and CLI metadata in `build.state`. The single-host deploy
+CLI, runner, activation policies, and limitations are documented in
+[Deploy](deploy.md). Automatic rollback and multi-host ordering are not
+implemented.
+
+Each registry entry names a `privateKeySecret`, `publicKeyFact`, and `generator`.
+For key `builder-1` these default to `deploy/signing-keys/builder-1/private`,
+`deploy/signing-keys/builder-1/public`, and `deploy/signing-keys/builder-1`. The key registry name
+also becomes the Nix signing key name. Use a new registry name when rotating keys.
+The automatically created generator instance imports the `deploy/signing-key`
+template. It generates an Ed25519 key with `nix key generate-secret` at execution
+time and writes the private key through `ALLOY_BIN secrets set` and the public
+key through `ALLOY_BIN facts set`. Plaintext private keys are never embedded in
+Nix evaluation or store artifacts.
+
+All three references are non-null strings. To retain trust without storing a
+private key locally, disable `generators.instances.<generator>.enable` and keep
+the public fact. The private secret is declared only by the enabled generator;
+the public fact is always declared by the registry. Evaluation and state export
+do not read the private secret. Deploy reports a missing secret when attempting
+to sign. The registry does not attach master secrets to hosts or grant global
+trust.
+
+Enabled deployment hosts select `signingKeys`; `trustedSigningKeys` defaults to
+that list and may additionally retain older keys. Public keys are added through
+`nix.settings.extra-trusted-public-keys` without changing `trusted-users`,
+signature requirements, or SSH server configuration. Public key contents are
+read directly from the fact for host trust; there is no separate `publicKey`
+option. State exports only reference names, and the CLI reads the public fact
+through the existing fact API.
+
+Connections contain an SSH address/alias and optional user and port. Client-side
+authentication belongs to the machine running deployment. The CLI accepts `-i`
+for an identity file and `ALLOY_SSHOPTS` for additional SSH flags. No identity
+file, agent policy, or extra SSH flags
+are stored in the Alloy connection configuration. OpenSSH configuration remains
+available for local authentication settings.
+
+A sole connection becomes the default automatically; multiple connections need
+an explicit `defaultConnection`. Enabled hosts validate connection and registry
+references through Alloy assertions. Activation settings distinguish `sudo`
+(interactive password by default) from `direct` (already privileged session),
+and `strict` from `warn` handling of a non-zero activation result. The Nix module
+exports settings; the Rust runner performs activation.
+
+An example inside an Alloy module:
+
+```nix
+deploy.signingKeys."builder-1" = { };
+hosts.server.deploy = {
+  enable = true;
+  signingKeys = [ "builder-1" ];
+  connections.public = {
+    address = "server.example.org";
+    user = "admin";
+  };
+};
+```
+
+The remaining multi-host deployment plan is tracked in [TODO](../../TODO.md).
+
 ## Facts, secrets, indexes, and accounts
 
 Facts are plaintext workspace data, including index allocations and generator

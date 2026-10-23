@@ -24,16 +24,22 @@
           nixosModule = lib.mkOption {
             type = lib.types.deferredModule;
             default = { };
-            apply = module: {
-              _class = "nixos";
-              _file = "hosts.${lib.strings.escapeNixIdentifier name}.nixosModule";
-              imports = [
-                module
-                {
-                  system.stateVersion = lib.mkDefault config.stateVersion;
-                }
-              ];
-            };
+            apply =
+              module:
+              let
+                moduleLocation = "hosts.${lib.strings.escapeNixIdentifier name}.nixosModule";
+              in
+              {
+                _class = "nixos";
+                _file = moduleLocation;
+                key = moduleLocation;
+                imports = [
+                  module
+                  {
+                    system.stateVersion = lib.mkDefault config.stateVersion;
+                  }
+                ];
+              };
           };
           nixosConfiguration = lib.mkOption {
             readOnly = true;

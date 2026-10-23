@@ -115,11 +115,17 @@
             nixosModule = lib.mkOption {
               type = lib.types.deferredModule;
               default = { };
-              apply = module: {
-                _class = "nixos";
-                _file = "hosts.${lib.strings.escapeNixIdentifier hostName}.qemu.nixosModule";
-                imports = [ module ];
-              };
+              apply =
+                module:
+                let
+                  moduleLocation = "hosts.${lib.strings.escapeNixIdentifier hostName}.qemu.nixosModule";
+                in
+                {
+                  _class = "nixos";
+                  _file = moduleLocation;
+                  key = moduleLocation;
+                  imports = [ module ];
+                };
             };
             variants = lib.mkOption {
               type = lib.types.attrsOf (lib.types.submodule variantSubmodule);

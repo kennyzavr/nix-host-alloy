@@ -26,18 +26,24 @@
             module = lib.mkOption {
               type = lib.types.deferredModule;
               default = { };
-              apply = module: {
-                _class = "homeManager";
-                _file = "hosts.${lib.strings.escapeNixIdentifier hostName}.users.${lib.strings.escapeNixIdentifier name}.home.module";
-                imports = [
-                  module
-                  {
-                    home.stateVersion = lib.mkDefault user.home.stateVersion;
-                    home.username = lib.mkDefault user.name;
-                    home.homeDirectory = lib.mkDefault user.dir;
-                  }
-                ];
-              };
+              apply =
+                module:
+                let
+                  moduleLocation = "hosts.${lib.strings.escapeNixIdentifier hostName}.users.${lib.strings.escapeNixIdentifier name}.home.module";
+                in
+                {
+                  _class = "homeManager";
+                  _file = moduleLocation;
+                  key = moduleLocation;
+                  imports = [
+                    module
+                    {
+                      home.stateVersion = lib.mkDefault user.home.stateVersion;
+                      home.username = lib.mkDefault user.name;
+                      home.homeDirectory = lib.mkDefault user.dir;
+                    }
+                  ];
+                };
             };
           };
         };
@@ -60,13 +66,19 @@
               sharedModule = lib.mkOption {
                 type = lib.types.deferredModule;
                 default = { };
-                apply = module: {
-                  _class = "homeManager";
-                  _file = "hosts.${lib.strings.escapeNixIdentifier name}.home.sharedModule";
-                  imports = [
-                    module
-                  ];
-                };
+                apply =
+                  module:
+                  let
+                    moduleLocation = "hosts.${lib.strings.escapeNixIdentifier name}.home.sharedModule";
+                  in
+                  {
+                    _class = "homeManager";
+                    _file = moduleLocation;
+                    key = moduleLocation;
+                    imports = [
+                      module
+                    ];
+                  };
               };
             };
           };

@@ -39,6 +39,11 @@
             readOnly = true;
             type = lib.types.unspecified;
           };
+          nixosConfig = lib.mkOption {
+            type = lib.types.unspecified;
+            readOnly = true;
+            default = config.nixosConfiguration.config;
+          };
           warnings = lib.mkOption {
             type = lib.types.listOf alib.types.warning;
             default = [ ];

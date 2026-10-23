@@ -39,8 +39,7 @@
               ];
             };
 
-            qemu.variants."disko-boot".package =
-              { pkgs, ... }:
+            qemu.variants."disko-boot".nixosConfig =
               (lib.nixosSystem {
                 inherit (config) system;
                 modules = [
@@ -51,7 +50,7 @@
                     };
                   })
                 ];
-              }).config.system.build.vmWithDisko;
+              }).config.virtualisation.vmVariantWithDisko;
           };
         };
     in

@@ -66,8 +66,12 @@
 
       variantSubmodule = { config, name, ... }: {
         options = {
+          nixosConfig = lib.mkOption {
+            type = lib.types.unspecified;
+          };
           package = lib.mkOption {
             type = lib.types.functionTo lib.types.package;
+            default = { ... }: config.nixosConfig.system.build.vm;
           };
         };
       };
@@ -75,6 +79,9 @@
       hostQemuSubmodule =
         hostName: host:
         { config, ... }:
+        let
+          qemu = config;
+        in
         {
           options = {
             memory = lib.mkOption {
@@ -135,14 +142,14 @@
               proto = fp.proto;
               guest.port = fp.guest;
               host.port = fp.hypervisor;
-            }) config.forwardPorts;
+            }) qemu.forwardPorts;
 
             virtualisation.graphics = true;
-            virtualisation.memorySize = config.memory;
-            virtualisation.cores = config.cores;
+            virtualisation.memorySize = qemu.memory;
+            virtualisation.cores = qemu.cores;
             virtualisation.qemu.options =
               [ ]
-              ++ lib.optionals (!config.graphics) [
+              ++ lib.optionals (!qemu.graphics) [
                 "-display"
                 "none"
                 # We use file:/dev/stdout instead of stdio so QEMU doesn't try to read from stdin,
@@ -161,30 +168,26 @@
                     "-netdev vde,id=net${idx},sock=$ALLOY_VDE_SOCKET_${idx}"
                     "-device virtio-net-pci,netdev=net${idx},mac=${netHost.mac}"
                   ]
-                ) config.nets
+                ) qemu.nets
               );
 
             boot.kernelModules = [ "console=ttyS0,115200n8" ];
             systemd.services."serial-getty@ttyS0".enable = true;
           };
-
-          config.variants."direct-boot".package =
-            { ... }:
+          config.variants."direct-boot".nixosConfig =
             (lib.nixosSystem {
               inherit (host) system;
               modules = [
                 host.nixosModule
-                config.nixosModule
+                qemu.nixosModule
               ];
-            }).config.system.build.vm;
-
-          config.variants."full-boot".package =
-            { ... }:
+            }).config;
+          config.variants."full-boot".nixosConfig =
             (lib.nixosSystem {
               inherit (host) system;
               modules = [
                 host.nixosModule
-                config.nixosModule
+                qemu.nixosModule
                 ({ config, ... }: {
                   virtualisation.useBootLoader = lib.mkDefault true;
                   virtualisation.useEFIBoot = lib.mkDefault (
@@ -192,7 +195,7 @@
                   );
                 })
               ];
-            }).config.system.build.vm;
+            }).config;
         };
 
       hostSubmodule =

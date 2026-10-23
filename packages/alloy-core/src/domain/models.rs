@@ -22,6 +22,7 @@ pub struct State {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Host {
+    pub system: String,
     pub tags: Vec<String>,
     pub secrets: HashMap<String, SecretRef>,
 

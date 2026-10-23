@@ -90,7 +90,7 @@
 
         build.state = { ... }: {
           hosts = lib.mapAttrs (_: host: {
-            inherit (host) tags;
+            inherit (host) tags system;
           }) alloy.hosts;
         };
       };

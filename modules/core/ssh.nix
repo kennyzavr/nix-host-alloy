@@ -13,9 +13,11 @@
         options = {
           net = lib.mkOption {
             type = lib.types.nullOr lib.types.str;
+            description = "Host network whose address this SSH listener binds to; null creates a listener without a named network address.";
           };
           port = lib.mkOption {
             type = lib.types.port;
+            description = "TCP port used by this SSH listener.";
           };
         };
       };
@@ -25,6 +27,7 @@
           authKeyFacts = lib.mkOption {
             default = [ ];
             type = lib.types.listOf (lib.types.str);
+            description = "Facts containing authorized public keys for this user.";
           };
         };
       };
@@ -52,6 +55,7 @@
             type = lib.types.str;
             readOnly = true;
             default = "${config.path}.pub";
+            description = "Public key path derived from `path`.";
           };
         };
       };
@@ -66,13 +70,16 @@
           enable = lib.mkOption {
             default = false;
             type = lib.types.bool;
+            description = "Whether to enable the SSH server on this host.";
           };
           listen = lib.mkOption {
             default = [ ];
             type = lib.types.listOf (lib.types.submodule (listenSubmodule config));
+            description = "SSH listener addresses and ports configured for this host.";
           };
           keyPaths = lib.mkOption {
             type = lib.types.listOf lib.types.str;
+            description = "Generated private key paths installed as SSH host keys.";
           };
         };
 
@@ -80,16 +87,20 @@
           enable = lib.mkOption {
             default = false;
             type = lib.types.bool;
+            description = "Whether to start the SSH server from the initrd.";
           };
           port = lib.mkOption {
             type = lib.types.port;
+            description = "TCP port used by the initrd SSH server.";
           };
           authKeyFacts = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
+            description = "Facts containing public keys authorized to access the initrd SSH server.";
           };
           keyPaths = lib.mkOption {
             type = lib.types.listOf lib.types.str;
+            description = "Generated private key paths included as initrd SSH host keys.";
           };
         };
 
@@ -109,20 +120,20 @@
                     ]) (builtins.attrValues config.ssh.keys);
                   in
                   builtins.length paths == builtins.length (lib.unique paths);
-                message = "[Alloy] Host '${name}': generated SSH private and public key paths must be unique";
+                message = "[Alloy] Host '${name}': Generated SSH private and public key paths must be unique. Set distinct `path` values in `ssh.keys`.";
               }
             ]
             ++ lib.concatLists (
               lib.mapAttrsToList (keyName: key: [
                 {
                   assertion = builtins.match "[a-zA-Z0-9_-]+" keyName != null;
-                  message = "[Alloy] Host '${name}': invalid SSH key name '${keyName}'";
+                  message = "[Alloy] Host '${name}', SSH key '${keyName}': The name may contain only letters, numbers, underscores, and hyphens.";
                 }
                 {
                   assertion =
                     (key.type == "ed25519" && key.bits == null)
                     || (key.type == "rsa" && key.bits != null && key.bits >= 2048);
-                  message = "[Alloy] Host '${name}': SSH key '${keyName}' requires null bits for Ed25519 or at least 2048 bits for RSA";
+                  message = "[Alloy] Host '${name}', SSH key '${keyName}': Set `bits = null` for Ed25519 or at least 2048 bits for RSA.";
                 }
                 {
                   assertion =
@@ -130,7 +141,7 @@
                     && lib.all (part: part != "" && part != "." && part != "..") (
                       lib.tail (lib.splitString "/" key.path)
                     );
-                  message = "[Alloy] Host '${name}': SSH key '${keyName}' needs a normalized persistent path outside the Nix store";
+                  message = "[Alloy] Host '${name}', SSH key '${keyName}': `path` must be a normalized persistent path outside `/nix/store`.";
                 }
               ]) config.ssh.keys
             );
@@ -184,7 +195,7 @@
             assertions = [
               {
                 assertion = config.boot.ssh.keyPaths != [ ];
-                message = "[Alloy] Host '${name}': boot SSH requires at least one host key path";
+                message = "[Alloy] Host '${name}': Configure at least one host key path in `boot.ssh.keyPaths`.";
               }
             ];
             nixosModule = { pkgs, ... }: {
@@ -212,7 +223,7 @@
             assertions = [
               {
                 assertion = builtins.length config.ssh.listen >= 1;
-                message = "[Alloy] Host '${name}': at least one ssh listener must be specified";
+                message = "[Alloy] Host '${name}': Configure at least one listener in `ssh.listen`.";
               }
             ];
 

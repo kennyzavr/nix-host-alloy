@@ -14,23 +14,28 @@
           enable = lib.mkOption {
             type = lib.types.bool;
             default = true;
+            description = "Whether to create authoritative DNS instances for this service.";
           };
           endpoint = lib.mkOption {
             readOnly = true;
             type = lib.types.str;
             default = "dns-auth-${name}";
+            description = "Generated endpoint name for this authoritative DNS service.";
           };
           zones = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
+            description = "Configured DNS zones served by this service.";
           };
           hosts = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule { });
+            description = "Hosts for which this service creates authoritative DNS jails.";
           };
           overlays = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule { });
+            description = "Network overlays used by the DNS jail endpoints.";
           };
         };
       };
@@ -39,12 +44,12 @@
         assertions = [
           {
             assertion = srv.overlays != { };
-            message = "[Alloy] Service 'dns-auth.${srvName}': You must specify at least one network overlay in 'overlays' for the endpoint targets.";
+            message = "[Alloy] Service 'dns-auth.${srvName}': Set `overlays` to at least one network overlay for the endpoint targets.";
           }
         ]
         ++ (lib.mapAttrsToList (hostName: _: {
           assertion = builtins.hasAttr hostName alloy.hosts;
-          message = "[Alloy] Service 'dns-auth.${srvName}': host '${hostName}' is unknown. Please ensure it is defined in 'config.hosts'.";
+          message = "[Alloy] Service 'dns-auth.${srvName}': Host '${hostName}' is not defined in `hosts`.";
         }) srv.hosts)
         ++ (lib.pipe srv.zones [
           (lib.filter (z: builtins.hasAttr z alloy.dns.zones))
@@ -52,7 +57,7 @@
           (lib.mapAttrsToList (
             apex: zones: {
               assertion = builtins.length zones == 1;
-              message = "[Alloy] Service 'dns-auth.${srvName}': Cannot serve zones [ ${lib.concatStringsSep ", " zones} ] simultaneously because they share the same apex '${apex}'.";
+              message = "[Alloy] Service 'dns-auth.${srvName}': Cannot serve zones [ ${lib.concatStringsSep ", " zones} ] simultaneously because they share the apex '${apex}'.";
             }
           ))
         ]);
@@ -162,6 +167,7 @@
       options.services.dns-auth = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
+        description = "Authoritative DNS service instances.";
       };
 
       config = {

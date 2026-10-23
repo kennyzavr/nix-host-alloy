@@ -132,35 +132,35 @@
             [
               {
                 assertion = config.deploy.connections != { };
-                message = "[Alloy] Host '${name}': deploy requires at least one connection.";
+                message = "[Alloy] Host '${name}': Configure at least one connection in `deploy.connections`.";
               }
               {
                 assertion =
                   config.deploy.defaultConnection != null
                   && builtins.hasAttr config.deploy.defaultConnection config.deploy.connections;
-                message = "[Alloy] Host '${name}': deploy.defaultConnection must name an existing connection (set it explicitly when multiple connections exist).";
+                message = "[Alloy] Host '${name}': `deploy.defaultConnection` must name an entry in `deploy.connections`. Set it explicitly when multiple connections are configured.";
               }
               {
                 assertion = config.deploy.signingKeys != [ ];
-                message = "[Alloy] Host '${name}': deploy.signingKeys must contain at least one signing key.";
+                message = "[Alloy] Host '${name}': Add at least one key to `deploy.signingKeys`.";
               }
               {
                 assertion = config.deploy.activation.method == "sudo" || !config.deploy.activation.askPassword;
-                message = "[Alloy] Host '${name}': deploy.activation.askPassword is only supported with method 'sudo'.";
+                message = "[Alloy] Host '${name}': `deploy.activation.askPassword` is supported only with method `sudo`.";
               }
             ]
             ++ lib.map (keyName: {
               assertion = builtins.hasAttr keyName alloy.deploy.signingKeys;
-              message = "[Alloy] Host '${name}': unknown deploy signing key '${keyName}'.";
+              message = "[Alloy] Host '${name}': Signing key '${keyName}' is not defined in `deploy.signingKeys`.";
             }) (lib.unique (config.deploy.signingKeys ++ config.deploy.trustedSigningKeys))
             ++ lib.map (keyName: {
               assertion = builtins.elem keyName config.deploy.trustedSigningKeys;
-              message = "[Alloy] Host '${name}': deploy signing key '${keyName}' must also be in trustedSigningKeys.";
+              message = "[Alloy] Host '${name}': Signing key '${keyName}' must also appear in `deploy.trustedSigningKeys`.";
             }) config.deploy.signingKeys
             ++ lib.mapAttrsToList (connectionName: connection: {
               assertion =
                 builtins.match "[^[:space:]]+" connection.address != null && !lib.hasPrefix "-" connection.address;
-              message = "[Alloy] Host '${name}', deploy connection '${connectionName}': address must be an SSH address or alias without whitespace or a leading '-'.";
+              message = "[Alloy] Host '${name}', deploy connection '${connectionName}': `address` must be an SSH address or alias without whitespace or a leading `-`.";
             }) config.deploy.connections
           );
 
@@ -191,28 +191,28 @@
       config.assertions = [
         {
           assertion = lib.allUnique (lib.mapAttrsToList (_: key: key.generator) alloy.deploy.signingKeys);
-          message = "[Alloy] Deploy signing keys must have distinct generator names.";
+          message = "[Alloy] Deploy signing keys: Each key must use a distinct generator name.";
         }
         {
           assertion = lib.allUnique (
             lib.mapAttrsToList (_: key: key.privateKeySecret) alloy.deploy.signingKeys
           );
-          message = "[Alloy] Deploy signing keys must have distinct privateKeySecret names.";
+          message = "[Alloy] Deploy signing keys: Each key must use a distinct `privateKeySecret` name.";
         }
         {
           assertion = lib.allUnique (lib.mapAttrsToList (_: key: key.publicKeyFact) alloy.deploy.signingKeys);
-          message = "[Alloy] Deploy signing keys must have distinct publicKeyFact names.";
+          message = "[Alloy] Deploy signing keys: Each key must use a distinct `publicKeyFact` name.";
         }
       ]
       ++ lib.concatLists (
         lib.mapAttrsToList (name: key: [
           {
             assertion = builtins.hasAttr key.publicKeyFact alloy.facts;
-            message = "[Alloy] Deploy signing key '${name}': unknown publicKeyFact '${key.publicKeyFact}'.";
+            message = "[Alloy] Deploy signing key '${name}': Fact '${key.publicKeyFact}' is not defined in `facts`.";
           }
           {
             assertion = builtins.match "[^[:space:]:]+" name != null;
-            message = "[Alloy] Deploy signing key '${name}': key name must not contain whitespace or ':'.";
+            message = "[Alloy] Deploy signing key '${name}': The key name cannot contain whitespace or `:`.";
           }
           {
             assertion =
@@ -221,7 +221,7 @@
               ->
                 builtins.match "[^[:space:]:]+:[A-Za-z0-9+/]{43}=" (lib.trim alloy.facts.${key.publicKeyFact}.value)
                 != null;
-            message = "[Alloy] Deploy signing key '${name}': publicKeyFact must contain one Nix Ed25519 public key (name:base64).";
+            message = "[Alloy] Deploy signing key '${name}': `publicKeyFact` must contain one Nix Ed25519 public key in `name:base64` format.";
           }
         ]) alloy.deploy.signingKeys
       );

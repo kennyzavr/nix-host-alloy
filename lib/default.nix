@@ -195,13 +195,13 @@ in
       in
       assert lib.assertMsg (
         builtins.match "^(([0-9a-f]{4})(:[0-9a-f]{4}){0,7})?$" ipv6 != null
-      ) "mkArapIpv6: expected ipv6 blocks, got ${ipv6}";
+      ) "[Alloy] `mkArpaIpv6`: Expected colon-separated IPv6 blocks, got '${ipv6}'.";
       builtins.concatStringsSep "." reversedChars + ".ip6.arpa.";
 
     resolveZoneNode =
       zones: node:
       assert lib.assertMsg (builtins.hasAttr node.zone zones)
-        "alloy: dns: resolveZoneNode 'zone ${node.zone}, name ${node.name}': the zone is not defined";
+        "[Alloy] DNS node '${node.name}' references undefined zone '${node.zone}'. Define it in `dns.zones`.";
       "${if node.name == "@" then "" else "${lib.removeSuffix "." node.name}."}${
         lib.removeSuffix "." zones.${node.zone}.apex
       }.";

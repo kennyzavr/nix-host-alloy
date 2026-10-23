@@ -14,38 +14,47 @@
           enable = lib.mkOption {
             type = lib.types.bool;
             default = true;
+            description = "Whether to expose this generator's outputs and include its script in generated state.";
           };
           description = lib.mkOption {
             default = "";
             type = lib.types.str;
+            description = "Human-readable summary shown when inspecting this generator.";
           };
           fingerprintFact = lib.mkOption {
             default = "generators/${name}/fingerprint";
             type = lib.types.str;
             readOnly = true;
+            description = "Fact path storing the last successfully generated package fingerprint.";
           };
           wants = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
+            description = "Generators that must run before this generator when executing the dependency graph.";
           };
           after = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
+            description = "Ordering-only generator dependencies that should run before this generator.";
           };
           tags = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
+            description = "Labels used to select or group this generator in CLI operations.";
           };
           facts = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule { });
+            description = "Facts produced by this generator.";
           };
           secrets = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule { });
+            description = "Master secrets produced by this generator.";
           };
           package = lib.mkOption {
             type = lib.types.functionTo lib.types.package;
+            description = "Callback returning the generator package for the requested system.";
           };
           assertions = lib.mkOption {
             default = [ ];

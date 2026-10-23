@@ -119,9 +119,11 @@
         options = {
           certFact = lib.mkOption {
             type = lib.types.str;
+            description = "Fact containing the PEM-encoded certificate chain.";
           };
           keySecret = lib.mkOption {
             type = lib.types.str;
+            description = "Master secret containing the certificate's private key.";
           };
         };
       };

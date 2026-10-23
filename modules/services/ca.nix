@@ -14,14 +14,17 @@
           enable = lib.mkOption {
             default = true;
             type = lib.types.bool;
+            description = "Whether to create this certificate authority service and its jail.";
           };
           endpoint = lib.mkOption {
             default = "ca-${name}";
             type = lib.types.str;
+            description = "Endpoint name used by ACME clients to reach this CA.";
           };
           ca = lib.mkOption {
             type = lib.types.str;
             default = name;
+            description = "Name of the step-ca authority configured by this service.";
           };
           root = {
             subject = lib.mkOption {
@@ -68,25 +71,31 @@
           overlays = lib.mkOption {
             default = [ ];
             type = lib.types.attrsOf (lib.types.submodule { });
+            description = "Network overlays used by the CA jail endpoint.";
           };
           host = lib.mkOption {
             type = lib.types.str;
+            description = "Host on which the CA jail is created.";
           };
           domain = lib.mkOption {
             type = alib.types.zoneNode;
+            description = "DNS node used as the CA server's domain name.";
           };
           acme = {
             enable = lib.mkOption {
               default = false;
               type = lib.types.bool;
+              description = "Whether to configure ACME issuance through this CA.";
             };
           };
           subject = lib.mkOption {
             type = lib.types.str;
+            description = "Subject used to construct the root and intermediate CA certificate subjects.";
           };
           permittedDomains = lib.mkOption {
             default = [ ];
             type = lib.types.listOf alib.types.zoneNode;
+            description = "DNS names the CA is permitted to issue certificates for.";
           };
           permittedIps = lib.mkOption {
             default = [ ];
@@ -96,6 +105,7 @@
                 options.prefixLength = lib.mkOption { type = lib.types.int; };
               }
             );
+            description = "IP address ranges the CA is permitted to issue certificates for.";
           };
         };
       };
@@ -104,11 +114,11 @@
         assertions = [
           {
             assertion = builtins.hasAttr srv.host alloy.hosts;
-            message = "[Alloy] ca '${srvName}': host '${srv.host}' is unknown";
+            message = "[Alloy] Service 'ca.${srvName}': Host '${srv.host}' is not defined in `hosts`.";
           }
           {
             assertion = srv.overlays != { };
-            message = "[Alloy] Service 'ca.${srvName}': you must specify at least one network overlay in 'overlays' for the endpoint targets.";
+            message = "[Alloy] Service 'ca.${srvName}': Set `overlays` to at least one network overlay for the endpoint targets.";
           }
         ];
 
@@ -299,6 +309,7 @@
       options.services.ca = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
+        description = "Private certificate authority service instances.";
       };
 
       config =

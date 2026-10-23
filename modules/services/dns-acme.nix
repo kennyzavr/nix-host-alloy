@@ -14,22 +14,27 @@
           enable = lib.mkOption {
             type = lib.types.bool;
             default = true;
+            description = "Whether to create this ACME DNS-update service and its jail.";
           };
           endpoint = lib.mkOption {
             type = lib.types.str;
             readOnly = true;
             default = "dns-acme-${name}";
+            description = "Generated endpoint name for this ACME DNS-update service.";
           };
           host = lib.mkOption {
             type = lib.types.str;
+            description = "Host on which the DNS-update jail is created.";
           };
           zones = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
+            description = "DNS zones this service updates for ACME DNS challenges.";
           };
           overlays = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule { });
+            description = "Network overlays used by the DNS-update jail endpoint.";
           };
         };
       };
@@ -74,11 +79,11 @@
           assertions = [
             {
               assertion = srv.overlays != { };
-              message = "[Alloy] Service 'dns-acme.${srvName}': you must specify at least one network overlay in 'overlays' for the endpoint targets.";
+              message = "[Alloy] Service 'dns-acme.${srvName}': Set `overlays` to at least one network overlay for the endpoint targets.";
             }
             {
               assertion = builtins.hasAttr srv.host alloy.hosts;
-              message = "[Alloy] Service 'dns-acme.${srvName}': host '${srv.host}' is unknown. Please ensure it is defined in 'config.hosts'.";
+              message = "[Alloy] Service 'dns-acme.${srvName}': Host '${srv.host}' is not defined in `hosts`.";
             }
           ]
           ++ (lib.pipe srv.zones [
@@ -87,7 +92,7 @@
             (lib.mapAttrsToList (
               apex: zones: {
                 assertion = builtins.length zones == 1;
-                message = "[Alloy] Service 'dns-acme.${srvName}': Cannot serve zones [ ${lib.concatStringsSep ", " zones} ] simultaneously because they share the same apex '${apex}'.";
+                message = "[Alloy] Service 'dns-acme.${srvName}': Cannot serve zones [ ${lib.concatStringsSep ", " zones} ] simultaneously because they share the apex '${apex}'.";
               }
             ))
           ]);
@@ -283,6 +288,7 @@
       options.services.dns-acme = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
+        description = "DNS-update service instances used to answer ACME DNS challenges.";
       };
 
       config = {

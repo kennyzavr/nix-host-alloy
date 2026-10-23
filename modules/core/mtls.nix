@@ -42,6 +42,7 @@
                 group = "root";
                 mode = "0400";
               };
+              description = "Owner, group, and mode applied to this node's generated mTLS files.";
             };
           };
           config = {
@@ -85,6 +86,7 @@
         certPath = lib.mkOption {
           type = lib.types.str;
           readOnly = true;
+          description = "Path to the root CA certificate installed in the host trust store.";
         };
       };
 

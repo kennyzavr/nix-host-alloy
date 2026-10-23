@@ -82,7 +82,7 @@
             assertions = [
               {
                 assertion = config.users != { };
-                message = "[Alloy] Host '${name}': at least one user must be specified";
+                message = "[Alloy] Host '${name}': Declare at least one user in `users`.";
               }
             ];
             nixosModule = lib.mkMerge [

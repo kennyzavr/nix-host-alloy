@@ -15,6 +15,7 @@
           options = {
             file = lib.mkOption {
               type = lib.types.str;
+              description = "Path to this fact's backing file, relative to the workspace root.";
             };
             path = lib.mkOption {
               readOnly = true;
@@ -32,6 +33,7 @@
             tags = lib.mkOption {
               default = [ ];
               type = lib.types.listOf lib.types.str;
+              description = "Labels used to select or group this fact in CLI operations.";
             };
             assertions = lib.mkOption {
               type = lib.types.listOf alib.types.assertion;
@@ -51,19 +53,16 @@
                 builtins.readFile config.path
               else
                 throw ''
-                  Alloy: Fact file for '${name}' not found at ${config.path}.
-                  To fix this, ensure the file is created (e.g. via 'alloy generators run' or 'alloy facts set "${name}"').
+                  [Alloy] Fact '${name}': File not found at ${config.path}.
+                  Create it with `alloy-cli gens exec` or edit it with `alloy-cli facts edit "${name}"`.
                 '';
 
             assertions = [
               {
                 assertion = config.exists;
                 message = ''
-                  [Alloy] Fact '${name}' has no backing file at ${config.path}.
-
-                  To fix this, run one of:
-                    alloy generators run    (if this fact is produced by a generator)
-                    alloy facts set "${name}" (to set the value manually)
+                  [Alloy] Fact '${name}': No backing file exists at ${config.path}.
+                  Run `alloy-cli gens exec` if a generator produces this fact, or edit it with `alloy-cli facts edit "${name}"`.
                 '';
               }
             ];
@@ -75,9 +74,11 @@
           path = lib.mkOption {
             type = lib.types.str;
             default = node.factsBasePath + "/${name}";
+            description = "Path where this fact is exposed inside the host or jail.";
           };
           permissions = lib.mkOption {
             type = alib.types.permissions;
+            description = "Owner, group, and mode used for the exposed fact file.";
           };
         };
         config = {
@@ -126,6 +127,7 @@
         facts = lib.mkOption {
           default = { };
           type = lib.types.attrsOf (lib.types.submodule factSubmodule);
+          description = "Workspace facts available to the Alloy configuration.";
         };
 
         hosts = lib.mkOption {
@@ -140,6 +142,7 @@
           baseDir = lib.mkOption {
             type = lib.types.str;
             default = "${alloy.workspace.baseDir}/facts";
+            description = "Workspace-relative directory containing fact files.";
           };
         };
       };

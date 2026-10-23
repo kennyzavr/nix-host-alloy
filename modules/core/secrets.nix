@@ -13,11 +13,13 @@
         options = {
           file = lib.mkOption {
             type = lib.types.str;
+            description = "Path to the encrypted secret file, relative to the workspace root.";
           };
           path = lib.mkOption {
             readOnly = true;
             default = alloy.workspace.root + "/${config.file}";
             type = lib.types.path;
+            description = "Absolute workspace path to the encrypted secret file.";
           };
           exists = lib.mkOption {
             readOnly = true;
@@ -27,6 +29,7 @@
           tags = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
+            description = "Labels used to select or group this secret in CLI operations.";
           };
           assertions = lib.mkOption {
             type = lib.types.listOf alib.types.assertion;
@@ -39,8 +42,8 @@
             {
               assertion = config.exists;
               message = ''
-                [Alloy] Master secret '${name}' not found at ${alloy.workspace.root}/${config.file}.
-                To fix this, ensure the file is created (e.g. via 'alloy generators run' or 'alloy secrets set "${name}"').
+                [Alloy] Master secret '${name}': File not found at ${alloy.workspace.root}/${config.file}.
+                Create it with `alloy-cli gens exec` or edit it with `alloy-cli secrets edit "${name}"`.
               '';
             }
           ];
@@ -66,10 +69,12 @@
                 group = "root";
                 mode = "0440";
               };
+              description = "Owner, group, and mode applied to the decrypted secret on the host or jail.";
             };
             placeholder = lib.mkOption {
               type = lib.types.str;
               default = "___ALLOY_SECRET_${builtins.hashString "sha256" name}___";
+              description = "Marker replaced with the decrypted secret when rendering a secret template.";
             };
             assertions = lib.mkOption {
               type = lib.types.listOf alib.types.assertion;
@@ -93,16 +98,14 @@
             assertions = [
               {
                 assertion = builtins.pathExists (alloy.workspace.root + "/${config.file}");
-                message = "[Alloy] Secret '${name}' attached to ${contextType} '${contextName}' not found at ${alloy.workspace.root}/${config.file}. You may need to rekey the secret for this ${contextType}, or add the rekeyed secret to git.";
+                message = "[Alloy] ${contextType} '${contextName}', secret '${name}': File not found at ${alloy.workspace.root}/${config.file}. Rekey the secret for this ${contextType} or add the rekeyed file to the workspace.";
               }
               {
                 assertion = builtins.hasAttr name alloy.secrets;
                 message = ''
-                  [Alloy] Invalid master secret reference
+                  [Alloy] ${contextType} '${contextName}', secret '${name}': No matching master secret is declared in `secrets`.
 
-                  Master secret corresponding to secret '${name}' attached to ${contextType} '${contextName}' does not exist.
-
-                  Location:
+                  Secret file definitions:
                   ${lib.concatStringsSep "\n" (map (f: "  - ${f}") options.master.files)}
                 '';
               }
@@ -133,6 +136,7 @@
                 group = "root";
                 mode = "0440";
               };
+              description = "Owner, group, and mode applied to the rendered template file.";
             };
           };
           config = {
@@ -341,7 +345,7 @@
             assertions = [
               {
                 assertion = config.workspace.secrets.age.keyPairs != [ ];
-                message = "[Alloy] host '${name}': the option secrets.age.keyPairs must be set";
+                message = "[Alloy] Host '${name}': Configure at least one `workspace.secrets.age.keyPairs` entry.";
               }
             ];
             nixosModule = {
@@ -430,16 +434,19 @@
         secrets = lib.mkOption {
           default = { };
           type = lib.types.attrsOf (lib.types.submodule masterSecretSubmodule);
+          description = "Master encrypted secrets stored in the workspace.";
         };
 
         workspace.secrets = {
           baseDir = lib.mkOption {
             type = lib.types.str;
             default = "${alloy.workspace.baseDir}/secrets/masters";
+            description = "Workspace-relative directory containing master encrypted secret files.";
           };
           age.keyPairs = lib.mkOption {
             default = [ ];
             type = lib.types.listOf alib.types.ageKeyPair;
+            description = "Age identity and recipient pairs used to rekey workspace secrets.";
           };
         };
 

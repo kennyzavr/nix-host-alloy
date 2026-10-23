@@ -27,6 +27,7 @@
             domains = lib.mkOption {
               default = [ ];
               type = lib.types.listOf alib.types.zoneNode;
+              description = "DNS names included in this certificate's subject alternative names.";
             };
             ips = lib.mkOption {
               default = [ ];
@@ -34,15 +35,19 @@
                 lib.types.submodule {
                   options.addr = lib.mkOption {
                     type = alib.types.ip.addr;
+                    description = "IP address included in the certificate's subject alternative names.";
                   };
                 }
               );
+              description = "IP addresses included in this certificate's subject alternative names.";
             };
             ca = lib.mkOption {
               type = lib.types.str;
+              description = "Certificate authority used to issue or sign this certificate.";
             };
             src = lib.mkOption {
               type = lib.types.attrTag { };
+              description = "Certificate source configuration, such as static files or an ACME challenge.";
             };
             assertions = lib.mkOption {
               type = lib.types.listOf lib.types.unspecified;
@@ -52,15 +57,15 @@
             assertions = [
               {
                 assertion = config.src.acme.email != "";
-                message = "[Alloy] Acme cert '${name}': email cant be an empty string";
+                message = "[Alloy] ACME certificate '${name}': Set a non-empty `src.acme.email`.";
               }
               {
                 assertion = config.domains != [ ];
-                message = "[Alloy] Acme cert '${name}': A certificate using ACME DNS challenge must specify at least one domain.";
+                message = "[Alloy] ACME certificate '${name}': Configure at least one domain when using the DNS challenge.";
               }
               {
                 assertion = config.ips == [ ];
-                message = "[Alloy] Acme cert '${name}': IP addresses (ips) are not allowed when using ACME DNS challenge.";
+                message = "[Alloy] ACME certificate '${name}': `ips` cannot be set when using the DNS challenge. Remove the IP addresses or use another challenge type.";
               }
               (
                 let
@@ -69,7 +74,7 @@
                 in
                 {
                   assertion = builtins.length dnsServers <= 1;
-                  message = "[Alloy] Acme cert '${name}': domains span multiple ACME servers, which is not supported in a single certificate.";
+                  message = "[Alloy] ACME certificate '${name}': Its domains use multiple ACME servers, which cannot be combined in one certificate.";
                 }
               )
             ];
@@ -81,14 +86,17 @@
           reloadServices = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [ ];
+            description = "Systemd services to reload after this certificate is updated.";
           };
           restartServices = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [ ];
+            description = "Systemd services to restart after this certificate is updated.";
           };
           group = lib.mkOption {
             type = lib.types.str;
             default = "tls-cert-${name}";
+            description = "Group granted access to this certificate's files on the host or jail.";
           };
           gid = lib.mkOption {
             type = lib.types.int;
@@ -97,12 +105,15 @@
           };
           certPath = lib.mkOption {
             type = lib.types.str;
+            description = "Path to the certificate chain for this entity.";
           };
           keyPath = lib.mkOption {
             type = lib.types.str;
+            description = "Path to the private key for this entity.";
           };
           fullPath = lib.mkOption {
             type = lib.types.str;
+            description = "Path to the combined certificate and private key PEM file.";
           };
           waitService = lib.mkOption {
             type = lib.types.str;

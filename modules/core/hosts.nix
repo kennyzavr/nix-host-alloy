@@ -17,13 +17,16 @@
           };
           system = lib.mkOption {
             type = lib.types.str;
+            description = "Nix platform identifier used to evaluate and build this host.";
           };
           stateVersion = lib.mkOption {
             type = lib.types.str;
+            description = "NixOS state version passed to this host's NixOS configuration.";
           };
           nixosModule = lib.mkOption {
             type = lib.types.deferredModule;
             default = { };
+            description = "NixOS module merged into this host's generated NixOS configuration.";
             apply =
               module:
               let
@@ -61,6 +64,7 @@
           tags = lib.mkOption {
             default = [ ];
             type = lib.types.listOf lib.types.str;
+            description = "Labels used to select or group this host in CLI operations.";
           };
         };
         config = {
@@ -68,7 +72,7 @@
           assertions = [
             {
               assertion = alib.types.dns.label.check name;
-              message = "[Alloy] Host name '${name}' contains invalid characters or is too long. Use only lowercase letters, numbers, and hyphens (max 63 characters).";
+              message = "[Alloy] Host '${name}': The name must be a valid DNS label.";
             }
           ];
           nixosModule = {

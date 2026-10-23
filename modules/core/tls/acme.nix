@@ -25,22 +25,27 @@
           options = {
             server = lib.mkOption {
               type = alib.types.serverEndpoint;
+              description = "DNS server updated to publish ACME DNS challenge records.";
             };
             tsigKey.alg = lib.mkOption {
               type = alib.types.dns.name;
               default = "hmac-sha256.";
+              description = "TSIG algorithm used to authenticate DNS updates.";
             };
             tsigKey.name = lib.mkOption {
               type = alib.types.dns.name;
               default = "key.dnsupdate.acme.${certName}";
+              description = "DNS name of the TSIG key used for updates.";
             };
             tsigKey.secret = lib.mkOption {
               type = lib.types.str;
               default = "tls/certs/${certName}/acme/dns-challenge/dnsupdate/tsig-key";
+              description = "Master secret containing the TSIG shared secret.";
             };
             tsigKey.generator = lib.mkOption {
               type = lib.types.str;
               default = "tls/certs/${certName}/acme/dns-challenge/dnsupdate/tsig-key";
+              description = "Generator instance that creates the TSIG shared secret.";
             };
           };
         };
@@ -68,13 +73,16 @@
             acceptTerms = lib.mkOption {
               default = false;
               type = lib.types.bool;
+              description = "Whether to accept the ACME server's terms of service.";
             };
             email = lib.mkOption {
               default = "";
               type = lib.types.str;
+              description = "Contact email registered with the ACME server.";
             };
             challenge = lib.mkOption {
               type = acmeChallengeType certName;
+              description = "ACME challenge method and its configuration.";
             };
           };
         };
@@ -208,7 +216,7 @@
         {
           warnings = lib.optional (ca.acme.url.server ? endpoint) (
             alloy.mkEndpointOverlaysWarn ca.acme.url.server.endpoint (builtins.attrNames host.overlays)
-              "host '${hostName}': acme dnsupdate cert '${certName}':"
+              "Host '${hostName}', ACME DNS-update certificate '${certName}':"
           );
 
           secrets.${challengeOpts.tsigKey.secret} = {
@@ -329,7 +337,7 @@
           jailConfig = {
             warnings = lib.optional (ca.acme.url.server ? endpoint) (
               alloy.mkEndpointOverlaysWarn ca.acme.url.server.endpoint (builtins.attrNames jail.overlays)
-                "jail '${jailName}': acme dnsupdate cert '${certName}':"
+                "Jail '${jailName}', ACME DNS-update certificate '${certName}':"
             );
           };
         };

@@ -13,6 +13,7 @@
         options.net = lib.mkOption {
           default = alloy.hosts.${name}.primaryNet;
           type = lib.types.str;
+          description = "Host network whose advertised addresses are published for this DNS edge host.";
         };
       };
 
@@ -21,10 +22,12 @@
           zone = lib.mkOption {
             default = name;
             type = lib.types.str;
+            description = "DNS zone served by this route; defaults to the route name.";
           };
           upstream = {
             endpoint = lib.mkOption {
               type = lib.types.str;
+              description = "Alloy endpoint used as the upstream for this route.";
             };
           };
         };
@@ -35,18 +38,22 @@
           enable = lib.mkOption {
             default = true;
             type = lib.types.bool;
+            description = "Whether to create the DNS edge jails, endpoints, and zone configuration for this service.";
           };
           allowedOverlays = lib.mkOption {
             default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            description = "Allowed overlays for upstream endpoints; null infers the set from configured routes.";
           };
           hosts = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
+            description = "Hosts that run DNS edge instances for this service.";
           };
           routes = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule routeSubmodule);
+            description = "Zones served by this service and the endpoint used for each route.";
           };
         };
       };
@@ -77,7 +84,7 @@
             (lib.mapAttrsToList (
               routeName: route: [
                 (alloy.mkEndpointOverlaysWarn route.upstream.endpoint srv.allowedOverlays
-                  "Service dns-edge '${srvName}': route '${routeName}':"
+                  "Service 'dns-edge.${srvName}', route '${routeName}':"
                 )
               ]
             ))
@@ -87,14 +94,14 @@
           assertions = [
             {
               assertion = srv.hosts != { };
-              message = "[Alloy] dns-edge '${srvName}': at least one host must be specified";
+              message = "[Alloy] Service 'dns-edge.${srvName}': Declare at least one host in `hosts`.";
             }
           ]
           ++ (lib.flatten (
             lib.mapAttrsToList (hostName: hostCfg: [
               {
                 assertion = builtins.hasAttr hostName alloy.hosts;
-                message = "[Alloy] dns-edge '${srvName}': host '${hostName}' is unknown";
+                message = "[Alloy] Service 'dns-edge.${srvName}': Host '${hostName}' is not defined in `hosts`.";
               }
             ]) srv.hosts
           ));
@@ -330,6 +337,7 @@
       options.services.dns-edge = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
+        description = "DNS edge service instances that serve configured zones.";
       };
 
       config =

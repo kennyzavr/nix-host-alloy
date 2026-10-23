@@ -13,6 +13,7 @@
         options.net = lib.mkOption {
           default = alloy.hosts.${name}.primaryNet;
           type = lib.types.str;
+          description = "Host network whose advertised address is published for this TLS edge host.";
         };
       };
 
@@ -20,23 +21,28 @@
         options = {
           domain = lib.mkOption {
             type = alib.types.zoneNode;
+            description = "DNS name handled by this TLS route.";
           };
           addDnsRecords = lib.mkOption {
             default = true;
             type = lib.types.bool;
+            description = "Whether to add a DNS record mapping this route's domain to its configured hosts.";
           };
           downstream = {
             port = lib.mkOption {
               type = lib.types.port;
+              description = "Port on which the downstream TLS connection is accepted.";
             };
             tls.cert = lib.mkOption {
               default = null;
               type = lib.types.nullOr lib.types.str;
+              description = "Certificate from `tls.certs` used to terminate downstream TLS.";
             };
           };
           upstream = {
             endpoint = lib.mkOption {
               type = lib.types.str;
+              description = "Alloy endpoint receiving the proxied TLS connection.";
             };
           };
         };
@@ -47,18 +53,22 @@
           enable = lib.mkOption {
             default = true;
             type = lib.types.bool;
+            description = "Whether to create the TLS edge jails, routes, and proxy configuration for this service.";
           };
           allowedOverlays = lib.mkOption {
             default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            description = "Allowed overlays for upstream endpoints; null infers the set from configured routes.";
           };
           hosts = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
+            description = "Hosts that run TLS edge instances for this service.";
           };
           routes = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule routeSubmodule);
+            description = "TLS domains, downstream certificates and ports, and upstream endpoints served by this service.";
           };
         };
       };
@@ -79,7 +89,7 @@
             (lib.mapAttrsToList (
               routeName: route: [
                 (alloy.mkEndpointOverlaysWarn route.upstream.endpoint srv.allowedOverlays
-                  "Service tls-edge '${srvName}': route '${routeName}':"
+                  "Service 'tls-edge.${srvName}', route '${routeName}':"
                 )
               ]
             ))
@@ -89,22 +99,22 @@
           assertions = [
             {
               assertion = alib.types.dns.label.check srvName;
-              message = "[Alloy] tls-edge name '${srvName}' must be valid dns label.";
+              message = "[Alloy] Service 'tls-edge.${srvName}': The service name must be a valid DNS label.";
             }
             {
               assertion = srv.hosts != { };
-              message = "[Alloy] tls-edge '${srvName}': at least one host must be specified";
+              message = "[Alloy] Service 'tls-edge.${srvName}': Declare at least one host in `hosts`.";
             }
             {
               assertion = srv.routes != { };
-              message = "[Alloy] smtp-relay '${srvName}': at least one route must be specified";
+              message = "[Alloy] Service 'tls-edge.${srvName}': Declare at least one route in `routes`.";
             }
           ]
           ++ (lib.flatten (
             lib.mapAttrsToList (hostName: hostCfg: [
               {
                 assertion = builtins.hasAttr hostName alloy.hosts;
-                message = "[Alloy] tls-edge '${srvName}': host '${hostName}' is unknown";
+                message = "[Alloy] Service 'tls-edge.${srvName}': Host '${hostName}' is not defined in `hosts`.";
               }
             ]) srv.hosts
           ))
@@ -112,15 +122,15 @@
             lib.mapAttrsToList (routeName: route: [
               {
                 assertion = alib.types.dns.label.check routeName;
-                message = "[Alloy] tls-edge '${srvName}': route name '${routeName}' must be valid dns label.";
+                message = "[Alloy] Service 'tls-edge.${srvName}', route '${routeName}': The route name must be a valid DNS label.";
               }
               {
                 assertion = builtins.hasAttr route.upstream.endpoint alloy.endpoints;
-                message = "[Alloy] tls-edge '${srvName}': route '${routeName}' refers to an unknown endpoint '${route.upstream.endpoint}'.";
+                message = "[Alloy] Service 'tls-edge.${srvName}', route '${routeName}': Endpoint '${route.upstream.endpoint}' is not defined in `endpoints`.";
               }
               {
                 assertion = builtins.hasAttr route.downstream.tls.cert alloy.tls.certs;
-                message = "[Alloy] tls-edge '${srvName}': route '${routeName}': downstream.tls.cert must be valid reference to tls.certs entry.";
+                message = "[Alloy] Service 'tls-edge.${srvName}', route '${routeName}': Certificate '${route.downstream.tls.cert}' is not defined in `tls.certs`.";
               }
             ]) srv.routes
           ));
@@ -290,6 +300,7 @@
       options.services.tls-edge = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
+        description = "TLS passthrough proxy service instances.";
       };
 
       config =

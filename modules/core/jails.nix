@@ -20,8 +20,14 @@
       portType = lib.types.either lib.types.port (
         lib.types.submodule {
           options = {
-            from = lib.mkOption { type = lib.types.port; };
-            to = lib.mkOption { type = lib.types.port; };
+            from = lib.mkOption {
+              type = lib.types.port;
+              description = "First port in the forwarded range, inclusive.";
+            };
+            to = lib.mkOption {
+              type = lib.types.port;
+              description = "Last port in the forwarded range, inclusive.";
+            };
             __toString = lib.mkOption {
               type = lib.types.unspecified;
               internal = true;
@@ -34,28 +40,36 @@
       forwardType = lib.types.submodule (
         { config, ... }: {
           options = {
-            port = lib.mkOption { type = portType; };
+            port = lib.mkOption {
+              type = portType;
+              description = "Host port or port range that receives forwarded traffic.";
+            };
             targetPort = lib.mkOption {
               type = portType;
               default = config.port;
+              description = "Port or matching-length range inside the jail; defaults to `port`.";
             };
             proto = lib.mkOption {
               type = lib.types.enum [
                 "tcp"
                 "udp"
               ];
+              description = "Transport protocol for this port forward.";
             };
             openFirewall = lib.mkOption {
               type = lib.types.bool;
               default = true;
+              description = "Whether to open the forwarded host port in the host firewall.";
             };
             iface = lib.mkOption {
               default = null;
               type = lib.types.nullOr lib.types.str;
+              description = "Limit forwarding to traffic arriving on this host interface.";
             };
             ip = lib.mkOption {
               default = null;
               type = lib.types.nullOr alib.types.ip.addr;
+              description = "Limit forwarding to traffic addressed to this host IP; null matches any address.";
             };
           };
         }
@@ -77,15 +91,18 @@
             };
             host = lib.mkOption {
               type = lib.types.str;
+              description = "Host that runs this jail.";
             };
             uplink = {
               allowEgress = lib.mkOption {
                 default = false;
                 type = lib.types.bool;
+                description = "Allow this jail to initiate connections outside its uplink.";
               };
               forwards = lib.mkOption {
                 default = [ ];
                 type = lib.types.listOf forwardType;
+                description = "Host-to-jail port forwarding rules.";
               };
               ipv6 = lib.mkOption {
                 type = lib.types.str;
@@ -101,10 +118,12 @@
             stateVersion = lib.mkOption {
               type = lib.types.str;
               default = alloy.hosts.${config.host}.stateVersion;
+              description = "NixOS state version used by this jail; defaults to its host's state version.";
             };
             nixosModule = lib.mkOption {
               type = lib.types.deferredModule;
               default = { };
+              description = "NixOS module merged into this jail's generated configuration.";
               apply =
                 module:
                 let
@@ -154,17 +173,14 @@
             assertions = [
               {
                 assertion = alib.types.dns.label.check name;
-                message = "[Alloy] Jail name '${name}' contains invalid characters or is too long. Use only lowercase letters, numbers, and hyphens (max 63 characters).";
+                message = "[Alloy] Jail '${name}': The name must be a valid DNS label.";
               }
               {
                 assertion = builtins.hasAttr config.host alloy.hosts;
                 message = ''
-                  [Alloy] Invalid host reference in jail '${name}'
+                  [Alloy] Jail '${name}': Host '${config.host}' is not defined in `hosts`.
 
-                  You attempted to assign jail '${name}' to host '${config.host}',
-                  but this host is not declared in 'hosts'.
-
-                  Location:
+                  Jail host definitions:
                   ${lib.concatStringsSep "\n" (map (f: "  - ${f}") options.host.files)}
                 '';
               }
@@ -175,36 +191,25 @@
                   assertion =
                     (builtins.isInt forward.port -> builtins.isInt forward.targetPort)
                     || (builtins.isAttrs forward.port -> builtins.isAttrs forward.targetPort);
-                  message = "alloy: jail '${name}': forward '${toString forwardIdx}': both port and targetPort must have the same type: either integer or { from, to } range";
+                  message = "[Alloy] Jail '${name}', port forward #${toString forwardIdx}: `port` and `targetPort` must both be integers or both be `{ from, to }` ranges.";
                 }
                 {
                   assertion = builtins.isAttrs forward.port -> forward.port.from <= forward.port.to;
-                  message = "alloy: jail '${name}': forward '${toString forwardIdx}': port's 'from' must be less than or equal to port's 'to'";
+                  message = "[Alloy] Jail '${name}', port forward #${toString forwardIdx}: `port.from` must be less than or equal to `port.to`.";
                 }
                 {
                   assertion = builtins.isAttrs forward.targetPort -> forward.targetPort.from <= forward.targetPort.to;
-                  message = "alloy: jail '${name}': forward '${toString forwardIdx}': target ports's 'from' must be less than or equal to target ports's 'to'";
+                  message = "[Alloy] Jail '${name}', port forward #${toString forwardIdx}: `targetPort.from` must be less than or equal to `targetPort.to`.";
                 }
                 {
                   assertion =
                     (builtins.isAttrs forward.port && builtins.isAttrs forward.targetPort)
                     -> (forward.port.to - forward.port.from) == (forward.targetPort.to - forward.targetPort.from);
-                  message = "alloy: jail '${name}': forward '${toString forwardIdx}': both port and targetPort must have the same range length";
+                  message = "[Alloy] Jail '${name}', port forward #${toString forwardIdx}: `port` and `targetPort` ranges must have the same length.";
                 }
                 {
                   assertion = forward.ip != null || forward.iface != null;
-                  message = ''
-                    [Alloy] Insecure NAT Forward rule in jail '${name}'!
-
-                    Forward index '${toString forwardIdx}' does not specify `ip.v4`, `ip.v6`, or `iface`.
-                    This creates an unconditional catch-all rule that will intercept ALL traffic on port ${toString forward.port}
-                    across the entire host, including internal traffic from other containers!
-
-                    To fix this, specify at least one of:
-                    - ip.v4
-                    - ip.v6
-                    - iface
-                  '';
+                  message = "[Alloy] Jail '${name}', port forward #${toString forwardIdx}: No `ip` address or `iface` is set. This creates a catch-all rule on port ${toString forward.port} across the host. Set `ip.v4`, `ip.v6`, or `iface` to limit the rule.";
                 }
               ]) config.uplink.forwards
             ));
@@ -405,7 +410,7 @@
                 assertion =
                   builtins.length (lib.filter (jail: jail.host == hostName) (builtins.attrValues alloy.jails))
                   <= 256 * 253;
-                message = "alloy: host '${hostName}': a host can serve no more than ${toString (256 * 253)} jails";
+                message = "[Alloy] Host '${hostName}': A host can serve at most ${toString (256 * 253)} jails.";
               }
             ]) alloy.hosts
           ));

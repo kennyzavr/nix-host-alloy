@@ -67,15 +67,51 @@ Hosts and jails aggregate their diagnostics into the global lists.
 assertions and warnings. CLI operations intentionally differ in validation policy
 (see the state guide). A successful unchecked metadata read is not validation.
 
+Write configuration diagnostics so they make sense on their own. Use the
+`[Alloy] <entity context>: <problem>. <correction or next check>.` shape; include
+the service/entity and nested route or field when relevant. Quote entity names
+with single quotes and format option paths and commands with backticks. Keep
+assertions for invalid configuration and warnings for concerns that do not
+block evaluation.
+
+The message string is the user-facing context for Alloy assertion and warning
+records. `builtins.trace` only writes a debugging message when its expression is
+evaluated; it does not add context to those records. `builtins.addErrorContext`
+can add context to evaluation exceptions, but it does not change collected
+assertion or warning messages. Use it for raw evaluation failures; use guarded
+lookups and explicit diagnostic messages for configuration errors.
+
 `alloy.mkEndpointOverlaysWarn endpointName allowedOverlays contextMsg` checks
 non-null overlay references against an explicit allowed set. With a null set,
-this check is silent. The predicate is now `invalidTargets == [ ]`, so valid sets
-are silent and invalid references warn. Direct-IP targets (`overlay = null`) are
-excluded from overlay maps/checks. Edge services infer their jail overlay set
-when `allowedOverlays = null`; the option value itself remains null.
+the warning is silent; with an allowed set, targets outside the set produce a
+warning. Targets with `overlay = null` are omitted from overlay maps and this
+check, and may use IPv4 or IPv6 directly. A target with an overlay must use the
+IPv6 variant of `ip`, and its address must fall within that overlay's IPv6
+prefix. This matches Alloy-generated service endpoints, which use overlay IPv6
+addresses. Edge services infer their jail overlay set when
+`allowedOverlays = null`; the option value itself remains null.
 
 ACME DNS-update reachability warnings for jail certificates are collected from
 `jailConfig.warnings` and propagated through the jail's global warning list.
+
+## Module source and identity metadata
+
+Nix module `_file` and `key` provide different context. `_file` identifies a
+module's source for definition locations and module errors. `key` identifies a
+module for deduplication and `disabledModules`; set it when Alloy wraps modules
+that need a stable identity. Do not rely on one attribute to provide the job of
+the other.
+
+The wrapper in [flakeModule.nix](../../flakeModule.nix) assigns registered Alloy
+modules a source and key based on their flake module name. Generated NixOS
+wrappers for hosts, jails, and QEMU, and Home Manager wrappers use the relevant
+entity option path for both values. Keep these identifiers stable and distinct
+for distinct entities. The custom `alib.evalModules` supplies Alloy's default
+module and `alib` special argument; it does not set an explicit module prefix.
+
+These metadata improve Nix's definition and module-system diagnostics. They do
+not add entity context to Alloy's collected assertions or warnings, so those
+messages should still name the relevant entity.
 
 ## Network addresses and DNS
 

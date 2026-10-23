@@ -12,25 +12,31 @@
           mode = lib.mkOption {
             type = lib.types.attrTag {
               static = lib.mkOption {
+                description = "Configure a static IPv4 address.";
                 type = lib.types.submodule {
                   options = {
                     address = lib.mkOption {
                       type = alib.types.ip.v4addr;
+                      description = "Static IPv4 address assigned to this network interface.";
                     };
                     gateway = lib.mkOption {
                       type = lib.types.nullOr alib.types.ip.v4addr;
+                      description = "Optional IPv4 gateway used to create a route.";
                     };
                     gatewayOnLink = lib.mkOption {
                       default = false;
                       type = lib.types.bool;
+                      description = "Treat the configured gateway as directly reachable on this interface.";
                     };
                     prefixLength = lib.mkOption {
                       type = lib.types.ints.between 0 32;
+                      description = "IPv4 prefix length for the static address.";
                     };
                   };
                 };
               };
               dhcp = lib.mkOption {
+                description = "Obtain IPv4 configuration through DHCP.";
                 type = lib.types.submodule { };
               };
             };
@@ -38,6 +44,7 @@
           advertiseAddress = lib.mkOption {
             type = alib.types.ip.v4addr;
             default = config.mode.static.address;
+            description = "IPv4 address published for services; set explicitly when the address is assigned dynamically.";
           };
         };
       };
@@ -46,25 +53,31 @@
           mode = lib.mkOption {
             type = lib.types.attrTag {
               static = lib.mkOption {
+                description = "Configure a static IPv6 address.";
                 type = lib.types.submodule {
                   options = {
                     address = lib.mkOption {
                       type = alib.types.ip.v6addr;
+                      description = "Static IPv6 address assigned to this network interface.";
                     };
                     gateway = lib.mkOption {
                       type = lib.types.nullOr alib.types.ip.v6addr;
+                      description = "Optional IPv6 gateway used to create a route.";
                     };
                     gatewayOnLink = lib.mkOption {
                       default = false;
                       type = lib.types.bool;
+                      description = "Treat the configured gateway as directly reachable on this interface.";
                     };
                     prefixLength = lib.mkOption {
                       type = lib.types.ints.between 0 128;
+                      description = "IPv6 prefix length for the static address.";
                     };
                   };
                 };
               };
               auto = lib.mkOption {
+                description = "Accept IPv6 router advertisements for automatic address configuration.";
                 type = lib.types.submodule {
                 };
               };
@@ -73,6 +86,7 @@
           advertiseAddress = lib.mkOption {
             type = alib.types.ip.v6addr;
             default = config.mode.static.address;
+            description = "IPv6 address published for services; set explicitly when the address is assigned automatically.";
           };
         };
       };
@@ -81,23 +95,29 @@
           managed = lib.mkOption {
             default = false;
             type = lib.types.bool;
+            description = "Generate systemd-networkd configuration for this interface in the host and initrd.";
           };
           primary = lib.mkOption {
             default = false;
             type = lib.types.bool;
+            description = "Mark this network as the host's primary network.";
           };
           default = lib.mkOption {
             default = false;
             type = lib.types.bool;
+            description = "Install a default route through this network's configured gateway.";
           };
           iface = lib.mkOption {
             type = lib.types.nullOr lib.types.str;
+            description = "Interface name matched by systemd-networkd when `managed` is enabled.";
           };
           v4 = lib.mkOption {
             type = lib.types.nullOr (lib.types.submodule v4Submodule);
+            description = "IPv4 configuration for this network, or null to omit IPv4.";
           };
           v6 = lib.mkOption {
             type = lib.types.nullOr (lib.types.submodule v6Submodule);
+            description = "IPv6 configuration for this network, or null to omit IPv6.";
           };
         };
       };
@@ -156,10 +176,12 @@
         options.primaryNet = lib.mkOption {
           readOnly = true;
           type = lib.types.str;
+          description = "Name of the network marked as primary on this host.";
         };
         options.nets = lib.mkOption {
           default = { };
           type = lib.types.attrsOf (lib.types.submodule netSubmodule);
+          description = "Named network interfaces configured for this host.";
         };
         config =
           let
@@ -172,14 +194,14 @@
             assertions = [
               {
                 assertion = builtins.length defaultNets <= 1;
-                message = "[Alloy] Host '${name}': at most one net can be configured as a default network, got: ${toString (builtins.length defaultNets)}";
+                message = "[Alloy] Host '${name}': At most one network can be the default network; found ${toString (builtins.length defaultNets)}.";
               }
             ]
             ++ lib.concatLists (
               lib.mapAttrsToList (netName: net: [
                 {
                   assertion = net.v4 != null || net.v6 != null;
-                  message = "[Alloy] Host '${name}', net '${netName}': at least of one ip block must be specified (v4 or v6)";
+                  message = "[Alloy] Host '${name}', network '${netName}': Configure at least one IP block (`v4` or `v6`).";
                 }
               ]) config.nets
             );

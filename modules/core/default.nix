@@ -31,15 +31,18 @@
     {
       options.name = lib.mkOption {
         type = lib.types.str;
+        description = "Name of this Alloy configuration, used in generated state and diagnostics.";
       };
 
       options.workspace = {
         root = lib.mkOption {
           type = lib.types.path;
+          description = "Absolute path to the workspace used to resolve fact and secret files.";
         };
         baseDir = lib.mkOption {
           default = ".";
           type = lib.types.str;
+          description = "Workspace-relative base directory for Alloy-managed facts and secrets.";
         };
       };
 

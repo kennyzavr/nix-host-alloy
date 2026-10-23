@@ -46,6 +46,7 @@
                     options.path = lib.mkOption {
                       default = config.boot.factsBasePath + "/${name}";
                       type = lib.types.str;
+                      description = "Destination path for this fact inside the initrd.";
                     };
                   }
                 )
@@ -54,6 +55,7 @@
             factsBasePath = lib.mkOption {
               type = lib.types.str;
               default = "/etc/alloy/facts";
+              description = "Base destination path for facts copied into the initrd.";
             };
           };
 
@@ -66,14 +68,14 @@
                     ++ map (fact: fact.path) (builtins.attrValues config.boot.facts);
                 in
                 builtins.length paths == builtins.length (lib.unique paths);
-              message = "[Alloy] Host '${name}': boot files and facts must have unique destination paths";
+              message = "[Alloy] Host '${name}': Boot files and facts must have unique destination paths. Assign each a distinct path.";
             }
           ]
           ++ lib.concatLists (
             lib.mapAttrsToList (fileName: file: [
               {
                 assertion = builtins.match "[a-zA-Z0-9_-]+" fileName != null;
-                message = "[Alloy] Host '${name}': invalid boot file name '${fileName}'";
+                message = "[Alloy] Host '${name}', boot file '${fileName}': The name may contain only letters, numbers, underscores, and hyphens.";
               }
               {
                 assertion =
@@ -81,7 +83,7 @@
                   && lib.all (part: part != "" && part != "." && part != "..") (
                     lib.tail (lib.splitString "/" file.source)
                   );
-                message = "[Alloy] Host '${name}': boot file '${fileName}' needs a normalized source path outside the Nix store";
+                message = "[Alloy] Host '${name}', boot file '${fileName}': `source` must be a normalized path outside `/nix/store`.";
               }
             ]) config.boot.files
           );
@@ -90,7 +92,7 @@
             assertions = [
               {
                 assertion = host.boot.files == { } || config.boot.loader.supportsInitrdSecrets;
-                message = "[Alloy] Host '${name}': boot.files requires a bootloader supporting initrd secrets";
+                message = "[Alloy] Host '${name}': `boot.files` requires a bootloader that supports initrd secrets. Select a compatible bootloader or remove these files.";
               }
             ];
 

@@ -13,9 +13,11 @@
         options = {
           from = lib.mkOption {
             type = lib.types.port;
+            description = "First port in the forwarded range, inclusive.";
           };
           to = lib.mkOption {
             type = lib.types.port;
+            description = "Last port in the forwarded range, inclusive.";
           };
         };
       };
@@ -26,22 +28,27 @@
             allowedTCPPorts = lib.mkOption {
               default = [ ];
               type = lib.types.listOf lib.types.port;
+              description = "TCP ports accepted by the overlay firewall.";
             };
             allowedUDPPorts = lib.mkOption {
               default = [ ];
               type = lib.types.listOf lib.types.port;
+              description = "UDP ports accepted by the overlay firewall.";
             };
             allowedTCPPortRanges = lib.mkOption {
               default = [ ];
               type = lib.types.listOf portRangeType;
+              description = "TCP port ranges accepted by the overlay firewall.";
             };
             allowedUDPPortRanges = lib.mkOption {
               default = [ ];
               type = lib.types.listOf portRangeType;
+              description = "UDP port ranges accepted by the overlay firewall.";
             };
             extraInputRules = lib.mkOption {
               default = "";
               type = lib.types.lines;
+              description = "Additional nftables input-rule statements appended to the generated overlay firewall rules.";
             };
             inputRules = lib.mkOption {
               type = lib.types.functionTo lib.types.lines;
@@ -90,14 +97,17 @@
             ipv6Prefix = lib.mkOption {
               type = lib.types.strMatching "^fd[0-9a-fA-F]{2}(:[0-9a-fA-F]{4}){2}$";
               default = "fdf2:82e2:${lib.fixedWidthString 4 "0" (lib.toLower (lib.toHexString config.idx))}";
+              description = "IPv6 /48 prefix allocated to this overlay; host and jail addresses are derived from it.";
             };
             links = lib.mkOption {
               default = [ ];
               type = lib.types.listOf (lib.types.submodule overlayLinkSubmodule);
+              description = "WireGuard links connecting pairs of hosts in this overlay.";
             };
             tags = lib.mkOption {
               default = [ ];
               type = lib.types.listOf lib.types.str;
+              description = "Labels used to select or group this overlay in CLI operations.";
             };
           };
         };
@@ -119,26 +129,31 @@
                     (builtins.sort builtins.lessThan)
                     (lib.concatStringsSep "_")
                   ];
+              description = "Stable identifier derived from the sorted names of the link's two hosts.";
             };
             a = {
               host = lib.mkOption {
                 type = lib.types.str;
+                description = "Host at this end of the WireGuard link.";
               };
               wg = {
                 persistentKeepalive = lib.mkOption {
                   default = 0;
                   type = lib.types.ints.u16;
+                  description = "WireGuard persistent keepalive interval in seconds for this link peer.";
                 };
               };
             };
             b = {
               host = lib.mkOption {
                 type = lib.types.str;
+                description = "Host at this end of the WireGuard link.";
               };
               wg = {
                 persistentKeepalive = lib.mkOption {
                   default = 0;
                   type = lib.types.ints.u16;
+                  description = "WireGuard persistent keepalive interval in seconds for this link peer.";
                 };
               };
             };
@@ -168,20 +183,24 @@
             firewall = lib.mkOption {
               default = { };
               type = firewallType;
+              description = "Firewall rules for traffic entering this host through the overlay.";
             };
             babeld = {
               localPort = lib.mkOption {
                 type = lib.types.port;
                 default = 33120 + overlay.idx;
+                description = "Babel daemon port used by this host on the overlay.";
               };
             };
             wg = {
               port = lib.mkOption {
                 type = lib.types.port;
                 default = 52400 + overlay.idx;
+                description = "Local WireGuard listen port for this host on the overlay.";
               };
               endpoint = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
+                description = "Publicly reachable WireGuard endpoint for this host, or null when it accepts connections only.";
               };
             };
           };
@@ -234,6 +253,7 @@
         options.overlay = lib.mkOption {
           default = null;
           type = lib.types.nullOr lib.types.str;
+          description = "Overlay for this target; set only for IPv6 addresses in that overlay. Null denotes a direct address, including IPv4.";
         };
       };
 
@@ -328,24 +348,13 @@
               assertions = [
                 {
                   assertion = link.a.host != link.b.host;
-                  message = ''
-                    [Alloy] Invalid overlay link
-
-                    Overlay '${overlayName}' attempts to create a link where both ends point to the same host '${link.a.host}'.
-                    A link must connect two different hosts.
-                  '';
+                  message = "[Alloy] Overlay '${overlayName}', link '${link.id}': Both ends refer to host '${link.a.host}'. A link must connect two different hosts.";
                 }
                 {
                   assertion =
                     hostA.overlays.${overlayName}.wg.endpoint != null
                     || hostB.overlays.${overlayName}.wg.endpoint != null;
-                  message = ''
-                    [Alloy] Missing WireGuard endpoint for overlay link
-
-                    Overlay '${overlayName}' defines a link between host '${link.a.host}' and host '${link.b.host}'.
-                    At least one host in the link must have a defined WireGuard endpoint (cannot be null) 
-                    so they can establish a connection.
-                  '';
+                  message = "[Alloy] Overlay '${overlayName}', link '${link.id}': Hosts '${link.a.host}' and '${link.b.host}' both lack a WireGuard endpoint. Set an endpoint on at least one host so they can establish a connection.";
                 }
               ];
             }
@@ -356,12 +365,7 @@
             assertions = [
               {
                 assertion = lib.length overlay.links == lib.length (lib.unique (map (l: l.id) overlay.links));
-                message = ''
-                  [Alloy] Duplicate links in overlay
-
-                  Overlay '${overlayName}' contains multiple links between the same pair of hosts.
-                  Each pair of hosts can only have a single link defined between them in the overlay.
-                '';
+                message = "[Alloy] Overlay '${overlayName}': Multiple links connect the same pair of hosts. Define only one link for each host pair.";
               }
             ];
           }
@@ -668,6 +672,7 @@
         overlays = lib.mkOption {
           default = { };
           type = lib.types.attrsOf (lib.types.submodule overlaySubmodule);
+          description = "Named private network overlays connecting hosts and jails.";
         };
 
         mkEndpointOverlaysWarn = lib.mkOption {
@@ -719,14 +724,7 @@
                 config = {
                   assertions = lib.mapAttrsToList (overlayName: overlay: {
                     assertion = host != null -> builtins.hasAttr overlayName host.overlays;
-                    message = ''
-                      [Alloy] Missing host overlay for jail
-
-                      Jail '${name}' uses overlay '${overlayName}', but its target host '${config.host}' 
-                      does not participate in this overlay.
-
-                      To fix this, add the overlay '${overlayName}' to the host '${config.host}' configuration.
-                    '';
+                    message = "[Alloy] Jail '${name}': Overlay '${overlayName}' is not configured on host '${config.host}'. Add it to `hosts.${config.host}.overlays`.";
                   }) config.overlays;
                 };
               }
@@ -757,12 +755,12 @@
               condition = allowedOverlays != null -> invalidTargets == [ ];
               message =
                 lib.optionalString (allowedOverlays != null)
-                  "[Alloy] ${contextMsg} Endpoint '${endpointName}' has invalid overlay references, allowed overlays: [ ${lib.concatStringsSep ", " allowedOverlays} ], invalid targets: [ ${
+                  "[Alloy] ${contextMsg} Endpoint '${endpointName}' has targets on overlays outside the allowed set. Allowed overlays: [ ${lib.concatStringsSep ", " allowedOverlays} ]. Invalid targets: [ ${
                     lib.concatMapStringsSep ", " (
                       { idx, target }:
                       ''${toString idx}: { overlay = "${target.overlay}"; ip = "${target.ip.v6 or target.ip.v4}"; } ''
                     ) invalidTargets
-                  } ]";
+                  } ].";
             };
 
           assertions =
@@ -774,7 +772,7 @@
                 lib.imap1 (i: target: [
                   {
                     assertion = target.overlay != null -> builtins.hasAttr target.overlay alloy.overlays;
-                    message = "[Alloy] Endpoint '${endpointName}' target #${toString i}: uses an unknown overlay '${target.overlay}'. This overlay is not defined in 'config.overlays'.";
+                    message = "[Alloy] Endpoint '${endpointName}', target #${toString i}: Overlay '${target.overlay}' is not defined in `overlays`.";
                   }
                   {
                     assertion =
@@ -782,13 +780,13 @@
                       -> target.overlay != null
                       -> builtins.hasAttr target.overlay alloy.overlays
                       -> lib.hasPrefix alloy.overlays.${target.overlay}.ipv6Prefix target.ip.v6;
-                    message = "[Alloy] Endpoint '${endpointName}' target #${toString i}: IPv6 address '${target.ip.v6}' does not belong to the prefix of overlay '${target.overlay}' (prefix: '${
+                    message = "[Alloy] Endpoint '${endpointName}', target #${toString i}: IPv6 address '${target.ip.v6}' is outside overlay '${target.overlay}' prefix '${
                       alloy.overlays.${target.overlay}.ipv6Prefix
-                    }').";
+                    }'.";
                   }
                   {
-                    assertion = target.overlay == null -> !(builtins.hasAttr "v4" target.ip);
-                    message = "[Alloy] Endpoint '${endpointName}' target #${toString i}: IPv4 address '${target.ip.v4}' and overlay cannot be specified together.";
+                    assertion = target.overlay != null -> !(builtins.hasAttr "v4" target.ip);
+                    message = "[Alloy] Endpoint '${endpointName}', target #${toString i}: Targets in overlay '${target.overlay}' must use IPv6. Set an address in the overlay's IPv6 prefix.";
                   }
                 ]) endpoint.targets
               ))

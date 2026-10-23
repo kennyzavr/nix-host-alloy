@@ -68,10 +68,12 @@
         options = {
           nixosConfig = lib.mkOption {
             type = lib.types.unspecified;
+            description = "NixOS configuration used to build this VM variant.";
           };
           package = lib.mkOption {
             type = lib.types.functionTo lib.types.package;
             default = { ... }: config.nixosConfig.system.build.vm;
+            description = "Callback returning the launchable VM package for the requested system.";
           };
         };
       };
@@ -102,6 +104,7 @@
             nets = lib.mkOption {
               default = { };
               type = lib.types.attrsOf (lib.types.submodule (hostNetSubmodule host.idx));
+              description = "QEMU user-mode networks attached to this VM.";
             };
             forwardPorts = lib.mkOption {
               default = [ ];
@@ -111,10 +114,12 @@
             extraPreScript = lib.mkOption {
               type = lib.types.functionTo lib.types.lines;
               default = { ... }: "";
+              description = "Callback returning shell commands run before QEMU starts.";
             };
             nixosModule = lib.mkOption {
               type = lib.types.deferredModule;
               default = { };
+              description = "NixOS module merged into this host's QEMU guest configuration.";
               apply =
                 module:
                 let
@@ -214,6 +219,7 @@
           options.qemu = lib.mkOption {
             default = { };
             type = lib.types.submodule (hostQemuSubmodule name host);
+            description = "QEMU guest settings for this host.";
           };
 
           config = {
@@ -222,7 +228,7 @@
                 assertion = lib.allUnique (
                   lib.map (pf: "${pf.proto}:${toString pf.hypervisor}") qemuCfg.forwardPorts
                 );
-                message = "[Alloy] VM '${name}': duplicate host port in forwardPorts.";
+                message = "[Alloy] VM '${name}': Multiple entries in `forwardPorts` use the same host port. Assign each entry a unique host port.";
               }
             ];
           };
@@ -242,6 +248,7 @@
     {
       options.qemu.nets = lib.mkOption {
         type = lib.types.attrsOf (lib.types.submodule netSubmodule);
+        description = "Named QEMU user-mode networks shared by configured VMs.";
       };
       options.hosts = lib.mkOption {
         type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
@@ -250,11 +257,11 @@
       config.assertions = [
         {
           assertion = lib.allUnique (lib.map (p: "${p.proto}:${toString p.hypervisorPort}") allPortKeys);
-          message = "[Alloy] VM port conflict: multiple VMs forward the same hypervisor port.";
+          message = "[Alloy] QEMU: Multiple VMs forward the same hypervisor port. Assign unique ports to their `forwardPorts` entries.";
         }
         {
           assertion = lib.allUnique (lib.mapAttrsToList (_: n: n.idx) alloy.qemu.nets);
-          message = "[Alloy] qemu.nets: idx values must be globally unique.";
+          message = "[Alloy] QEMU networks: `idx` values must be unique across all networks.";
         }
       ];
 

@@ -27,12 +27,15 @@
           options = {
             domain = lib.mkOption {
               type = alib.types.zoneNode;
+              description = "Owner name for this DNS record, resolved relative to the named zone.";
             };
             ttl = lib.mkOption {
               default = null;
               type = lib.types.nullOr lib.types.int;
+              description = "Record-specific TTL in seconds; null uses the zone default.";
             };
             data = lib.mkOption {
+              description = "DNS record type and value, expressed as one record-type attribute such as `a`, `mx`, or `txt`.";
               type = lib.types.attrTag {
                 a = mkOpt alib.types.ip.v4addr;
                 aaaa = mkOpt alib.types.ip.v6addr;
@@ -158,24 +161,30 @@
           options = {
             apex = lib.mkOption {
               type = alib.types.dns.name;
+              description = "Fully qualified owner name at the top of this DNS zone.";
             };
             # TODO: parentZone should be derefferenced to throw error if it does not point to a valid zone
             parentZone = lib.mkOption {
               default = null;
               type = lib.types.nullOr lib.types.str;
+              description = "Name of the parent zone, when this zone is delegated from another configured zone.";
             };
             nname = lib.mkOption {
               type = alib.types.dns.name;
+              description = "Primary authoritative nameserver recorded in the zone's SOA record.";
             };
             rname = lib.mkOption {
               type = alib.types.dns.name;
+              description = "Responsible mailbox encoded as a DNS name in the zone's SOA record.";
             };
             email = lib.mkOption {
               type = lib.types.str;
+              description = "Contact email used by the generated DNS service configuration.";
             };
             ttl = lib.mkOption {
               default = 3600;
               type = lib.types.int;
+              description = "Default TTL in seconds for records in this zone.";
             };
             bindConfig = lib.mkOption {
               readOnly = true;
@@ -184,6 +193,7 @@
             nameservers = lib.mkOption {
               default = [ ];
               type = lib.types.listOf alib.types.serverEndpoint;
+              description = "Authoritative DNS servers for this zone, as literal addresses or Alloy endpoint references.";
             };
           };
           config.bindConfig = ''
@@ -334,23 +344,28 @@
         internalDomain = lib.mkOption {
           type = alib.types.dns.name;
           default = "alloy.internal";
+          description = "Internal DNS suffix used to derive host, jail, endpoint, and overlay names.";
         };
         resolvers = lib.mkOption {
           default = [ ];
           type = lib.types.listOf alib.types.serverEndpoint;
+          description = "Upstream recursive DNS servers configured for host and jail name resolution.";
         };
         records = lib.mkOption {
           default = [ ];
           type = lib.types.listOf recordType;
+          description = "DNS resource records included in configured zones.";
         };
         zones = lib.mkOption {
           default = { };
           type = lib.types.attrsOf zoneType;
+          description = "Authoritative DNS zones keyed by their Alloy zone name.";
         };
         resolveNode = lib.mkOption {
           type = lib.types.functionTo lib.types.str;
           readOnly = true;
           default = domain: alib.resolveZoneNode config.dns.zones domain;
+          description = "Resolve an Alloy DNS node reference to its fully qualified domain name.";
         };
       };
 

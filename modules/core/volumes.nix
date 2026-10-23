@@ -12,6 +12,7 @@
       driverType = lib.types.attrTag {
         directory = lib.mkOption {
           type = lib.types.submodule { };
+          description = "Create a persistent directory on the host and bind-mount it into the jail.";
         };
       };
 
@@ -20,15 +21,18 @@
           path = lib.mkOption {
             type = lib.types.str;
             default = "/var/lib/alloy/volumes/${name}";
+            description = "Mount point for this volume inside the jail.";
           };
           driver = lib.mkOption {
             type = driverType;
+            description = "Volume provisioning method, such as a host-backed directory.";
           };
           permissions = lib.mkOption {
             default = {
               mode = "0755";
             };
             type = alib.types.permissions;
+            description = "Owner, group, and mode used for the volume directory.";
           };
         };
       };
@@ -102,6 +106,7 @@
           volumes = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule volumeSubmodule);
+            description = "Persistent volumes mounted into this jail.";
           };
         };
       };

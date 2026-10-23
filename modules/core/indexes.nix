@@ -73,23 +73,15 @@
               else
                 # { };
                 throw ''
-                  Alloy: Index '${name}' has no allocated values.
+                  [Alloy] Index '${name}': No allocations were found.
                   The index file at '${alloy.workspace.facts.baseDir}/${config.factName}' is either
                   missing or out of date.
-                  Run: alloy indexes generate --instace "${name}"
-                  to regenerate it.
+                  Allocate it with `alloy-cli indexes alloc "${name}"`.
                 '';
-            get = key: config.values.${key} or (throw "[Alloy]: index '${name}': key '${key}' missing");
-            # if config.values ? ${key}
-            #   config.values.${key}
-            # else
-            # throw ''
-            #   Alloy: Index '${name}' has no allocation for key '${key}'.
-            #   The index file at '${alloy.workspace.facts.baseDir}/${config.factName}' is either
-            #   missing or out of date.
-            #   Run: alloy indexes generate --instace "${name}"
-            #   to regenerate it.
-            # '';
+            get =
+              key:
+              config.values.${key}
+                or (throw "[Alloy] Index '${name}': No allocation exists for key '${key}'. Allocate it with `alloy-cli indexes alloc \"${name}\"`.");
 
             assertions = lib.optionals alloy.facts.${config.factName}.exists (
               [
@@ -98,11 +90,8 @@
                     lib.length (builtins.attrNames config.values)
                     == lib.length (lib.unique (builtins.attrValues config.values));
                   message = ''
-                    [Alloy] Index '${name}': duplicate values detected in the index file.
-
-                    Every key must map to a unique integer. Run:
-                      alloy indexes generate --force --instance "${name}"
-                    to reallocate and fix collisions.
+                    [Alloy] Index '${name}': Multiple keys map to the same integer.
+                    Reallocate them with `alloy-cli indexes alloc --force "${name}"`.
                   '';
                 }
                 {
@@ -110,23 +99,18 @@
                     builtins.attrValues config.values
                   );
                   message = ''
-                    [Alloy] Index '${name}': one or more values are outside the
-                    allowed range [${toString config.minValue}, ${toString config.maxValue}].
-
-                    Run:
-                      alloy indexes generate --force --instance "${name}"
-                    to reallocate all values within the valid range.
+                    [Alloy] Index '${name}': One or more allocations are outside the allowed range [${toString config.minValue}, ${toString config.maxValue}].
+                    Reallocate them with `alloy-cli indexes alloc --force "${name}"`.
                   '';
                 }
               ]
               ++ (lib.map (key: {
                 assertion = builtins.hasAttr key config.values;
                 message = ''
-                  Alloy: Index '${name}' has no allocation for key '${key}'.
+                  [Alloy] Index '${name}': No allocation exists for key '${key}'.
                   The index file at '${alloy.workspace.facts.baseDir}/${config.factName}' is either
                   missing or out of date.
-                  Run: alloy indexes generate --instace "${name}"
-                  to regenerate it.
+                  Allocate it with `alloy-cli indexes alloc "${name}"`.
                 '';
               }) config.keys)
             );

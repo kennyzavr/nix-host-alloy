@@ -13,13 +13,16 @@
         options = {
           domain = lib.mkOption {
             type = alib.types.zoneNode;
+            description = "DNS node used as the mail domain for this route.";
           };
           postmaster = lib.mkOption {
             type = lib.types.str;
             default = "postmaster@${alloy.dns.resolveNode config.domain}";
+            description = "Postmaster address advertised for this route.";
           };
           upstream.endpoint = lib.mkOption {
             type = lib.types.str;
+            description = "Alloy endpoint used as the upstream mail server.";
           };
         };
       };
@@ -28,6 +31,7 @@
         options.net = lib.mkOption {
           default = alloy.hosts.${name}.primaryNet;
           type = lib.types.str;
+          description = "Host network whose advertised address is published for this SMTP edge host.";
         };
       };
 
@@ -36,26 +40,32 @@
           enable = lib.mkOption {
             default = true;
             type = lib.types.bool;
+            description = "Whether to create this SMTP edge service and its generated mail configuration.";
           };
           endpoint = lib.mkOption {
             type = lib.types.str;
             readOnly = true;
             default = "smtp-edge-${name}";
+            description = "Generated endpoint name for this SMTP service.";
           };
           hostname = lib.mkOption {
             type = alib.types.zoneNode;
+            description = "DNS name used as the SMTP server's primary hostname.";
           };
           addDnsRecords = lib.mkOption {
             default = true;
             type = lib.types.bool;
+            description = "Whether to add DNS records for the service hostname and mail routes.";
           };
           routes = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule routeSubmodule);
+            description = "Mail domains and upstream endpoints served by this SMTP edge service.";
           };
           maxMsgSizeMB = lib.mkOption {
             default = 35;
             type = lib.types.ints.positive;
+            description = "Maximum accepted message size in mebibytes.";
           };
           explicitTLS = {
             mode = lib.mkOption {
@@ -65,24 +75,29 @@
                 "optional"
                 "require"
               ];
+              description = "STARTTLS policy: `none` disables it, `optional` permits plaintext delivery, and `require` enforces encryption.";
             };
             cert = lib.mkOption {
               default = null;
               type = lib.types.nullOr lib.types.str;
+              description = "Certificate from `tls.certs` used for explicit TLS; required when TLS mode is enabled.";
             };
           };
           hosts = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
+            description = "Hosts that run SMTP edge instances for this service.";
           };
           allowedOverlays = lib.mkOption {
             default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            description = "Allowed overlays for upstream endpoints; null infers the set from configured routes.";
           };
           dkim = {
             enable = lib.mkOption {
               type = lib.types.bool;
               default = true;
+              description = "Whether to enable DKIM signing and its key generator for this service.";
             };
             dmarcPolicy = lib.mkOption {
               default = "reject";
@@ -91,6 +106,7 @@
                 "quarantine"
                 "reject"
               ];
+              description = "DMARC policy published for this service's mail domain.";
             };
             privKeySecret = lib.mkOption {
               default = "smtp-edge/${name}/dkim/pub.key";
@@ -112,6 +128,7 @@
             enable = lib.mkOption {
               type = lib.types.bool;
               default = true;
+              description = "Whether to enable antivirus scanning of incoming mail.";
             };
           };
         };
@@ -121,6 +138,7 @@
       options.services.smtp-edge = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
+        description = "SMTP relay service instances, including mail routing and optional DKIM/antivirus features.";
       };
 
       config =
@@ -141,7 +159,7 @@
                 (lib.mapAttrsToList (
                   routeName: route: [
                     (alloy.mkEndpointOverlaysWarn route.upstream.endpoint srv.allowedOverlays
-                      "Service tls-edge '${srvName}': route '${routeName}':"
+                      "Service 'smtp-edge.${srvName}', route '${routeName}':"
                     )
                   ]
                 ))
@@ -151,23 +169,23 @@
               assertions = [
                 {
                   assertion = alib.types.dns.label.check srvName;
-                  message = "[Alloy] smtp-edge name '${srvName}' must be valid dns label.";
+                  message = "[Alloy] Service 'smtp-edge.${srvName}': The service name must be a valid DNS label.";
                 }
                 {
                   assertion = srv.hosts != { };
-                  message = "[Alloy] smtp-edge '${srvName}': at least one host must be specified";
+                  message = "[Alloy] Service 'smtp-edge.${srvName}': Declare at least one host in `hosts`.";
                 }
                 {
                   assertion = srv.routes != { };
-                  message = "[Alloy] smtp-edge '${srvName}': at least one route must be specified";
+                  message = "[Alloy] Service 'smtp-edge.${srvName}': Declare at least one route in `routes`.";
                 }
                 {
                   assertion = srv.explicitTLS.mode != "none" -> srv.explicitTLS.cert != null;
-                  message = "[Alloy] smtp-edge '${srvName}' specifies explicitTLS.mode '${srv.explicitTLS.mode}' but explicitTLS.cert is not set. You must specify a valid certificate reference in 'explicitTLS.cert'.";
+                  message = "[Alloy] Service 'smtp-edge.${srvName}': `explicitTLS.cert` is required when `explicitTLS.mode` is '${srv.explicitTLS.mode}'. Set it to a certificate defined in `tls.certs`.";
                 }
                 {
                   assertion = (srv.explicitTLS.cert != null) -> builtins.hasAttr srv.explicitTLS.cert alloy.tls.certs;
-                  message = "[Alloy] smtp-edge '${srvName}' explicitTLS.cert refers to an unknown TLS certificate '${srv.explicitTLS.cert}'. Please ensure it is defined in 'config.tls.certs'.";
+                  message = "[Alloy] Service 'smtp-edge.${srvName}': Certificate '${srv.explicitTLS.cert}' from `explicitTLS.cert` is not defined in `tls.certs`.";
                 }
                 {
                   assertion =
@@ -175,14 +193,14 @@
                     -> (srv.explicitTLS.cert != null)
                     -> builtins.hasAttr srv.explicitTLS.cert alloy.tls.certs
                     -> builtins.elem srv.hostname alloy.tls.certs.${srv.explicitTLS.cert}.domains;
-                  message = "[Alloy] smtp-edge '${srvName}' explicitTLS.cert does not contain hostname of the smtp-edge";
+                  message = "[Alloy] Service 'smtp-edge.${srvName}': Certificate '${srv.explicitTLS.cert}' does not cover hostname '${srv.hostname}'. Add the hostname to the certificate's domains or select another certificate.";
                 }
               ]
               ++ (lib.flatten (
                 lib.mapAttrsToList (hostName: hostCfg: [
                   {
                     assertion = builtins.hasAttr hostName alloy.hosts;
-                    message = "[Alloy] smtp-edge '${srvName}': host '${hostName}' is unknown";
+                    message = "[Alloy] Service 'smtp-edge.${srvName}': Host '${hostName}' is not defined in `hosts`.";
                   }
                 ]) srv.hosts
               ))
@@ -190,11 +208,11 @@
                 lib.mapAttrsToList (routeName: route: [
                   {
                     assertion = alib.types.dns.label.check routeName;
-                    message = "[Alloy] smtp-edge '${srvName}': route name '${routeName}' must be valid dns label.";
+                    message = "[Alloy] Service 'smtp-edge.${srvName}', route '${routeName}': The route name must be a valid DNS label.";
                   }
                   {
                     assertion = builtins.hasAttr route.upstream.endpoint alloy.endpoints;
-                    message = "[Alloy] smtp-edge '${srvName}': route '${routeName}' refers to an unknown endpoint '${route.upstream.endpoint}'.";
+                    message = "[Alloy] Service 'smtp-edge.${srvName}', route '${routeName}': Endpoint '${route.upstream.endpoint}' is not defined in `endpoints`.";
                   }
                 ]) srv.routes
               ));

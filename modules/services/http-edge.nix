@@ -13,6 +13,7 @@
         options.net = lib.mkOption {
           default = alloy.hosts.${name}.primaryNet;
           type = lib.types.str;
+          description = "Host network whose advertised address is published for this HTTP edge host.";
         };
       };
 
@@ -20,19 +21,23 @@
         options = {
           domain = lib.mkOption {
             type = alib.types.zoneNode;
+            description = "DNS name handled by this route.";
           };
           addDnsRecords = lib.mkOption {
             default = true;
             type = lib.types.bool;
+            description = "Whether to add DNS records mapping this route's domain to its configured hosts.";
           };
           downstream = {
             http2 = lib.mkOption {
               default = true;
               type = lib.types.bool;
+              description = "Enable HTTP/2 for downstream connections.";
             };
             http3 = lib.mkOption {
               default = false;
               type = lib.types.bool;
+              description = "Enable HTTP/3 for downstream connections.";
             };
             tls.mode = lib.mkOption {
               default = "none";
@@ -42,15 +47,18 @@
                 "force"
                 "only"
               ];
+              description = "Downstream TLS mode: `none` serves HTTP, `add` serves both HTTP and HTTPS, `force` redirects HTTP to HTTPS, and `only` serves HTTPS.";
             };
             tls.cert = lib.mkOption {
               default = null;
               type = lib.types.nullOr lib.types.str;
+              description = "Certificate from `tls.certs` used for downstream TLS; required by TLS modes that terminate TLS.";
             };
           };
           upstream = {
             endpoint = lib.mkOption {
               type = lib.types.str;
+              description = "Alloy endpoint receiving proxied requests.";
             };
           };
         };
@@ -61,18 +69,22 @@
           enable = lib.mkOption {
             default = true;
             type = lib.types.bool;
+            description = "Whether to create the HTTP edge jails, routes, and proxy configuration for this service.";
           };
           allowedOverlays = lib.mkOption {
             default = null;
             type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            description = "Allowed overlays for upstream endpoints; null infers the set from configured routes.";
           };
           hosts = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule hostSubmodule);
+            description = "Hosts that run HTTP edge instances for this service.";
           };
           routes = lib.mkOption {
             default = { };
             type = lib.types.attrsOf (lib.types.submodule routeSubmodule);
+            description = "HTTP domains, downstream policies, and upstream endpoints served by this service.";
           };
         };
       };
@@ -93,7 +105,7 @@
             (lib.mapAttrsToList (
               routeName: route: [
                 (alloy.mkEndpointOverlaysWarn route.upstream.endpoint srv.allowedOverlays
-                  "Service http-edge '${srvName}': route '${routeName}':"
+                  "Service 'http-edge.${srvName}', route '${routeName}':"
                 )
               ]
             ))
@@ -103,14 +115,14 @@
           assertions = [
             {
               assertion = srv.hosts != { };
-              message = "[Alloy] http-edge '${srvName}': at least one host must be specified";
+              message = "[Alloy] Service 'http-edge.${srvName}': Declare at least one host in `hosts`.";
             }
           ]
           ++ (lib.flatten (
             lib.mapAttrsToList (hostName: hostCfg: [
               {
                 assertion = builtins.hasAttr hostName alloy.hosts;
-                message = "[Alloy] http-edge '${srvName}': host '${hostName}' is unknown";
+                message = "[Alloy] Service 'http-edge.${srvName}': Host '${hostName}' is not defined in `hosts`.";
               }
             ]) srv.hosts
           ));
@@ -368,6 +380,7 @@
       options.services.http-edge = lib.mkOption {
         default = { };
         type = lib.types.attrsOf (lib.types.submodule serviceSubmodule);
+        description = "HTTP reverse-proxy service instances.";
       };
 
       config =

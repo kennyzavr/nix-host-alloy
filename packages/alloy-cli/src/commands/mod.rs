@@ -22,10 +22,10 @@ pub struct Args {
     #[arg(long = "flake-url", env = Env::FLAKE_URL)]
     flake_url: String,
 
-    #[arg(long = "flake-attr", env = Env::MODULE_ATTR)]
+    #[arg(long = "module-attr", env = Env::MODULE_ATTR)]
     module_attr: String,
 
-    #[arg(long = "flake-attr", env = Env::INPUT_ATTR)]
+    #[arg(long = "alloy-input-attr", env = Env::INPUT_ATTR)]
     input_attr: String,
 
     #[arg(long = "depth", env = Env::DEPTH, default_value = Env::DEFAULT_DEPTH)]

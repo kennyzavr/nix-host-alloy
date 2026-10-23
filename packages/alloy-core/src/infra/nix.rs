@@ -79,20 +79,19 @@ impl System {
         );
         let expr = self.build_nix_expr(None, &expr, false, ctx)?;
 
-        let output = std::process::Command::new("nix")
-            .args([
-                "build",
-                "--impure",
-                if ctx.show_nix_trace {
-                    "--show-trace"
-                } else {
-                    ""
-                },
-                "--no-link",
-                "--print-out-paths",
-                "--expr",
-                &expr,
-            ])
+        let mut cmd = std::process::Command::new("nix");
+        cmd.args([
+            "build",
+            "--impure",
+            "--no-link",
+            "--print-out-paths",
+            "--expr",
+            &expr,
+        ]);
+        if ctx.show_nix_trace {
+            cmd.arg("--show-trace");
+        }
+        let output = cmd
             .stderr(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::piped())
             .output()
@@ -121,20 +120,19 @@ impl System {
         log::debug!("Evaluating state spec={:?}: {}", spec, expr);
         let expr = self.build_nix_expr(Some(spec), &expr, check_assertions, ctx)?;
 
-        let output = std::process::Command::new("nix")
-            .args([
-                "build",
-                "--impure",
-                if ctx.show_nix_trace {
-                    "--show-trace"
-                } else {
-                    ""
-                },
-                "--no-link",
-                "--print-out-paths",
-                "--expr",
-                &expr,
-            ])
+        let mut cmd = std::process::Command::new("nix");
+        cmd.args([
+            "build",
+            "--impure",
+            "--no-link",
+            "--print-out-paths",
+            "--expr",
+            &expr,
+        ]);
+        if ctx.show_nix_trace {
+            cmd.arg("--show-trace");
+        }
+        let output = cmd
             .stderr(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::piped())
             .output()
@@ -151,7 +149,7 @@ impl System {
         Ok(path)
     }
 
-    fn build_nix_expr(
+    pub(super) fn build_nix_expr(
         &self,
         spec: Option<&NixBuildSpec>,
         inner_expr: &str,

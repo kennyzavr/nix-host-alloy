@@ -1,4 +1,5 @@
 mod age;
+mod deploy;
 mod fs;
 mod gens;
 mod git;

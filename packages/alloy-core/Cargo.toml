@@ -14,4 +14,6 @@ itertools = "0.15.0"
 either = "1.18.0"
 chrono = "0.4.45"
 tempfile = "3.27.0"
-nix = { version = "0.31.3", features = ["poll", "term"] }
+nix = { version = "0.31.3", features = ["poll", "term", "fs", "signal", "process"] }
+shlex = "2.0.1"
+zeroize = "1.9.0"

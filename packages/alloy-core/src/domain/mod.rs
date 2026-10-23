@@ -1,6 +1,7 @@
 use core::fmt;
 use std::path::Path;
 
+pub mod deploy;
 pub mod env;
 pub mod facts;
 pub mod gens;

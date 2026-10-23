@@ -1,6 +1,7 @@
 {
   imports = [
     ./hosts.nix
+    ./deploy.nix
     ./jails.nix
     ./secrets.nix
     ./facts.nix

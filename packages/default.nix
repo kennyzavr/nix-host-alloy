@@ -45,6 +45,7 @@
                 pkgs.lib.makeBinPath [
                   pkgs.git
                   pkgs.rage
+                  pkgs.openssh
                   pkgs.vde2
                 ]
               }

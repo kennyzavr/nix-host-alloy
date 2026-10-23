@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{
     DynError,
     env::Env,
-    models::{AgeIdentity, AgeRecipient},
+    models::{AgeIdentity, AgeRecipient, DeployActivation, DeployConnection},
 };
 
 pub trait Ctx {
@@ -24,6 +24,8 @@ pub trait Ctx {
     fn gen_runner(&self) -> &dyn GenRunner;
 
     fn qemu_runner(&self) -> &dyn QemuRunner;
+
+    fn deploy_runner(&self) -> &dyn DeployRunner;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -152,4 +154,46 @@ impl<C: Ctx, T, F: FnMut(&mut C, T)> Reporter<C, T> for F {
     fn report(&mut self, ctx: &mut C, event: T) {
         (self)(ctx, event)
     }
+}
+
+/// Owns the GC root for the entire deployment.
+pub trait DeployBuild {
+    fn toplevel(&self) -> &Path;
+}
+
+pub trait DeployRunner {
+    fn build_host(
+        &self,
+        host: &str,
+        ctx: NixCtx<'_>,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<Box<dyn DeployBuild>, DynError>;
+
+    fn sign(
+        &self,
+        toplevel: &Path,
+        private_key: &[u8],
+        public_key: &str,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<(), DynError>;
+
+    fn copy(
+        &self,
+        toplevel: &Path,
+        connection: &DeployConnection,
+        identity_file: Option<&Path>,
+        ssh_options: &str,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<(), DynError>;
+
+    /// Update the profile and switch in one privileged session.
+    fn activate(
+        &self,
+        toplevel: &Path,
+        connection: &DeployConnection,
+        identity_file: Option<&Path>,
+        ssh_options: &str,
+        activation: &DeployActivation,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<(), DynError>;
 }

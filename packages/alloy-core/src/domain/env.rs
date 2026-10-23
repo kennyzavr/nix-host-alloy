@@ -16,6 +16,7 @@ pub struct Env {
     pub force: Option<bool>,
     pub add_to_git: Option<bool>,
     pub show_nix_trace: Option<bool>,
+    pub ssh_options: String,
 }
 
 impl Env {
@@ -30,6 +31,7 @@ impl Env {
     pub const DEPTH: &'static str = "ALLOY_DEPTH";
     pub const DEFAULT_DEPTH: &'static str = "0";
     pub const SHOW_NIX_TRACE: &'static str = "ALLOY_SHOW_NIX_TRACE";
+    pub const SSH_OPTIONS: &'static str = "ALLOY_SSHOPTS";
 
     pub fn inject_to_cmd(
         &self,
@@ -43,6 +45,7 @@ impl Env {
         cmd.env(Self::MODULE_ATTR, &self.module_attr);
         cmd.env(Self::INPUT_ATTR, &self.input_attr);
         cmd.env(Self::CACHE_DIR, &self.cache_dir);
+        cmd.env(Self::SSH_OPTIONS, &self.ssh_options);
         cmd.env(
             Self::DEPTH,
             if increase_depth {

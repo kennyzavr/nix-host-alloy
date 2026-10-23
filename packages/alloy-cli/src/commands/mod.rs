@@ -4,6 +4,7 @@ use alloy_core::domain::env::{Env, EnvStateSource};
 
 use crate::{ctx::Ctx, term_ui::TermUi};
 
+mod deploy;
 mod facts;
 mod gens;
 mod indexes;
@@ -49,12 +50,23 @@ pub struct Args {
     )]
     show_nix_trace: Option<bool>,
 
+    /// Extra SSH options, parsed with shell quoting, without shell evaluation.
+    #[arg(
+        long = "ssh-options",
+        env = Env::SSH_OPTIONS,
+        default_value = "",
+        global = true,
+        allow_hyphen_values = true
+    )]
+    ssh_options: String,
+
     #[command(subcommand)]
     cmd: Cmd,
 }
 
 #[derive(clap::Subcommand, Debug)]
 pub enum Cmd {
+    Deploy(deploy::Args),
     Facts(facts::Args),
     Gens(gens::Args),
     Indexes(indexes::Args),
@@ -114,6 +126,7 @@ pub fn handle_args(args: Args) {
         force: args.force,
         add_to_git: args.add_to_git,
         show_nix_trace: args.show_nix_trace,
+        ssh_options: args.ssh_options,
     };
 
     let mut ctx = Ctx {
@@ -124,6 +137,7 @@ pub fn handle_args(args: Args) {
     let ui = TermUi { depth: args.depth };
 
     match args.cmd {
+        Cmd::Deploy(cmd_args) => deploy::handle(cmd_args, &mut ctx, ui),
         Cmd::Facts(cmd_args) => facts::handle(cmd_args, &mut ctx, ui),
         Cmd::Secrets(cmd_args) => secrets::handle(cmd_args, &mut ctx, ui),
         Cmd::Indexes(cmd_args) => indexes::handle(cmd_args, &mut ctx, ui),

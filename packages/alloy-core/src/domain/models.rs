@@ -17,12 +17,16 @@ pub struct State {
     pub gens: HashMap<String, Gen>,
     pub indexes: HashMap<String, Index>,
 
+    #[serde(default)]
+    pub deploy: Deploy,
+
     pub qemu: Option<Qemu>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Host {
     pub system: String,
+    pub deploy: Option<HostDeploy>,
     pub tags: Vec<String>,
     pub secrets: HashMap<String, SecretRef>,
 
@@ -30,6 +34,62 @@ pub struct Host {
     pub secrets_age_key_pairs: Vec<AgeKeyPair>,
 
     pub qemu: Option<QemuGuest>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct Deploy {
+    #[serde(rename = "signingKeys")]
+    pub signing_keys: HashMap<String, DeploySigningKey>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploySigningKey {
+    pub private_key_secret: String,
+    pub public_key_fact: String,
+    pub generator: String,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct HostDeploy {
+    pub enable: bool,
+    pub connections: HashMap<String, DeployConnection>,
+    pub default_connection: Option<String>,
+    pub signing_keys: Vec<String>,
+    pub trusted_signing_keys: Vec<String>,
+    pub activation: DeployActivation,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct DeployConnection {
+    pub address: String,
+    pub user: Option<String>,
+    pub port: Option<u16>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeployActivation {
+    pub method: DeployActivationMethod,
+    pub ask_password: bool,
+    #[serde(default)]
+    pub policy: DeployActivationPolicy,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DeployActivationMethod {
+    Sudo,
+    Direct,
+}
+
+#[derive(Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DeployActivationPolicy {
+    #[default]
+    Strict,
+    Warn,
 }
 
 #[derive(Deserialize, Debug, Clone)]

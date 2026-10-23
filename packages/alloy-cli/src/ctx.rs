@@ -36,6 +36,10 @@ impl ports::Ctx for Ctx {
         &self.system
     }
 
+    fn deploy_runner(&self) -> &dyn ports::DeployRunner {
+        &self.system
+    }
+
     fn qemu_runner(&self) -> &dyn ports::QemuRunner {
         &self.system
     }

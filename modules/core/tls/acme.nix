@@ -151,7 +151,7 @@
               ]);
           in
           {
-            warnings = lib.mkMerge (lib.map (c: c.warnings or [ ]) certConfigs);
+            warnings = lib.mkMerge (lib.map (c: c.jailConfig.warnings or [ ]) certConfigs);
             secrets = lib.mkMerge (lib.map (c: c.secrets or { }) certConfigs);
             secretTemplates = lib.mkMerge (lib.map (c: c.secretTemplates or { }) certConfigs);
             nixosModule = {

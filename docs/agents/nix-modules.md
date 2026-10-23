@@ -74,10 +74,8 @@ are silent and invalid references warn. Direct-IP targets (`overlay = null`) are
 excluded from overlay maps/checks. Edge services infer their jail overlay set
 when `allowedOverlays = null`; the option value itself remains null.
 
-Known implementation limitation: in [tls/acme.nix](../../modules/core/tls/acme.nix),
-`mkJailDnsupdate` returns `jailConfig.warnings`, but the jail collector reads
-`c.warnings`. These jail CA reachability warnings are not currently propagated.
-Do not treat that omission as an intended diagnostic contract.
+ACME DNS-update reachability warnings for jail certificates are collected from
+`jailConfig.warnings` and propagated through the jail's global warning list.
 
 ## Network addresses and DNS
 

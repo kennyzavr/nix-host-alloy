@@ -72,15 +72,15 @@ prefer guarded lookups and Alloy assertions with actionable messages.
 References: [Nix built-ins: `trace` and `addErrorContext`](https://nix.dev/manual/nix/2.35/language/builtins.html),
 [NixOS warnings and assertions](https://nixos.org/manual/nixos/stable/).
 
-### Required warning propagation fix
+### Required warning propagation fix — completed
 
 `modules/core/tls/acme.nix`: `mkJailDnsupdate` returns its warning under
 `jailConfig.warnings`, but the jail submodule's collector reads
-`c.warnings or [ ]` from each returned `cfg`. The warning is therefore not
-propagated. Fix this as a required part of the diagnostics work, and check the
-resulting aggregation path so the jail name and certificate context survive.
-The host-side ACME warning path is collected separately and should remain
-working.
+`c.warnings or [ ]` from each returned `cfg`. This was fixed by collecting
+`c.jailConfig.warnings or [ ]`. The resulting path continues through the jail's
+global warning aggregation, preserving the warning message's jail and
+certificate context. The host-side ACME warning path remains separately
+collected.
 
 ## `_file` and `key` investigation
 
@@ -148,8 +148,8 @@ Nix references: [Nixpkgs module-system manual](https://nixos.org/manual/nixpkgs/
 1. Inspect module graphs and representative failures for Alloy, generated
    NixOS, and Home Manager evaluations; confirm the new explicit keys preserve
    intended repeated-import and disable behavior.
-2. Fix ACME jail warning propagation and verify that this diagnostic reaches
-   the top-level warning list with useful context.
+2. [x] Fix ACME jail warning propagation and verify that this diagnostic
+   reaches the top-level warning list with useful context.
 3. Agree on the message conventions above, including prefix and quoting style.
 4. Inventory and normalize assertions/warnings by core module and service,
    preserving validation conditions unless a separate behavior change is

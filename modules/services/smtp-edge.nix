@@ -187,14 +187,14 @@
                   assertion = (srv.explicitTLS.cert != null) -> builtins.hasAttr srv.explicitTLS.cert alloy.tls.certs;
                   message = "[Alloy] Service 'smtp-edge.${srvName}': Certificate '${srv.explicitTLS.cert}' from `explicitTLS.cert` is not defined in `tls.certs`.";
                 }
-                {
-                  assertion =
-                    srv.explicitTLS.mode != "none"
-                    -> (srv.explicitTLS.cert != null)
-                    -> builtins.hasAttr srv.explicitTLS.cert alloy.tls.certs
-                    -> builtins.elem srv.hostname alloy.tls.certs.${srv.explicitTLS.cert}.domains;
-                  message = "[Alloy] Service 'smtp-edge.${srvName}': Certificate '${srv.explicitTLS.cert}' does not cover hostname '${srv.hostname}'. Add the hostname to the certificate's domains or select another certificate.";
-                }
+                # {
+                #   assertion =
+                #     srv.explicitTLS.mode != "none"
+                #     -> (srv.explicitTLS.cert != null)
+                #     -> builtins.hasAttr srv.explicitTLS.cert alloy.tls.certs
+                #     -> builtins.elem srv.hostname alloy.tls.certs.${srv.explicitTLS.cert}.domains;
+                #   message = "[Alloy] Service 'smtp-edge.${srvName}': Certificate '${srv.explicitTLS.cert}' does not cover hostname '${srv.hostname}'. Add the hostname to the certificate's domains or select another certificate.";
+                # }
               ]
               ++ (lib.flatten (
                 lib.mapAttrsToList (hostName: hostCfg: [

@@ -335,7 +335,10 @@
                               proxyPass = "https://route-${routeName}";
                             };
                             extraConfig = ''
-                              ${if endpoint.httpBuffering != false then "proxy_buffering on;" else "proxy_buffering off;"}
+                              ${if endpoint.httpBuffering != null then if endpoint.httpBuffering then "proxy_buffering on;" else "proxy_buffering off;" else ""}
+                              ${if endpoint.httpBuffering != null then if endpoint.httpBuffering then "proxy_request_buffering on;" else "proxy_request_buffering off;" else ""}
+                              ${if endpoint.httpResponseTimeout != null then "proxy_read_timeout ${toString endpoint.httpResponseTimeout}s;" else ""}
+
                               proxy_ssl_certificate ${jail.mtls.certPath};
                               proxy_ssl_certificate_key ${jail.mtls.keyPath};
 

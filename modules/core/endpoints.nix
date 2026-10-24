@@ -65,6 +65,11 @@
               type = lib.types.nullOr lib.types.bool;
               description = "Whether to buffer proxied HTTP responses; null lets the consuming service choose.";
             };
+            httpResponseTimeout = lib.mkOption {
+              default = null;
+              type = lib.types.nullOr lib.types.int;
+              description = "How long wait in seconds HTTP responses from upstream; null lets the consuming service choose.";
+            };
           };
         }
       );

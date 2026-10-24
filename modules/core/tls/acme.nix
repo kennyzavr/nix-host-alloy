@@ -75,6 +75,10 @@
               type = lib.types.bool;
               description = "Whether to accept the ACME server's terms of service.";
             };
+            wildcard = lib.mkOption {
+              default = false;
+              type = lib.types.bool;
+            };
             email = lib.mkOption {
               default = "";
               type = lib.types.str;
@@ -160,6 +164,7 @@
           in
           {
             warnings = lib.mkMerge (lib.map (c: c.jailConfig.warnings or [ ]) certConfigs);
+            assertions = lib.mkMerge (lib.map (c: c.jailConfig.assertions or [ ]) certConfigs);
             secrets = lib.mkMerge (lib.map (c: c.secrets or { }) certConfigs);
             secretTemplates = lib.mkMerge (lib.map (c: c.secretTemplates or { }) certConfigs);
             nixosModule = {
@@ -199,6 +204,7 @@
           in
           {
             warnings = lib.mkMerge (lib.map (c: c.warnings or [ ]) certConfigs);
+            assertions = lib.mkMerge (lib.map (c: c.assertions or [ ]) certConfigs);
           };
       };
 
@@ -214,6 +220,13 @@
           globalExtraDomains = builtins.tail domains;
         in
         {
+          assertions = [
+            {
+              assertion = acmeOpts.wildcard -> builtins.length domains == 1;
+              message = "[Alloy] Host '${hostName}', ACME DNS-update certificate '${certName}': the wildcard cert can have only one domain";
+            }
+          ];
+
           warnings = lib.optional (ca.acme.url.server ? endpoint) (
             alloy.mkEndpointOverlaysWarn ca.acme.url.server.endpoint (builtins.attrNames host.overlays)
               "Host '${hostName}', ACME DNS-update certificate '${certName}':"
@@ -254,7 +267,7 @@
             security.acme.certs."tls-acme-${certName}" = {
               email = acmeOpts.email;
               server = toString ca.acme.url;
-              domain = primaryDomain;
+              domain = if acmeOpts.wildcard then "*.${lib.removePrefix "." primaryDomain}" else primaryDomain;
               extraDomainNames = globalExtraDomains;
               group = lib.mkForce hostCert.group;
               dnsProvider = "dnsupdate";
@@ -312,7 +325,7 @@
               security.acme.certs."tls-acme-${certName}" = {
                 email = acmeOpts.email;
                 server = toString ca.acme.url;
-                domain = primaryDomain;
+                domain = if acmeOpts.wildcard then "*.${lib.removePrefix "." primaryDomain}" else primaryDomain;
                 extraDomainNames = globalExtraDomains;
                 group = lib.mkDefault jailCert.group;
                 dnsProvider = "dnsupdate";
@@ -335,6 +348,13 @@
           };
 
           jailConfig = {
+            assertions = [
+              {
+                assertion = challengeOpts.wildcard -> builtins.length domains == 1;
+                message = "[Alloy] Jail '${jailName}', ACME DNS-update certificate '${certName}': the wildcard cert can have only one domain";
+              }
+            ];
+
             warnings = lib.optional (ca.acme.url.server ? endpoint) (
               alloy.mkEndpointOverlaysWarn ca.acme.url.server.endpoint (builtins.attrNames jail.overlays)
                 "Jail '${jailName}', ACME DNS-update certificate '${certName}':"

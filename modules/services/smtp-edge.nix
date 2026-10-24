@@ -535,6 +535,7 @@
                                 "-o smtpd_tls_security_level=encrypt"
                                 "-o smtpd_tls_req_ccert=yes"
                                 "-o smtpd_client_restrictions=permit_mynetworks,reject"
+                                "-o smtpd_hide_client_session=yes"
                               ];
                             }
                           ) jail.overlays)

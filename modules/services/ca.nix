@@ -92,6 +92,10 @@
             type = lib.types.str;
             description = "Subject used to construct the root and intermediate CA certificate subjects.";
           };
+          allowWildcardCerts = lib.mkOption {
+            default = false;
+            type = lib.types.bool;
+          };
           permittedDomains = lib.mkOption {
             default = [ ];
             type = lib.types.listOf alib.types.zoneNode;
@@ -281,7 +285,7 @@
                       defaultUserSSHCertDuration = "16h";
                     };
                     policy.x509 = {
-                      allowWildcardNames = false;
+                      allowWildcardNames = srv.allowWildcardCerts;
                     };
                     provisioners = lib.optionals (srv.acme.enable) [
                       {

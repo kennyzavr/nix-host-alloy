@@ -61,6 +61,7 @@
             ...
           }:
           {
+            packages.disko = inputs'.disko.packages.disko;
 
             devshells.default = {
               packages = [

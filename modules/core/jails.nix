@@ -328,7 +328,7 @@
                 jailName: jail:
                 lib.nameValuePair "alloy-jail-${jailName}" {
                   autoStart = true;
-                  ephemeral = true;
+                  ephemeral = false;
                   privateUsers = "no";
                   extraVeths = {
                     ${mkVethIface jail} = {
